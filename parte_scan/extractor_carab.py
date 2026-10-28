@@ -217,7 +217,7 @@ def _infractor(texto_inf):
     s = re.sub(r"^[\W_]+", "", limpiar(texto_inf))
     if not s or re.match(r"(?:por\s+escrito|ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
-    s = re.split(r"\bDISP\.?\s*INFR\w*|\bDISPOSICI[OÓ]N\s+INFRINGIDA\b", s, 1, flags=re.I)[0].strip()
+    s = re.split(r"\bDISP\.?\s*INFR\w*|\bD[I1l|]SP[O0]S[I1l|]C\w{0,3}\b", s, 1, flags=re.I)[0].strip()   # tolera «INFRINCIDA» y otros errores del OCR
     cut = _fin_nombre(s)
     nombre = limpiar((s[:cut] if cut else s.split(".")[0]).replace(",", " ")).upper()
     rut, leido, aviso = "", "", ""
@@ -247,8 +247,9 @@ def _infractor(texto_inf):
                 d = d + ", " + comuna   # es un sector, no una comuna: queda en la dirección
                 comuna = ""
         d = re.sub(r"^(?:calle|pasaje\s+)?\s*", "", d.strip(), flags=re.I) if re.match(r"calle\b", d.strip(), re.I) else d
+        d = re.sub(r"\bsin\s+(?:Nro\.?|N[°º]|n[uú]mero)\b\.?", "S/N", d, flags=re.I)      # «sin Nro.» -> S/N
         d = re.sub(r"\b(?:Nro\.?|N[°º]|n[uú]mero)\s*", "", d, flags=re.I)
-        direccion = limpiar(d).upper()
+        direccion = limpiar(d).upper().strip(" ,.")
     return nombre, rut, direccion, comuna, aviso, leido
 
 

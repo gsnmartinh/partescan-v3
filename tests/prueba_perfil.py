@@ -84,5 +84,9 @@ _inf = extractor_carab._infractor("JUAN PEREZ SOTO, 28 años, Run Nro. 11.111.11
                                   "DISPOSICION INFRINGIDA: Articulo Nro. 25 de la Ley 19.925, sobre expendio y consumo de bebidas alcoholicas.")
 ok(_inf[3] == "VALDIVIA" and "BEBIDAS" not in _inf[2], "la comuna no arrastra la «disposición infringida»: %r" % (_inf[2:4],))
 
+for _ocr in ("DISPOSICION INFRINGIDA", "DISPOSICION INFRINCIDA", "DlSPOSICION INFRlNGIDA"):      # errores típicos del OCR
+    _i = extractor_carab._infractor("JUAN PEREZ SOTO, Run Nro. 11.111.111-1, domiciliado en el sector Ejemplo sin Nro., de Valdivia. " + _ocr + ": Articulo 25 de la Ley 19.925")
+    ok(_i[2] == "EL SECTOR EJEMPLO S/N" and _i[3] == "VALDIVIA", "dirección y comuna con «%s»: %r" % (_ocr, _i[2:4]))
+
 print("TODO BIEN" if not fallas else f"{len(fallas)} falla(s)")
 sys.exit(1 if fallas else 0)
