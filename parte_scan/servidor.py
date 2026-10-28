@@ -4,7 +4,7 @@ import io, json, os, sys, zipfile, time, queue, re, shutil, tempfile, threading,
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
+from . import actualizador, catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
 
 WEB = os.path.join(motor._base(), "parte_scan", "web")
 if not os.path.isdir(WEB):
@@ -217,6 +217,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, estado_perfil())
         if u.path == "/api/perfil/equivalencias":
             return self._send(200, equivalencias_actuales())
+        if u.path == "/api/actualizacion":
+            return self._send(200, actualizador.estado())
         if u.path == "/api/tecleo/estado":
             try:
                 return self._send(200, tecleador.estado(int(parse_qs(u.query).get("desde", ["0"])[0] or 0)))
@@ -290,6 +292,14 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {"error": str(e)})
             except Exception as e:
                 return self._send(500, {"error": "No se pudo: %s" % e})
+        if u.path == "/api/actualizacion/instalar":
+            if tecleador.corriendo():
+                return self._send(400, {"error": "Hay un ingreso en curso: espera a que termine para actualizar."})
+            try:
+                actualizador.instalar()
+            except Exception as e:      # noqa: BLE001
+                return self._send(400, {"error": str(e)})
+            return self._send(200, {"ok": True})
         if u.path == "/api/limpiar":
             with LOCK:
                 PARTES.clear()
@@ -483,6 +493,7 @@ def _abrir_ventana(url):
 def main():
     _registro_en_archivo()
     threading.Thread(target=trabajador, daemon=True).start()
+    actualizador.revisar_en_segundo_plano()          # sin internet no pasa nada
     for puerto in range(8765, 8785):
         try:
             srv = ThreadingHTTPServer(("127.0.0.1", puerto), H)

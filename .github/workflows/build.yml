@@ -37,6 +37,9 @@ jobs:
       - name: Pruebas del tecleo desde ParteScan
         run: python tests/prueba_tecleador.py
 
+      - name: Probar la actualización automática
+        run: python tests/prueba_actualizador.py
+
       - name: Instalar Tesseract (motor de OCR, gratuito)
         run: choco install tesseract -y --no-progress
 
@@ -51,6 +54,13 @@ jobs:
           Get-ChildItem build\tesseract\tessdata
           $env:TESSDATA_PREFIX = (Resolve-Path build\tesseract\tessdata).Path
           & build\tesseract\tesseract.exe --list-langs
+
+      - name: Escribir la versión dentro del programa
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'dev' }}"
+          Set-Content -Path parte_scan\version.py -Encoding utf8 -Value "VERSION = `"$v`""
+          Get-Content parte_scan\version.py
 
       - name: Crear el programa (.exe)
         shell: pwsh
@@ -85,13 +95,18 @@ jobs:
           choco install innosetup -y --no-progress
           $v = "${{ github.event.inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'dev' }}"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DVersion=$v" instalador\ParteScan.iss
+          # huella SHA-256: el programa la comprueba antes de ejecutar una actualización descargada
+          Get-ChildItem salida\*.exe | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            Set-Content -Path ($_.FullName + ".sha256") -Value "$h  $($_.Name)" -NoNewline -Encoding ascii
+          }
           Get-ChildItem salida
 
       - uses: actions/upload-artifact@v4
         with:
           name: ParteScan-Instalador
           retention-days: 14
-          path: salida/*.exe
+          path: salida/*
 
       - uses: actions/upload-artifact@v4
         with:
@@ -107,6 +122,6 @@ jobs:
         run: |
           $tag = "${{ github.event.inputs.version || github.ref_name }}"
           Compress-Archive -Path "dist\ParteScan" -DestinationPath "ParteScan-Windows-$tag.zip"
-          gh release create $tag --title "ParteScan y PartesTeclea $tag" --target ${{ github.sha }} --notes-file RELEASE_NOTES.md 2>$null
+          gh release create $tag --title "ParteScan $tag" --target ${{ github.sha }} --notes-file RELEASE_NOTES.md 2>$null
           gh release upload $tag "ParteScan-Windows-$tag.zip" --clobber
-          gh release upload $tag (Get-ChildItem salida\*.exe).FullName --clobber
+          gh release upload $tag (Get-ChildItem salida\*).FullName --clobber

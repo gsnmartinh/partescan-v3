@@ -38,3 +38,5 @@ Name: "{autodesktop}\ParteScan"; Filename: "{app}\ParteScan.exe"; Tasks: escrito
 
 [Run]
 Filename: "{app}\ParteScan.exe"; Description: "Abrir ParteScan"; Flags: nowait postinstall skipifsilent
+; al actualizar desde el programa (/SILENT) se vuelve a abrir solo
+Filename: "{app}\ParteScan.exe"; Flags: nowait; Check: WizardSilent

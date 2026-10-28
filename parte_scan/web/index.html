@@ -73,6 +73,8 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <input type="file" id="fileSes" accept=".partescan" hidden>
 <span id="estado" class="note"></span><span style="flex:1"></span>
 <button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">⚙ Juzgado</button><button id="btnSalir">Cerrar programa</button></header>
+<div id="barAct" hidden style="background:#e8f1ff;border-bottom:1px solid #b6d0ff;padding:8px 16px;display:flex;gap:12px;align-items:center">
+ <span id="actTxt" style="flex:1"></span><button class="p" id="actSi">Actualizar ahora</button><button id="actNo">Más tarde</button></div>
 
 <div class="lote">
  <label>Rol Disponible (rol del primer parte)<input id="rol" inputmode="numeric" placeholder="ej. 19952"></label>
@@ -417,6 +419,27 @@ $('dGuardar').onclick=async()=>{
   await cargarPerfil(); $('dlgJuz').close(); toast('Perfil guardado');
 };
 cargarPerfil();
+/* ---------- actualización automática (solo si hay internet) ---------- */
+(async function(){
+  for(let i=0;i<6;i++){                    // la consulta a GitHub corre en segundo plano: se espera un poco
+    let a=null; try{ a=await (await fetch('/api/actualizacion')).json() }catch(e){ return }
+    if(a.hay){
+      $('actTxt').textContent='Hay una versión nueva de ParteScan ('+a.ultima+'; tienes '+a.version+'). Se descarga e instala sola y conserva tus datos.';
+      $('barAct').hidden=false; $('barAct').style.display='flex';
+      $('actNo').onclick=()=>{$('barAct').hidden=true;$('barAct').style.display='none'};
+      $('actSi').onclick=async()=>{
+        if(!confirm('ParteScan se cerrará, se actualizará y volverá a abrirse solo. Guarda antes tu sesión si estás a mitad de un lote. ¿Actualizar ahora?'))return;
+        $('actSi').disabled=true; $('actTxt').textContent='Descargando la actualización…';
+        const r=await fetch('/api/actualizacion/instalar',{method:'POST',body:'x'}); const j=await r.json().catch(()=>({}));
+        if(!r.ok){ $('actTxt').textContent=j.error||'No pude actualizar.'; $('actSi').disabled=false; return }
+        $('actTxt').textContent='Instalando… el programa se abrirá de nuevo en unos segundos.';
+      };
+      return;
+    }
+    if(a.ultima||a.error) return;           // ya respondió GitHub (o no hay internet): nada que avisar
+    await new Promise(r=>setTimeout(r,1500));
+  }
+})();
 
 /* ---------- tecleo en el sistema desde esta misma ventana ---------- */
 const TXT_EST={pendiente:'Pendiente',tecleando:'Tecleando…',tecleado:'Por aceptar',ingresado:'Ingresado ✓',interrumpido:'Interrumpido',cancelado:'Cancelado'};

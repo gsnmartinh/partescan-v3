@@ -1,23 +1,14 @@
-**ParteScan**: lee los partes escaneados y prepara los datos para que PartesTeclea los ingrese.
-**PartesTeclea**: teclea esos partes en el sistema del Juzgado.
+**ParteScan v3**: lee los partes escaneados (OCR local, sin internet) y los **teclea en el sistema del Juzgado**, todo en una sola aplicación de escritorio.
 
-Descarga el zip de cada programa en *Assets*, descomprímelo completo y abre el `.exe`.
+**Instalación (recomendada):** descarga `ParteScan-Instalador-…exe` en *Assets*, ejecútalo y sigue el asistente. No pide permisos de administrador y crea el acceso directo.
 Si Windows muestra «Windows protegió su PC»: *Más información → Ejecutar de todas formas* (el programa no está firmado).
+También hay un `.zip` portátil (se descomprime completo y se abre `ParteScan.exe`).
 
-**Novedades v1.4.1**: encabezado de ParteScan ordenado en una sola fila (sesión agrupada, atajo F2 en la leyenda, «Continuar anterior» se oculta al haber partes).
+**Actualizaciones automáticas:** si hay internet, al abrir el programa avisa cuando hay una versión nueva y se actualiza con un botón, conservando tu perfil y tus sesiones. Sin internet funciona igual.
 
-**Novedades v1.4.0** (incluye lo preparado como v1.3.0)
-
-*ParteScan*
-- **Segundo lector de OCR (RapidOCR, local y sin internet)** que cotejan la boleta, la patente y el RUT: completa lo que el primero no leyó y avisa cuando los dos leen distinto (suma unos 80 MB al programa).
-- Infracciones: línea amarilla, ciclovía y demás estacionamientos sin opción propia → 19; beber, ingerir o consumir alcohol (aunque venga mal escrito, ej. «ingringir») → 300; la descripción de la infracción ya no arrastra HORA/LUGAR y el lugar no trae «lugar donde» al final.
-- Sesiones: guarda y abre el lote con tus correcciones e imágenes (archivo `.partescan`), con guardado automático para continuar sin releer los PDF.
-- Lectura de partes de Carabineros más robusta: toma personas, vehículo y lugar por su significado, sin depender de rótulos ni del orden; mejor lectura del N° de parte, RUT, domicilio, hora y patentes de motos antiguas.
-- Reconoce la unidad de Carabineros en encabezados como «R. ISLA TEJA» o «PRIMERA COM.».
-- La boleta leída con poca seguridad se avisa para revisarla; el año de la fecha del parte siempre es el en curso (y avisa cuando lo corrige).
-- Vehículo: si el parte no dice el tipo se usa AUTOMOVIL; la marca es opcional; la patente de motos va con 6 caracteres (TV880 → TV0880) y se vuelve a leer avisando si las lecturas difieren.
-- Infracciones: estacionar sin opción propia → 19; alcohol → 300; no portar licencia → 66 (a confirmar); señal PARE de Carabineros más acera.
-
-*PartesTeclea*: sin cambios respecto de la v1.2.0.
-
-**Novedades v1.2.0**: ParteScan queda en un solo modo (sin «vías exclusivas»): el flujo es leer, revisar y guardar los datos para PartesTeclea.
+**Novedades**
+- Ventana de escritorio propia (sin navegador ni consola negra).
+- Teclear en el sistema directamente desde ParteScan: se corrige un dato y se sigue, sin empezar de nuevo.
+- Infracción que no calza con la lista: se ingresa con el código comodín **67** y la descripción lleva lo que dice el parte.
+- Comuna escrita exactamente como la lista del sistema (con tilde); se conserva la Ñ en el resto de los campos.
+- Aviso si la comuna del parte no existe en la lista; la comuna del infractor ya no arrastra la «Disposición infringida».
