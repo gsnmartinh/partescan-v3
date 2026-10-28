@@ -26,7 +26,7 @@ def numero(linea, despues=None):
     if not m:
         return ""
     n = m.group(0)
-    return n[1:] if len(n) == 7 else n  # "N9111187": la N° se leyó como un dígito
+    return n[-6:] if len(n) in (7, 8) else n  # "N9111187": la N° se leyó como un dígito (los folios municipales tienen 6)
 
 
 def limpiar(s):
@@ -64,6 +64,11 @@ def parte(t):
     o["n_parte"] = numero(l, r"DENUNCI\w*")
     _, l = primera(L, r"ADJUNTA\s+CITACI|^Observaciones")
     o["n_citacion_adjunta"] = numero(l, r"CITACI\w*")
+    a, b = o["n_parte"], o["n_citacion_adjunta"]
+    if a and b and a != b and (a.endswith(b) or b.endswith(a)):      # un dígito de más (la «N°» leída como número): vale el más corto
+        o["n_parte"] = o["n_citacion_adjunta"] = min(a, b, key=len)
+    elif len(a) == 7 and not b:
+        o["n_parte"] = a[1:]
     if o["n_parte"] and o["n_citacion_adjunta"] and o["n_parte"] != o["n_citacion_adjunta"]:
         av.append("El N° del encabezado (%s) no coincide con el de la citación adjunta (%s)." % (o["n_parte"], o["n_citacion_adjunta"]))
 

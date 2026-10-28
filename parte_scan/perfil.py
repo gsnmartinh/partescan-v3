@@ -28,6 +28,7 @@ DEFECTO = {
     "actuarios": {"KATHERINE": "19", "MARILYN": "16", "MONICA": "12", "YISSEL": "10", "SANDRA": "9"},
     "rol_actuario": {"1": "KATHERINE", "2": "KATHERINE", "3": "MARILYN", "4": "MARILYN", "5": "MONICA",
                      "6": "MONICA", "7": "YISSEL", "8": "YISSEL", "9": "SANDRA", "0": "SANDRA"},
+    "oficina_municipal": {"INSPECCION GENERAL": "32", "SEGURIDAD CIUDADANA": "32"},   # depto. del encabezado -> código de oficina emisora
     "infraccion_comodin": "67",             # código que se usa cuando la infracción del parte no calza con la lista
     "equivalencias": {},                     # concepto del catálogo -> código de ESTE juzgado (lo confirma el usuario)
 }
@@ -181,6 +182,17 @@ def codigo_oficina(nombre):
     for c, d in sorted(oficinas().items(), key=lambda kv: _clave_orden(kv[0])):
         if sin_tildes(d).strip() == n:
             return c
+    return ""
+
+
+def oficina_municipal(depto):
+    """Nombre de la oficina emisora para un parte municipal según el departamento del encabezado ('' si no se sabe)."""
+    cod = str((cargar().get("oficina_municipal") or {}).get(str(depto or "").upper(), ""))
+    if not cod:
+        return ""
+    for c, d in oficinas().items():
+        if str(c) == cod:
+            return d
     return ""
 
 

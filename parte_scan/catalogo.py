@@ -213,22 +213,44 @@ def resolver_o_comodin(texto):
 
 
 _COMUNAS = None
+_COMUNAS_NOMBRES = {}
 
 
-def comuna_en_sistema(nombre):
-    """True si la comuna existe en la lista del sistema (sin importar acentos ni mayúsculas); vacía = True."""
+def _cargar_comunas():
     global _COMUNAS
     from .exportar import sin_tildes
     if _COMUNAS is None:
         try:
             ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "comunas_sistema.txt")
             with open(ruta, encoding="utf-8") as f:
-                _COMUNAS = {sin_tildes(l).strip().upper() for l in f if l.strip()}
+                lineas = [l.strip() for l in f if l.strip()]
         except OSError:
-            _COMUNAS = set()
-    if not _COMUNAS or not str(nombre or "").strip():
+            lineas = []
+        _COMUNAS = {sin_tildes(l).upper() for l in lineas}
+        _COMUNAS_NOMBRES.update({sin_tildes(l).upper(): l for l in lineas})
+    return _COMUNAS
+
+
+def comuna_oficial(texto):
+    """Nombre de la comuna tal como está en la lista del sistema (con su tilde). Si sobran palabras al final (ruido del
+    OCR: «VALDIVIA I», «MÁFIL A») las va quitando hasta encontrar una; si ninguna calza devuelve el texto como vino."""
+    from .exportar import sin_tildes
+    _cargar_comunas()
+    palabras = str(texto or "").split()
+    for n in range(len(palabras), 0, -1):
+        k = sin_tildes(" ".join(palabras[:n])).upper()
+        if k in _COMUNAS_NOMBRES:
+            return _COMUNAS_NOMBRES[k]
+    return str(texto or "").strip()
+
+
+def comuna_en_sistema(nombre):
+    """True si la comuna existe en la lista del sistema (sin importar acentos ni mayúsculas); vacía = True."""
+    from .exportar import sin_tildes
+    lista = _cargar_comunas()
+    if not lista or not str(nombre or "").strip():
         return True
-    return sin_tildes(nombre).strip().upper() in _COMUNAS
+    return sin_tildes(nombre).strip().upper() in lista
 
 
 def actuario(rol):

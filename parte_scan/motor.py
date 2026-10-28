@@ -109,6 +109,36 @@ def texto_pagina(g):
     return pytesseract.image_to_string(big, lang="spa", config="--psm 6")
 
 
+def leer_rut_certificado(g):
+    """Respaldo cuando el OCR de la hoja completa no leyó el RUT del certificado: se ubica el rótulo «R.U.N./R.U.T.» y se lee
+    solo esa línea, ampliada y con los caracteres permitidos (dígitos, punto, guion y K). Devuelve '12345678-5' o ''."""
+    from . import certificado
+    big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
+    d = pytesseract.image_to_data(big, lang="spa", config="--psm 6", output_type=pytesseract.Output.DICT)
+    cajas = []          # (x0, y0, y1): zonas donde puede estar el valor del RUT
+    pal = [(i, (w or "").strip()) for i, w in enumerate(d["text"]) if (w or "").strip()]
+    for i, w in pal:
+        if re.fullmatch(r"R\.?U\.?[NT]\.?:?", w, re.I):
+            cajas.append((d["left"][i] + d["width"][i] + 6, d["top"][i] - 8, d["top"][i] + d["height"][i] + 8))
+    if not cajas:       # rótulo ilegible: el RUT es la línea que queda entre «Nombre» y «Domicilio»
+        nom = [i for i, w in pal if re.fullmatch(r"Nombre|Nobre", w, re.I)]
+        dom = [i for i, w in pal if re.fullmatch(r"Domicilio|Domiclio", w, re.I)]
+        if nom and dom and d["top"][dom[-1]] > d["top"][nom[-1]]:
+            y0, y1 = d["top"][nom[-1]] + d["height"][nom[-1]], d["top"][dom[-1]]
+            cajas.append((d["left"][nom[-1]] + d["width"][nom[-1]] + 6, y0 - 4, y1 + 4))
+    for x0, y0, y1 in cajas:
+        fila = big.crop((x0, max(0, y0), min(big.width, x0 + int(big.width * 0.45)), y1))
+        fila = fila.resize((fila.width * 2, fila.height * 2), Image.LANCZOS)
+        for psm in (7, 13):
+            txt = pytesseract.image_to_string(fila, lang="eng", config="--psm %d -c tessedit_char_whitelist=0123456789.-Kk:" % psm)
+            m = re.search(r"(\d{1,2})[.,\s]*(\d{3})[.,\s]*(\d{3})\s*[-–]\s*([\dKk])", txt)
+            if m:
+                rut = m.group(1) + m.group(2) + m.group(3) + "-" + m.group(4).upper()
+                if certificado.rut_ok(rut):
+                    return rut
+    return ""
+
+
 def tipo_pagina(texto):
     """'parte', 'carab' (parte de Carabineros), 'mtt' (denuncia del MTT), 'certificado' u 'otra' (hoja que no sirve, p. ej. segunda hoja del certificado)."""
     from . import certificado, extractor_carab, extractor_mtt

@@ -24,10 +24,36 @@ def es_certificado(t):
     return bool(re.search(r"EXTRACTO\s+DE\s+INSCRIP|DATOS\s+DEL\s+PROPIETARIO|Uso\s+exclusivo\s+Juzgados", t, re.I))
 
 
+RUIDO_FINAL = re.compile(r"(?:\s+[|!\\/\[\]\u2018\u2019'`´‘’:;,.\-_]+|\s+[IilLjJ1](?![\w/-]))+\s*$")
+
+
+def _sin_ruido(v):
+    """El borde del escáner deja una raya vertical que el OCR lee como «I», «1», «!», «|», «\\» al final de la línea."""
+    return _limpiar(RUIDO_FINAL.sub("", " " + v + " ")) if v else v
+
+
 def _valor(t, etiqueta):
-    # el OCR a veces lee los dos puntos como "?", "*", "—", "1"...
-    m = re.search(etiqueta + r"\W{0,4}[:;?*1!|]\s*(.+)", t, re.I)
-    return _limpiar(m.group(1)) if m else ""
+    # el OCR a veces lee los dos puntos como "?", "*", "—", "1", "g"...
+    m = re.search(etiqueta + r"\W{0,4}(?:[:;?*1!|]|\b[gGjJ]\b)\s*(.+)", t, re.I)
+    return _sin_ruido(_limpiar(m.group(1))) if m else ""
+
+
+def _propietario(t):
+    """Líneas de «DATOS DEL PROPIETARIO» sin su rótulo: [nombre, rut, domicilio, comuna, ...]. Sirve cuando el OCR
+    estropea el rótulo («Nombre», «Comuna»...) y la búsqueda por rótulo falla."""
+    m = re.search(r"PROPIETARIO", t, re.I)
+    if not m:
+        return []
+    out = []
+    for l in t[m.end():].splitlines()[1:]:      # el resto de la línea del encabezado es ruido
+        l = l.strip()
+        if not l:
+            continue
+        if re.match(r"\W*(?:Fec\.?\s*adq|Repertorio|FECHA)", l, re.I):
+            break
+        v = re.sub(r"^[^:;]{0,22}[:;?*]\s*", "", l) if re.match(r"^[^:;]{0,22}[:;?*]", l) else re.sub(r"^[A-Za-z.]{1,12}\s+(?:[gGjJiIl1|]\s+)?(?=\S)", "", l)
+        out.append(_sin_ruido(_limpiar(v)))
+    return out
 
 
 def leer(t):
@@ -49,7 +75,10 @@ def leer(t):
     o["marca"] = _valor(t, r"Marca").upper()
     o["modelo"] = _valor(t, r"Modelo").upper()
     o["color"] = _valor(t, r"Color").upper()
+    prop = _propietario(t)
     o["nombre"] = _valor(t, r"Nombre").upper()
+    if not o["nombre"] and prop:
+        o["nombre"] = prop[0].upper()
     # RUN: tolera coma por punto, espacios y letras confundidas
     m = re.search(r"R\.?\s*U\.?\s*N\.?\s*[:;]\s*([\d.,\s]{6,12})\s*[-–]\s*([\dKk])", t)
     rut = ""
@@ -66,9 +95,21 @@ def leer(t):
     elif not rut_ok(rut):
         av.append("El RUT del certificado (%s) no cumple el dígito verificador: revísalo." % rut)
     dom = _valor(t, r"Domicilio")
-    o["direccion"] = _limpiar(re.sub(r"\s\.\s", " ", dom)).upper()
-    com = _valor(t, r"Comuna")
-    o["comuna"] = re.sub(r"[^A-ZÁÉÍÓÚÑ ]", "", com.upper()).strip()
+    if not dom and len(prop) > 2:
+        dom = prop[2]
+    o["direccion"] = _sin_ruido(_limpiar(re.sub(r"\s\.\s", " ", dom))).upper().strip(" ,")
+    from . import catalogo
+    def _com(v):
+        return catalogo.comuna_oficial(re.sub(r"[^A-ZÁÉÍÓÚÑ ]", "", v.upper()).strip())
+    def _en_lista(c):
+        return bool(c) and catalogo.comuna_en_sistema(c)
+    com = _com(_valor(t, r"Comuna"))
+    if not _en_lista(com):          # rótulo ilegible o valor raro: se prueba la línea que sigue al domicilio
+        for cand in prop[3:4] + prop[2:3]:
+            if _en_lista(_com(cand)):
+                com = _com(cand)
+                break
+    o["comuna"] = com
     for k, nom in (("nombre", "el nombre"), ("direccion", "la dirección"), ("comuna", "la comuna"),
                    ("marca", "la marca"), ("tipo_vehiculo", "el tipo de vehículo"), ("placa", "la placa")):
         if not o[k]:

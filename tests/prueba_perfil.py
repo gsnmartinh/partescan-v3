@@ -88,5 +88,17 @@ for _ocr in ("DISPOSICION INFRINGIDA", "DISPOSICION INFRINCIDA", "DlSPOSICION IN
     _i = extractor_carab._infractor("JUAN PEREZ SOTO, Run Nro. 11.111.111-1, domiciliado en el sector Ejemplo sin Nro., de Valdivia. " + _ocr + ": Articulo 25 de la Ley 19.925")
     ok(_i[2] == "EL SECTOR EJEMPLO S/N" and _i[3] == "VALDIVIA", "dirección y comuna con «%s»: %r" % (_ocr, _i[2:4]))
 
+# 8) certificados con ruido del borde del escáner (datos ficticios) y oficina de partes municipales
+from parte_scan import certificado, extractor  # noqa: E402
+_base = "DATOS DEL VEHICULO\nInscripcion : ABCD.12-3\nTipo Vehiculo : STATION WAGON Año : 2020\nMarca : TOYOTA J\nDATOS DEL PROPIETARIO H\n"
+_c = certificado.leer(_base + "Nombre : SERVICIOS EJEMPLO SPA \\\nR.U.T. : 11.111.111-1 j\nDomicilio : LOTE A 2 SITIO 4 . EJEMPLO i\nSNEED : VALDIVIA I\nFec. adquisicion: 06-08-2020\n")
+ok(_c["nombre"] == "SERVICIOS EJEMPLO SPA" and _c["rut"] == "11111111-1" and _c["comuna"] == "VALDIVIA" and _c["direccion"] == "LOTE A 2 SITIO 4 EJEMPLO", "certificado con ruido: %r" % _c)
+_c = certificado.leer(_base + "Nobre ; JUAN PEREZ SOTO !\nee : 11.111.111-1\nDomiclio g CALLE UNO 123 I\nComuna ; MAFIL A\nFec. adquisicion: 02-02-2022\n")
+ok(_c["nombre"] == "JUAN PEREZ SOTO" and _c["direccion"] == "CALLE UNO 123" and _c["comuna"] == "MÁFIL", "certificado con rótulos dañados: %r" % ((_c["nombre"], _c["direccion"], _c["comuna"]),))
+ok(catalogo.comuna_oficial("RIO BUENO") == "RÍO BUENO" and catalogo.comuna_oficial("VALDIVIA I") == "VALDIVIA", "comuna oficial de la lista")
+ok(perfil.oficina_municipal("SEGURIDAD CIUDADANA") == "Departamento Inspeccion General" and perfil.oficina_municipal("INSPECCION GENERAL") == "Departamento Inspeccion General", "oficina de partes municipales")
+_p = extractor.parte("DEPTO. SEGURIDAD CIUDADANA\nDENUNCIO N 9111187 2026\nVALDIVIA, 17 DE SEPTIEMBRE DE 2026\nObservaciones: SE ADJUNTA CITACION N 111187 2026\n")
+ok(_p["n_parte"] == "111187", "el N° de denuncia coincide con el de la citación: %r" % _p["n_parte"])
+
 print("TODO BIEN" if not fallas else f"{len(fallas)} falla(s)")
 sys.exit(1 if fallas else 0)

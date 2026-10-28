@@ -31,7 +31,7 @@ def armar(r, archivo, pagina, pid):
                       "Revísalo." % catalogo.comodin())
     return {
         "id": pid, "archivo": archivo, "pagina": pagina, "img_cert": 0,
-        "depto": r["departamento"], "folio": r["n_parte_final"],
+        "depto": r["departamento"], "folio": r["n_parte_final"], "oficina": perfil.oficina_municipal(r["departamento"]),
         "fecha_parte": r["fecha_parte"], "fecha_infraccion": r["fecha_infraccion"],
         "hora_infraccion": hora(r["hora_infraccion"]), "lugar": r["lugar"],
         "infraccion_texto": r["infraccion_texto"], "tipo_vehiculo": exportar.tipo_limpio(r["tipo_vehiculo"]),
@@ -166,6 +166,14 @@ def trabajador():
                         PARTES.append(ultimo)
                 elif tipo == "certificado":
                     c = certificado.leer(texto)
+                    if not certificado.rut_ok(c.get("rut")):       # respaldo: se lee solo la línea del RUT, ampliada
+                        try:
+                            rut2 = motor.leer_rut_certificado(g)
+                        except Exception:       # noqa: BLE001 - el respaldo nunca debe impedir leer el certificado
+                            rut2 = ""
+                        if rut2:
+                            c["rut"] = rut2
+                            c["avisos"] = [a for a in c["avisos"] if "RUT" not in a]
                     with LOCK:
                         pid = len(IMAGENES) + 1
                         IMAGENES[pid] = img

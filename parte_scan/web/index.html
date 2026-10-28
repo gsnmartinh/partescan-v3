@@ -203,7 +203,7 @@ function campos(p){
   S.push({t:'1 · Datos de la causa',f:[
     carab?gc('Oficina emisora',p.oficina||(PERFIL?PERFIL.oficina_carabineros:''),p.oficina_reconocida?'ok':'check','Elige la unidad en la lista. El cargador pone «Ministerio De Transportes»; cámbiala a mano.'+(p.oficina_reconocida?'':' No se leyó la unidad en el encabezado: confirma cuál es.'))
          :(mtt?gc('Oficina emisora','Ministerio De Transportes','ok','El cargador ya la pone: no hay que cambiarla.')
-         :gc('Oficina emisora','','blank','Parte de Inspección: se deja la que ya trae el sistema.')),
+         :gc('Oficina emisora',p.oficina||'',p.oficina?'ok':'check',p.oficina?'Parte municipal ('+(p.depto||'')+'): se ingresa con esta oficina. Se cambia en ⚙ Juzgado.':'No sé qué oficina corresponde a este parte: elígela en el sistema.')),
     gc('Fecha de ingreso',hoy(),'ok','Día en que ingresas el parte.'),
     ...((carab||mtt)?[gc(carab?'N° de parte (Carabineros)':'N° de denuncia (MTT)',p.n_parte_carab||'',p.n_parte_carab?'ok':'check',(carab?'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.':'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.'))]:[]),
     ...((!carab&&!mtt)?[gc('N° de parte',p.folio,p.folio?'ok':'check','Paso 4 al ingresar: «Nº Parte». En Inspección es el mismo número de la boleta.')]:[]),
@@ -310,7 +310,7 @@ const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>f.st==='check').leng
 function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
 const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
     boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
-    oficina:p.origen==='mtt'?'Ministerio De Transportes':(p.origen==='carab'?(V(p,'Oficina emisora')||(PERFIL?PERFIL.oficina_carabineros:'')):''),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
+    oficina:p.origen==='mtt'?'Ministerio De Transportes':(p.origen==='carab'?(V(p,'Oficina emisora')||(PERFIL?PERFIL.oficina_carabineros:'')):(p.oficina||'')),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
     rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
     placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
     infracciones:(p.items||[]).map(x=>x.cod).filter(Boolean),causa:p.causa||'',uid:P.indexOf(p),ingresado:!!p.fin});
