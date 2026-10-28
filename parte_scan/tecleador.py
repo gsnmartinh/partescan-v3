@@ -203,11 +203,23 @@ def marcar(uid, nuevo):
     raise ValueError("No encuentro ese parte.")
 
 
+def limpiar():
+    """Vacía la lista y el registro para empezar una tanda nueva (no se puede mientras se está tecleando)."""
+    with LOCK:
+        if corriendo():
+            raise ValueError("Hay un ingreso en curso: detenlo o espera a que termine.")
+        LISTA.clear()
+        LOG.clear()
+    return {"ok": True}
+
+
 def accion(nombre, datos):
     if nombre == "cargar":
         return cargar(datos.get("partes", []))
     if nombre == "iniciar":
         return iniciar(datos.get("uids"), datos.get("auto", False), datos.get("actuario", ""))
+    if nombre == "limpiar":
+        return limpiar()
     if nombre == "detener":
         return detener()
     if nombre == "marcar":

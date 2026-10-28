@@ -72,7 +72,7 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <button id="btnContinua" hidden></button></span>
 <input type="file" id="fileSes" accept=".partescan" hidden>
 <span id="estado" class="note"></span><span style="flex:1"></span>
-<button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">⚙ Juzgado</button><button id="btnSalir">Cerrar programa</button></header>
+<button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">⚙ Juzgado</button><button id="btnNueva" title="Borra el lote de la pantalla y deja el programa en blanco para una tanda nueva (no cierra el programa)">🧹 Nueva tanda</button><button id="btnSalir">Cerrar programa</button></header>
 <div id="barAct" hidden style="background:#e8f1ff;border-bottom:1px solid #b6d0ff;padding:8px 16px;display:flex;gap:12px;align-items:center">
  <span id="actTxt" style="flex:1"></span><button class="p" id="actSi">Actualizar ahora</button><button id="actNo">Más tarde</button></div>
 
@@ -133,6 +133,22 @@ const drop=$('drop');
 ['dragover','dragenter'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('on')}));
 ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('on')}));
 document.addEventListener('drop',e=>{subir([...e.dataTransfer.files])});
+$('btnNueva').onclick=async()=>{
+  if(!P.length){toast('Ya está en blanco');return}
+  if(pend+subiendo>0){alert('Espera a que termine de leer los archivos.');return}
+  const faltan=P.filter(p=>!p.fin).length;
+  const msg=faltan?('Quedan '+faltan+' parte(s) sin marcar como ingresados.\n\nSi limpias, el lote se borra de la pantalla (la última sesión guardada sigue disponible en «Continuar anterior»).\n\n¿Limpiar de todos modos?')
+                  :'Terminaste todos los partes. ¿Limpiar la pantalla para una tanda nueva?';
+  if(!confirm(msg)) return;
+  const r=await fetch('/api/limpiar',{method:'POST',body:'x'}); const j=await r.json().catch(()=>({}));
+  if(!r.ok){alert(j.error||'No pude limpiar.');return}
+  P=[];sel=0;activeKey=null;citTocada=false;vista='p';ultimoAuto='';
+  $('cit').value='';$('rol').value='';try{localStorage.removeItem('rol')}catch(e){}
+  tNlog=0; if($('tLog')) $('tLog').textContent='';
+  pintarTira();mostrar();actualizarEstado();window.scrollTo(0,0);toast('Listo: pantalla en blanco');
+  try{ const u=await (await fetch('/api/sesion/ultima')).json();       // vuelve a ofrecer «Continuar anterior»
+    if(u.existe&&u.partes){ $('btnContinua').textContent='↺ Continuar anterior ('+u.partes+')'; $('btnContinua').hidden=false } }catch(e){}
+};
 $('btnSalir').onclick=async()=>{ if(confirm('¿Cerrar el programa? Se perderá la lectura de este lote.')){ try{await fetch('/api/salir',{method:'POST'})}catch(e){} document.body.innerHTML='<p style="padding:30px">Programa cerrado. Ya puedes cerrar esta pestaña.</p>'; } };
 
 let pend=0,err='';

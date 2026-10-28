@@ -131,6 +131,22 @@ est = tecleador.estado()
 ok(est["partes"][0]["estado"] == "interrumpido" and est["partes"][1]["estado"] == "pendiente", "Detener debe dejar el primero interrumpido y el resto pendiente")
 ok(any("[detenido]" in l for l in est["log"]), "el registro debe indicar que se detuvo")
 
+# 7b) limpiar: no se puede mientras teclea; después deja todo en blanco
+T.procesar_lote = lote_lento
+tecleador.LISTA.clear()
+tecleador.cargar([reg(0, "30", "1")])
+tecleador.iniciar()
+time.sleep(0.1)
+try:
+    tecleador.limpiar()
+    ok(False, "no debía limpiar mientras teclea")
+except ValueError:
+    pass
+tecleador.detener()
+tecleador.HILO.join(5)
+tecleador.limpiar()
+ok(tecleador.estado()["partes"] == [] and tecleador.estado()["log"] == [], "limpiar deja la lista y el registro vacíos")
+
 # 8) comuna: se escribe como está en la lista del sistema (con tilde); si no existe, queda limpia
 ok(T.comuna_sistema("rio bueno") == "RÍO BUENO" and T.comuna_sistema("Ñuñoa") == "ÑUÑOA" and T.comuna_sistema("VALDIVIA") == "VALDIVIA", "comuna con tilde como en el sistema")
 ok(T.comuna_sistema("Pueblo Inventado") == "PUEBLO INVENTADO", "comuna fuera de la lista")

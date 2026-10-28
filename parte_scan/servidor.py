@@ -301,6 +301,10 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {"error": str(e)})
             return self._send(200, {"ok": True})
         if u.path == "/api/limpiar":
+            try:
+                tecleador.limpiar()
+            except ValueError as e:
+                return self._send(400, {"error": str(e)})
             with LOCK:
                 PARTES.clear()
                 IMAGENES.clear()
