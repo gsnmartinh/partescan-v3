@@ -6,7 +6,9 @@ También hay un `.zip` portátil (se descomprime completo y se abre `ParteScan.e
 
 **Actualizaciones automáticas:** si hay internet, al abrir el programa avisa cuando hay una versión nueva y se actualiza con un botón, conservando tu perfil y tus sesiones. Sin internet funciona igual.
 
-**Novedades**
+**Novedades v3.0.1**: la dirección del infractor ya no arrastra la «Disposición infringida» aunque el OCR la lea con errores, y «sin Nro.» queda como S/N.
+
+**Novedades v3.0.0**
 - Ventana de escritorio propia (sin navegador ni consola negra).
 - Teclear en el sistema directamente desde ParteScan: se corrige un dato y se sigue, sin empezar de nuevo.
 - Infracción que no calza con la lista: se ingresa con el código comodín **67** y la descripción lleva lo que dice el parte.
