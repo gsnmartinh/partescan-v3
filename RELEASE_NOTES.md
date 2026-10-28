@@ -6,6 +6,10 @@ También hay un `.zip` portátil (se descomprime completo y se abre `ParteScan.e
 
 **Actualizaciones automáticas:** si hay internet, al abrir el programa avisa cuando hay una versión nueva y se actualiza con un botón, conservando tu perfil y tus sesiones. Sin internet funciona igual.
 
+**Novedades v3.0.3**
+- Botón **✓ Confirmar** junto a «Copiar» en cada campo marcado «Revisar», y **✓ Ya revisé todo** en el recuadro de avisos: al confirmar, el campo queda en verde y el parte cambia de color.
+- Los avisos «No pude leer la marca / el tipo de vehículo / la comuna…» desaparecen solos cuando el campo ya tiene valor.
+
 **Novedades v3.0.2**
 - Botón **🧹 Nueva tanda**: limpia el lote y el tecleo para empezar de cero sin cerrar el programa.
 - Partes municipales: la **oficina emisora** se completa sola según el encabezado (Inspección General y Seguridad Ciudadana → «Departamento Inspeccion General»; se cambia en ⚙ Juzgado).

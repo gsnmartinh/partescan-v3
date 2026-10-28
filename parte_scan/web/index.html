@@ -162,7 +162,7 @@ async function sondear(){
       ['img_cert','cert','cert_avisos','placa','marca','tipo_vehiculo'].forEach(k=>{q[k]=n[k]}); cambio=true; }});
     if(cambio&&P.length&&!$('main').hidden) mostrar();
     if(r.partes.length!==P.length){
-      const nuevos=r.partes.slice(P.length).map(p=>Object.assign(p,{ed:{},done:{},fin:false}));
+      const nuevos=r.partes.slice(P.length).map(p=>Object.assign(p,{ed:{},done:{},ok:{},fin:false}));
       nuevos.forEach((p,i)=>{ if(p.origen==='carab'&&p.n_parte_carab){ p.inf_idx0=P.concat(nuevos.slice(0,i)).filter(q=>q.origen==='carab'&&q.n_parte_carab===p.n_parte_carab).length } });
       const vacio=P.length===0; P=P.concat(nuevos);
       if(!citTocada) $('cit').value=consenso();
@@ -245,6 +245,13 @@ function campos(p){
   ]});
   return S;
 }
+function avisoVigente(p,x){            // «No pude leer la marca…» deja de valer cuando el campo ya tiene valor
+  const c=p.cert||{}, v=k=>(valorActual(p,k)||'').trim();
+  const mapa=[[/la marca del certificado/,'Marca (certificado)'],[/el tipo de vehículo/,'Tipo de vehículo (certificado)'],[/la comuna del certificado/,'Comuna (certificado)'],
+              [/la dirección del certificado/,'Dirección (certificado)'],[/el nombre del certificado/,'Nombre (certificado)'],[/el RUT del certificado/,'RUT (certificado)']];
+  for(const [re,k] of mapa) if(re.test(x)&&v(k)) return false;
+  return true;
+}
 function mostrar(){
   if(!P.length){$('main').hidden=true;return}
   const p=P[sel]; $('main').hidden=false;
@@ -252,11 +259,11 @@ function mostrar(){
   const src='/api/img/'+(vista==='c'?p.img_cert:p.id); if(img.getAttribute('src')!==src) img.src=src;
   $('tabP').classList.toggle('on',vista==='p'); $('tabC').classList.toggle('on',vista==='c'); $('tabC').disabled=!p.img_cert;
   const S=campos(p), F=$('form'); F.innerHTML='';
-  const av=p.avisos.filter(x=>!/N° de parte|folio/i.test(x)).concat(p.cert_avisos||[]);
+  const av=p.avOk?[]:p.avisos.filter(x=>!/N° de parte|folio/i.test(x)).concat(p.cert_avisos||[]).filter(x=>avisoVigente(p,x));
   const rp=rolPrevisto(p);
   F.insertAdjacentHTML('beforeend',rp?('<div class="avisos" style="background:var(--okb);color:var(--ok);font-size:17px"><b>Rol previsto de este parte: '+rp+'</b> &nbsp;<small style="color:inherit">anótalo en el parte; compruébalo al cargar el archivo</small></div>')
     :'<div class="avisos"><b>Escribe arriba el «Rol Disponible»</b> para ver el rol previsto de cada parte.</div>');
-  if(av.length){F.insertAdjacentHTML('beforeend','<div class="avisos"><b>Revisa este parte:</b><br>'+av.map(x=>'· '+x).join('<br>')+'</div>')}
+  if(av.length){F.insertAdjacentHTML('beforeend','<div class="avisos"><b>Revisa este parte:</b><br>'+av.map(x=>'· '+x).join('<br>')+'<div style="margin-top:8px"><button id="avOk" title="Ya los revisé: quita este aviso y confirma todos los campos que piden revisión">✓ Ya revisé todo</button></div></div>')}
   const nav=document.createElement('div');nav.className='nav';
   nav.innerHTML='<button id="ant">← Anterior</button><button id="sig">Saltar →</button><button class="p" id="ing">Ingresado → siguiente parte</button>';
   F.appendChild(nav);
@@ -267,18 +274,20 @@ function mostrar(){
       const r=document.createElement('div');r.className='row'+(f.big?' big':'')+(key===activeKey?' act':'')+(p.done[key]?' done':'');
       const esOfi=(key==='Oficina emisora'&&carab0(p));
       const ctl=esOfi?'<select class="val">'+(OFICINAS_SIS.some(o=>o[1]===val)?'':'<option value="'+String(val).replace(/"/g,'&quot;')+'">'+val+'</option>')+OFICINAS_SIS.map(o=>'<option value="'+o[1]+'"'+(o[1]===val?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>').join('')+'</select>':'<input class="val" value="'+String(val).replace(/"/g,'&quot;')+'" placeholder="(en blanco)">';
-      r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+f.st+'">'+LAB[f.st]+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div><button>Copiar</button></div>';
+      r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+((p.ok&&p.ok[key])?'ok':f.st)+'">'+((p.ok&&p.ok[key])?'Confirmado':LAB[f.st])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((f.st==='check'&&!(p.ok&&p.ok[key]))?'<button class="cf" title="Revisé este dato y está bien">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
       el.oninput=el.onchange=e=>{p.ed[key]=e.target.value;pintarTira();if(key==='Infractor de esta copia (1, 2)')mostrar()};
       el.onfocus=()=>{activeKey=key};
       if(key==='Placa')el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();delete p.ed['Nombre (certificado)']}}})});
       r.querySelector('button').onclick=()=>{activeKey=key;copiarCampo(p,key)};
+      const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; p.ok[key]=true; pintarTira(); mostrar() };
       d.appendChild(r);
     });
     F.appendChild(d);
   });
   $('ant').onclick=()=>ir(sel-1);$('sig').onclick=()=>ir(sel+1);$('ing').onclick=ingresado;
+  if($('avOk')) $('avOk').onclick=()=>{ p.ok=p.ok||{}; p.avOk=true; campos(p).forEach(s=>s.f.forEach(f=>{ if(f.st==='check') p.ok[f.k]=true })); pintarTira(); mostrar(); toast('Marcado como revisado') };
   if(!F.dataset.k)F.dataset.k=1;
 }
 function valorActual(p,key){ for(const s of campos(p)) for(const f of s.f) if(f.k===key) return (key in p.ed)?p.ed[key]:f.v; return ''}
@@ -327,7 +336,7 @@ $('btnTecleo').onclick=()=>{
 // ---- Sesión: guardar / abrir el lote con las correcciones, sin volver a leer los PDF ----
 function estadoSesion(){return JSON.stringify({version:1,partes:P,rol:$('rol').value,cit:$('cit').value,citTocada:citTocada})}
 function aplicarSesion(e){
-  P=(e.partes||[]).map(p=>Object.assign({ed:{},done:{},fin:false},p));
+  P=(e.partes||[]).map(p=>Object.assign({ed:{},done:{},ok:{},fin:false},p));
   if(e.rol) $('rol').value=e.rol;
   if(e.cit){ $('cit').value=e.cit; citTocada=true; }
   sel=0;activeKey=null;pintarTira();mostrar();window.scrollTo(0,0);
@@ -366,7 +375,7 @@ function ingresado(){
   ir(n);
 }
 function semaforo(p){
-  const n=campos(p).reduce((k,s)=>k+s.f.filter(f=>f.st==='check'&&!(f.k in p.ed)).length,0);
+  const n=campos(p).reduce((k,s)=>k+s.f.filter(f=>f.st==='check'&&!(f.k in p.ed)&&!(p.ok&&p.ok[f.k])).length,0);
   return {n,c:n===0?'v':(n<3?'a':'r')};
 }
 function pintarTira(){
