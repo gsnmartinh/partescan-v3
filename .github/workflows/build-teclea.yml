@@ -1,0 +1,66 @@
+name: Compilar PartesTeclea para Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version a publicar como Release (ej. v1.0.0). Dejar vacio = solo compilar"
+        required: false
+        default: ""
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+    paths: ["teclea/**", "parte_scan/comunas_sistema.txt", "parte_scan/perfil.py", "parte_scan/codigos_sistema.py", ".github/workflows/build-teclea.yml"]
+
+concurrency:
+  group: compilar-teclea-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write      # necesario para adjuntar el zip a la Release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: pip install -r teclea/requirements.txt
+      - name: Crear el programa (.exe)
+        shell: pwsh
+        working-directory: teclea
+        run: |
+          pyinstaller --noconfirm --clean --name PartesTeclea --windowed `
+            --paths .. `
+            --hidden-import parte_scan.perfil --hidden-import parte_scan.codigos_sistema `
+            --hidden-import pywinauto.keyboard `
+            --collect-data sv_ttk `
+            --add-data "comunas_sistema.txt;." `
+            teclea_gui.py
+          Copy-Item LEEME.txt dist\PartesTeclea\LEEME.txt
+      - name: Comprobar que el programa arranca
+        shell: pwsh
+        working-directory: teclea
+        run: |
+          $p = Start-Process -FilePath dist\PartesTeclea\PartesTeclea.exe -ArgumentList "--autotest","$PWD\prueba.txt" -PassThru -Wait
+          Get-Content prueba.txt
+          if ((Get-Content prueba.txt) -notmatch "^ok .* tabla=2\d\d gui=ok tema=sv_ttk") { throw "El programa no arranco bien" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PartesTeclea-Windows
+          retention-days: 14
+          path: teclea/dist/PartesTeclea
+
+      - name: Publicar en la Release (solo al crear una versión)
+        if: ${{ github.event.inputs.version != '' || startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.event.inputs.version || github.ref_name }}"
+          Compress-Archive -Path "teclea\dist\PartesTeclea" -DestinationPath "PartesTeclea-Windows-$tag.zip"
+          gh release create $tag --title "ParteScan y PartesTeclea $tag" --target ${{ github.sha }} --notes-file RELEASE_NOTES.md 2>$null
+          gh release upload $tag "PartesTeclea-Windows-$tag.zip" --clobber

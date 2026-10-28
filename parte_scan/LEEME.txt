@@ -1,0 +1,43 @@
+PARTESCAN - Lectura de partes y certificados
+============================================
+ParteScan lee los partes escaneados (y su certificado del Registro Civil) y prepara los datos para que
+PartesTeclea los ingrese en el sistema.
+
+INSTALAR
+  1. Descomprime la carpeta "ParteScan" donde quieras (por ejemplo en Documentos).
+     No necesita instalación ni internet. Todo funciona dentro de tu computador.
+  2. Haz doble clic en  ParteScan.exe
+     - Se abre en su propia ventana de ParteScan (en Windows 11). Si no pudiera, se abre en el navegador, como antes.
+     - Para salir, usa «Cerrar programa» o cierra la ventana.
+     - Si Windows muestra "Windows protegió su PC": Más información > Ejecutar de todas formas.
+
+ESCANEAR
+  Escanea en un solo PDF (200 dpi, escala de grises), en este orden:
+     parte 1, certificado 1, parte 2, certificado 2, ...
+  Solo la primera hoja de cada parte y la hoja del certificado del Registro Civil.
+  Si un parte no tiene certificado, igual se puede cargar (irá sin RUT, nombre ni dirección).
+
+USAR
+  1. Arrastra el PDF a la ventana o pulsa "Abrir partes escaneados...". Espera unos 15 segundos por parte con certificado.
+  2. Revisa cada parte: pestañas "Parte" y "Certificado" para ver la imagen. Los campos en amarillo ("Revisar") son los dudosos.
+     Compara siempre: folio, placa y RUT. Si un parte de Carabineros no dice la unidad, elígela en "Oficina emisora".
+  3. La "Fecha de citación del lote" se propone sola. Cámbiala si hace falta.
+     El "Rol Disponible" es opcional: solo sirve para mostrar el actuario previsto de cada parte.
+  4. Pulsa "Guardar datos para tecleo (.json)". Se guarda en Descargas con la fecha, la hora y la cantidad de partes.
+  5. Abre ese archivo en PartesTeclea.
+
+TECLEAR DESDE LA MISMA VENTANA (prueba)
+  En vez de los pasos 4 y 5, pulsa "Teclear en el sistema…": se abre un panel con todos los partes, su estado y sus avisos.
+  Abre en el sistema la pantalla de ingreso, deja el cursor en Rol y pulsa "Teclear pendientes"; luego haz clic en la
+  ventana del sistema. ESC detiene. Si un dato está mal, pulsa "Corregir" en ese parte, arréglalo con su imagen a la
+  vista y vuelve a "Teclear en el sistema…": lo que ya se ingresó no se pierde y no hay que empezar de nuevo.
+  Necesita Windows. El archivo .json y PartesTeclea siguen funcionando como siempre.
+
+SI ALGO FALLA
+  - Un parte o certificado mal leído: corrige el campo en la pantalla antes de guardar.
+  - Certificado sin parte, o una hoja que no es parte ni certificado: el programa lo avisa arriba y la ignora.
+  - Cuéntame qué falló y pásame el escaneo para mejorarlo.
+
+OTRO JUZGADO / CÓDIGOS NUEVOS
+  Botón "Juzgado" (arriba a la derecha): ahí se cargan las listas de infracciones y oficinas de tu juzgado,
+  las actuarias y se confirman las equivalencias de infracciones. Sin tocar nada, usa las del 2° Juzgado de Valdivia.

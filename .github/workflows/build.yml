@@ -1,0 +1,112 @@
+name: Compilar ParteScan para Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version a publicar como Release (ej. v1.0.0). Dejar vacio = solo compilar"
+        required: false
+        default: ""      # botón "Run workflow"
+  push:
+    branches: [main, master]
+    tags: ["v*"]          # al crear una versión (v1.0.0, v1.1.0…) se publica una Release con el zip
+
+concurrency:
+  group: compilar-${{ github.ref }}
+  cancel-in-progress: true   # si subes dos cambios seguidos, solo se compila el último
+
+permissions:
+  contents: write      # necesario para adjuntar el zip a la Release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias de Python
+        run: pip install -r requirements.txt
+
+      - name: Pruebas del perfil y del reconocimiento
+        run: python tests/prueba_perfil.py
+
+      - name: Pruebas del tecleo desde ParteScan
+        run: python tests/prueba_tecleador.py
+
+      - name: Instalar Tesseract (motor de OCR, gratuito)
+        run: choco install tesseract -y --no-progress
+
+      - name: Preparar Tesseract portable con español
+        shell: pwsh
+        run: |
+          $src = "C:\Program Files\Tesseract-OCR"
+          New-Item -ItemType Directory -Force -Path build\tesseract | Out-Null
+          Copy-Item "$src\*" build\tesseract -Recurse -Force
+          New-Item -ItemType Directory -Force -Path build\tesseract\tessdata | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_best/raw/main/spa.traineddata" -OutFile build\tesseract\tessdata\spa.traineddata
+          Get-ChildItem build\tesseract\tessdata
+          $env:TESSDATA_PREFIX = (Resolve-Path build\tesseract\tessdata).Path
+          & build\tesseract\tesseract.exe --list-langs
+
+      - name: Crear el programa (.exe)
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --name ParteScan --windowed `
+            --add-data "build\tesseract;tesseract" `
+            --add-data "parte_scan\web;parte_scan\web" `
+            --add-data "parte_scan\catalogo.json;parte_scan" `
+            --add-data "parte_scan\comunas_sistema.txt;parte_scan" `
+            --collect-all pypdfium2_raw --collect-all pypdfium2 `
+            --collect-all rapidocr_onnxruntime --collect-all onnxruntime `
+            --paths teclea --hidden-import teclea_contextual --hidden-import pywinauto.keyboard `
+            --collect-all webview --collect-all pythonnet --collect-all clr_loader `
+            partescan.py
+          Copy-Item parte_scan\LEEME.txt dist\ParteScan\LEEME.txt
+
+      - name: Comprobar que el programa arranca
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\ParteScan\ParteScan.exe -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 12
+          $r = Invoke-WebRequest -Uri http://127.0.0.1:8765/api/estado -UseBasicParsing
+          Write-Host $r.Content
+          $t = Invoke-WebRequest -Uri http://127.0.0.1:8765/api/tecleo/estado -UseBasicParsing
+          Write-Host $t.Content
+          if ($t.Content -notmatch '"disponible":\s*true') { throw "El tecleo no quedo disponible dentro del programa" }
+          Stop-Process -Id $p.Id -Force
+
+      - name: Crear el instalador (Setup.exe)
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $v = "${{ github.event.inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'dev' }}"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DVersion=$v" instalador\ParteScan.iss
+          Get-ChildItem salida
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ParteScan-Instalador
+          retention-days: 14
+          path: salida/*.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ParteScan-Windows
+          retention-days: 14        # los compilados viejos se borran solos a los 14 días
+          path: dist/ParteScan
+
+      - name: Publicar en la Release (solo al crear una versión)
+        if: ${{ github.event.inputs.version != '' || startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.event.inputs.version || github.ref_name }}"
+          Compress-Archive -Path "dist\ParteScan" -DestinationPath "ParteScan-Windows-$tag.zip"
+          gh release create $tag --title "ParteScan y PartesTeclea $tag" --target ${{ github.sha }} --notes-file RELEASE_NOTES.md 2>$null
+          gh release upload $tag "ParteScan-Windows-$tag.zip" --clobber
+          gh release upload $tag (Get-ChildItem salida\*.exe).FullName --clobber

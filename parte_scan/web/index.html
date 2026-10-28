@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ParteScan</title>
+<style>
+:root{color-scheme:light dark;--bg:#f3f3f3;--bg2:#eaeef5;--card:#fbfbfb;--card2:#fff;--ink:#1a1a1a;--mut:#616161;--line:#e0e0e0;--line2:#c9c9c9;--ac:#0067c0;--acx:#005aa8;--acon:#fff;--ok:#0f7b0f;--okb:#dff6dd;--ck:#9d5d00;--ckb:#fff4ce;--bl:#616161;--blb:#ededed;--done:#e7f5e8;--rj:#c42b1c;--rjb:#fde7e9;--sh:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05);--r:8px;--f:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+@media(prefers-color-scheme:dark){:root{--bg:#202020;--bg2:#1b2430;--card:#2b2b2b;--card2:#323232;--ink:#f3f3f3;--mut:#a8a8a8;--line:#3d3d3d;--line2:#555;--ac:#60cdff;--acx:#4cc2f5;--acon:#04293d;--ok:#6ccb5f;--okb:#1f3a1f;--ck:#fce100;--ckb:#433519;--blb:#383838;--done:#1d3322;--rj:#ff99a4;--rjb:#442726;--sh:0 1px 2px rgba(0,0,0,.4),0 2px 10px rgba(0,0,0,.3)}}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,var(--bg2) 0,var(--bg) 280px) fixed,var(--bg);color:var(--ink);font:14px/1.45 var(--f);-webkit-font-smoothing:antialiased}
+header .grp{display:flex;gap:6px;align-items:center;padding-left:12px;border-left:1px solid var(--line)}header .grp button{padding:6px 10px;font-size:13px}header .note{white-space:nowrap}
+@media(max-width:1500px){#juz{display:none}header{gap:8px!important}}
+header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 20px;background:color-mix(in srgb,var(--card) 82%,transparent);backdrop-filter:blur(18px) saturate(1.4);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+h1{font-size:18px;font-weight:600;letter-spacing:-.2px;margin:0 10px 0 0;display:flex;align-items:center;gap:10px}
+h1::before{content:"";width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--ac),#7aa7ff);box-shadow:inset 0 0 0 5px color-mix(in srgb,var(--acon) 0%,transparent);-webkit-mask:none}
+button{font:inherit;border:1px solid var(--line);border-bottom-color:var(--line2);background:var(--card2);color:var(--ink);border-radius:var(--r);padding:6px 14px;min-height:32px;cursor:pointer;transition:background .12s,transform .05s,box-shadow .12s}
+button:hover{background:color-mix(in srgb,var(--card2) 88%,var(--ink) 12%)}
+button:active{transform:scale(.98)}
+button:focus-visible,.val:focus-visible,.lote input:focus-visible,.chip:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+button.p{background:var(--ac);color:var(--acon);border-color:var(--ac);font-weight:600}
+button.p:hover{background:var(--acx);border-color:var(--acx)}
+button:disabled{opacity:.5;cursor:default}
+.lote{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin:14px 20px 4px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh)}
+.lote label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:4px}
+.lote input,.val{font:inherit;font-size:15px;padding:6px 10px;border:1px solid var(--line);border-bottom:2px solid var(--line2);border-radius:var(--r);background:var(--card2);color:var(--ink);width:150px;transition:border-color .12s}
+.lote input:focus,.val:focus{outline:none;border-bottom-color:var(--ac)}
+.lote input[readonly]{background:var(--blb);color:var(--mut)}
+#drop{margin:14px 20px;border:2px dashed var(--line2);border-radius:12px;padding:26px;text-align:center;color:var(--mut);background:color-mix(in srgb,var(--card) 60%,transparent);transition:.15s}
+#drop.on{border-color:var(--ac);background:var(--okb);color:var(--ink)}
+#tira{display:flex;gap:6px;flex-wrap:wrap;padding:0 20px 10px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:13px;cursor:pointer;background:var(--card2);transition:.12s}
+.chip:hover{border-color:var(--line2);transform:translateY(-1px);box-shadow:var(--sh)}
+.chip.v{background:var(--okb);color:var(--ok);border-color:transparent}.chip.a{background:var(--ckb);color:var(--ck);border-color:transparent}.chip.r{background:var(--rjb);color:var(--rj);border-color:transparent}
+.leyenda{padding:0 20px 8px;font-size:12px;color:var(--mut)}
+.chip.sel{border-color:var(--ac);outline:2px solid var(--ac);outline-offset:0}.chip.fin{background:var(--done);color:var(--ok)}
+main{display:grid;grid-template-columns:minmax(300px,42%) 1fr;gap:16px;padding:0 20px 40px;align-items:start}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+#imgbox{position:sticky;top:64px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:calc(100vh - 80px);overflow:auto;box-shadow:var(--sh)}
+#imgbox img{width:100%;display:block;border-radius:6px;cursor:zoom-in}#imgbox img.z{width:170%;cursor:zoom-out}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;box-shadow:var(--sh)}
+.sec h3{margin:0 0 8px;font-size:15px;font-weight:600}
+.row{display:grid;grid-template-columns:150px 1fr auto;gap:10px;align-items:start;padding:7px 6px;border-radius:var(--r);transition:background .12s}
+.row.act{background:var(--ckb)}.row.done{background:var(--done)}
+.lab{font-size:13px;color:var(--mut);padding-top:8px}
+.val{width:100%}
+select.val{padding:6px 8px}
+.row.big .val{font-size:20px;font-weight:600}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:12px;align-items:center}
+.tag{border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600}.t-ok{background:var(--okb);color:var(--ok)}.t-check{background:var(--ckb);color:var(--ck)}.t-blank{background:var(--blb);color:var(--bl)}
+.note{color:var(--mut)}
+.avisos{background:var(--ckb);color:var(--ck);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:14px;border-left:4px solid var(--ck)}
+.nav{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#202020;color:#fff;padding:9px 18px;border-radius:999px;opacity:0;transition:.2s;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.35)}#toast.show{opacity:.95}
+small{color:var(--mut)}
+.tabs{display:flex;gap:4px;margin-bottom:8px;padding:3px;background:var(--blb);border-radius:10px;width:max-content}.tabs button{border:0;background:transparent;min-height:28px}.tabs button.on{background:var(--card2);color:var(--ink);box-shadow:var(--sh);font-weight:600}
+#hoja{margin:14px 20px 40px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--sh);overflow:auto}
+#hoja table{border-collapse:collapse;width:100%;font-size:14px}#hoja th,#hoja td{border:1px solid var(--line);padding:6px 9px;text-align:left}
+#hoja th{background:var(--blb)}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.35);width:min(900px,95vw);max-height:92vh;padding:0}
+dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
+.dh{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line)}.dh h2{margin:0;font-size:17px}
+.db{padding:6px 20px 12px;overflow:auto;max-height:calc(92vh - 130px)}.df{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--line)}
+.db h3{margin:18px 0 6px;font-size:15px}.db .g{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.db label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:3px}.db .val,.db select{width:100%}
+.db table{border-collapse:collapse;width:100%;font-size:13px}.db td,.db th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:middle}
+.rowa{display:flex;gap:8px;margin-bottom:6px}.rowa .val{width:auto}
+@media print{header,.lote,#drop,#tira,main,#toast,#btnCerrarHoja,#btnImprHoja{display:none!important}#hoja{border:0;margin:0;box-shadow:none}}
+</style></head><body>
+<header><h1>ParteScan</h1><span id="juz" class="note" style="margin-left:-4px"></span>
+<button class="p" id="btnAbrir">Abrir partes escaneados…</button>
+<input type="file" id="file" multiple accept=".pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff" hidden>
+<span class="grp"><button id="btnGuardaSes" title="Guarda el lote con tus correcciones y las imágenes, para seguir después sin leer de nuevo los PDF">Guardar sesión</button>
+<button id="btnAbreSes" title="Abre un lote guardado antes (.partescan) con todas tus correcciones">Abrir sesión…</button>
+<button id="btnContinua" hidden></button></span>
+<input type="file" id="fileSes" accept=".partescan" hidden>
+<span id="estado" class="note"></span><span style="flex:1"></span>
+<button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">⚙ Juzgado</button><button id="btnSalir">Cerrar programa</button></header>
+
+<div class="lote">
+ <label>Rol Disponible (rol del primer parte)<input id="rol" inputmode="numeric" placeholder="ej. 19952"></label>
+ <label>Fecha de citación del lote<input id="cit" placeholder="dd/mm/aaaa"></label>
+ <label>Fecha de ingreso (hoy)<input id="hoy" readonly></label>
+<button class="p" id="btnTec" title="Teclea los partes en el sistema del Juzgado desde esta misma ventana: si un dato está mal, lo corriges y sigues">Teclear en el sistema…</button>
+<button id="btnTecleo" title="Guarda el archivo que abre PartesTeclea para ingresar los partes en el sistema">Guardar datos para tecleo (.json)</button>
+ <small style="max-width:520px">El rol es opcional: sirve para mostrar el actuario previsto. La fecha de citación se propone con la que más se repite en el lote. Al terminar, tecléalos desde aquí mismo con «Teclear en el sistema…» (el .json queda como alternativa para PartesTeclea).</small>
+</div>
+<div id="drop">Arrastra aquí los PDF o fotos de los partes (solo la primera hoja de cada parte), o usa «Abrir partes escaneados…»</div>
+<div class="leyenda">Atajo: <b>F2</b> copia el siguiente campo. · Colores de cada parte: <b style="color:var(--ok)">verde</b> = todos los datos completos · <b style="color:var(--ck)">amarillo</b> = 1 o 2 campos por revisar · <b style="color:var(--rj)">rojo</b> = 3 o más, revisar con cuidado. Al corregir un campo, se actualiza.</div>
+<div id="tira"></div>
+<main id="main" hidden><div id="imgbox"><div class="tabs"><button id="tabP" class="on">Parte</button><button id="tabC">Certificado</button></div><img id="img" alt="parte"></div><div id="form"></div></main>
+<dialog id="dlgJuz"><div class="dh"><h2>Perfil del juzgado</h2><button id="dClose">Cerrar</button></div><div class="db" id="dBody"></div><div class="df"><button id="dGuardar" class="p">Guardar cambios</button></div></dialog>
+<dialog id="dlgTec" style="width:min(1150px,96vw)"><div class="dh"><h2>Teclear en el sistema del Juzgado</h2><button id="tCerrar">Cerrar</button></div>
+<div class="db"><div id="tAviso" class="avisos" hidden></div><div id="tNoDisp" class="avisos" hidden></div>
+<small>Abre en el sistema la pantalla de ingreso («Procesos…»), deja el cursor en Rol y pulsa «Teclear pendientes»; después haz clic en la ventana del sistema. ESC detiene. Si un dato está mal, pulsa «Corregir», arréglalo y vuelve aquí: lo ya ingresado no se pierde.</small>
+<div class="rowa" style="align-items:center;flex-wrap:wrap;margin:10px 0">
+<label style="flex-direction:row;align-items:center;gap:6px">Actuario <select id="tAct" class="val" style="width:auto"><option value="">Automático (según el Rol)</option></select></label>
+<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tAuto" style="width:auto"> Aceptar automáticamente (solo partes sin avisos)</label>
+<button class="p" id="tIniciar">Teclear pendientes</button><button id="tDetener">Detener</button><span id="tResumen" class="note"></span></div>
+<div style="overflow:auto"><table id="tTabla"></table></div>
+<h3>Registro</h3><pre id="tLog" style="max-height:200px;overflow:auto;background:var(--blb);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap"></pre></div></dialog>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+let ACT={}, PERFIL=null, OFICINAS_SIS=[];
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+async function cargarPerfil(){
+  try{PERFIL=await (await fetch('/api/perfil')).json()}catch(e){return}
+  ACT={}; for(let d=0;d<10;d++){const n=PERFIL.rol_actuario[String(d)]; ACT[d]=n?[n.charAt(0)+n.slice(1).toLowerCase(),PERFIL.actuarios[n]]:null}
+  OFICINAS_SIS=PERFIL.oficinas;
+  $('juz').textContent=PERFIL.juzgado;
+  if(P.length&&!$('main').hidden){pintarTira();mostrar()}
+}
+const LAB={ok:"Listo",check:"Revisar",blank:"Vacío"};
+let P=[],sel=0,activeKey=null,citTocada=false,subiendo=0,vista='p';
+const hoy=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
+$('hoy').value=hoy();
+try{$('rol').value=localStorage.getItem('rol')||'';}catch(e){}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1200)}
+function copiar(t){ if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).catch(()=>fb(t));}else fb(t);
+ function fb(t){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy')}catch(e){}a.remove()}}
+
+/* ---------- subida y lectura ---------- */
+async function subir(files){
+  for(const f of files){
+    subiendo++; actualizarEstado();
+    try{ await fetch('/api/subir?nombre='+encodeURIComponent(f.name),{method:'POST',body:f}); }catch(e){toast('No pude enviar '+f.name)}
+    subiendo--;
+  }
+}
+$('btnAbrir').onclick=()=>$('file').click();
+$('file').onchange=e=>{subir([...e.target.files]);e.target.value=''};
+const drop=$('drop');
+['dragover','dragenter'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('on')}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('on')}));
+document.addEventListener('drop',e=>{subir([...e.dataTransfer.files])});
+$('btnSalir').onclick=async()=>{ if(confirm('¿Cerrar el programa? Se perderá la lectura de este lote.')){ try{await fetch('/api/salir',{method:'POST'})}catch(e){} document.body.innerHTML='<p style="padding:30px">Programa cerrado. Ya puedes cerrar esta pestaña.</p>'; } };
+
+let pend=0,err='';
+async function sondear(){
+  try{
+    const r=await (await fetch('/api/estado')).json();
+    pend=r.pendientes; err=r.error;
+    // el certificado puede llegar después del parte: actualizar los partes ya mostrados
+    let cambio=false;
+    P.forEach((q,i)=>{const n=r.partes[i]; if(n&&n.img_cert!==q.img_cert){
+      ['img_cert','cert','cert_avisos','placa','marca','tipo_vehiculo'].forEach(k=>{q[k]=n[k]}); cambio=true; }});
+    if(cambio&&P.length&&!$('main').hidden) mostrar();
+    if(r.partes.length!==P.length){
+      const nuevos=r.partes.slice(P.length).map(p=>Object.assign(p,{ed:{},done:{},fin:false}));
+      nuevos.forEach((p,i)=>{ if(p.origen==='carab'&&p.n_parte_carab){ p.inf_idx0=P.concat(nuevos.slice(0,i)).filter(q=>q.origen==='carab'&&q.n_parte_carab===p.n_parte_carab).length } });
+      const vacio=P.length===0; P=P.concat(nuevos);
+      if(!citTocada) $('cit').value=consenso();
+      if(vacio){sel=0;activeKey=null;}
+      pintarTira(); if(vacio||!$('main').hidden) mostrar();
+    }
+  }catch(e){}
+  actualizarEstado();
+}
+setInterval(sondear,900);
+function actualizarEstado(){
+  if(P.length) $('btnContinua').hidden=true;
+  const n=pend+subiendo;
+  $('estado').textContent=(n?('Leyendo… '+n+' archivo(s) pendiente(s). '):'')+(P.length?(P.length+' partes leídos. '):'')+(err?('⚠ '+err):'');
+}
+function consenso(){
+  const c={};P.forEach(p=>{if(p.fecha_citacion)c[p.fecha_citacion]=(c[p.fecha_citacion]||0)+1});
+  return Object.keys(c).sort((a,b)=>c[b]-c[a])[0]||'';
+}
+$('cit').oninput=()=>{citTocada=true;mostrar()};
+$('rol').oninput=()=>{try{localStorage.setItem('rol',$('rol').value)}catch(e){};pintarTira();mostrar()};
+
+/* ---------- campos ---------- */
+function folioBase(p){const L=p.infractores||[];return (L.length>1&&L[infIdx(p)]&&L[infIdx(p)].boleta)||p.folio||''}
+function folioReal(p){const e=p.ed&&p.ed['N° de boleta (folio)'];return String(e!==undefined?e:folioBase(p)).replace(/\D/g,'')}
+function infIdx(p){const e=p.ed&&p.ed['Infractor de esta copia (1, 2)'];const n=(e!==undefined&&e!=='')?(+e-1):(p.inf_idx0||0);const L=(p.infractores||[]).length;return L?Math.min(Math.max(n,0),L-1):0}
+function rolPrevisto(p){
+  const rol0=+($('rol').value.replace(/\D/g,''))||0; if(!rol0) return 0;
+  const ord=P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0));
+  return rol0+ord.indexOf(p);
+}
+function campos(p){
+  const rp=rolPrevisto(p), rol=rp?String(rp):'', lote=$('cit').value.trim();
+  const a=rol?ACT[+rol.slice(-1)]:null;
+  const gc=(k,v,st,n,extra)=>Object.assign({k,v,st,n:n||''},extra||{});
+  const folioAv=p.avisos.some(x=>/N° de parte|folio/i.test(x)), folioDup=!!folioBase(p)&&P.some(q=>q!==p&&folioBase(q)===folioBase(p));
+  const S=[], carab=p.origen==='carab', mtt=p.origen==='mtt', cit=p.fecha_citacion?p.fecha_citacion:lote;
+  S.push({t:'1 · Datos de la causa',f:[
+    carab?gc('Oficina emisora',p.oficina||(PERFIL?PERFIL.oficina_carabineros:''),p.oficina_reconocida?'ok':'check','Elige la unidad en la lista. El cargador pone «Ministerio De Transportes»; cámbiala a mano.'+(p.oficina_reconocida?'':' No se leyó la unidad en el encabezado: confirma cuál es.'))
+         :(mtt?gc('Oficina emisora','Ministerio De Transportes','ok','El cargador ya la pone: no hay que cambiarla.')
+         :gc('Oficina emisora','','blank','Parte de Inspección: se deja la que ya trae el sistema.')),
+    gc('Fecha de ingreso',hoy(),'ok','Día en que ingresas el parte.'),
+    ...((carab||mtt)?[gc(carab?'N° de parte (Carabineros)':'N° de denuncia (MTT)',p.n_parte_carab||'',p.n_parte_carab?'ok':'check',(carab?'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.':'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.'))]:[]),
+    ...((!carab&&!mtt)?[gc('N° de parte',p.folio,p.folio?'ok':'check','Paso 4 al ingresar: «Nº Parte». En Inspección es el mismo número de la boleta.')]:[]),
+    gc('N° de boleta (folio)',folioBase(p),folioBase(p)&&!folioAv&&!folioDup?'ok':'check',folioDup?'Este folio se repite en el lote: el cargador rechaza folios repetidos'+(mtt&&p.n_parte_carab?'. Usa el N° de denuncia ('+p.n_parte_carab+') como folio de uno de ellos.':'. Cambia uno de ellos.'):folioAv?p.avisos.filter(x=>/N° de parte|folio/i.test(x)).join(' '):(carab?'Paso 5 al ingresar: «Bol/N.Parte». Es el número que va en el archivo.':(mtt?'Paso 5 al ingresar: «Bol/N.Parte». Primeros 6 dígitos de la boleta de citación (al pie del parte)'+(p.boleta_completa?': '+p.boleta_completa:'')+'.':'Paso 5 al ingresar: «Bol/N.Parte».')),{big:1}),
+    gc('Fecha del parte',p.fecha_parte,p.fecha_parte?'ok':'check',carab?'Fecha en que Carabineros hizo el parte.':'Igual a la de la boleta.'),
+    gc('Descripción de la causa',p.causa,p.causa?'ok':'check',p.causa?(p.causa_literal?'Lo que dice el parte (la infracción va con el código comodín).':'Igual a la infracción.'):'Escríbela a mano.'),
+    gc('Actuario (código)',a?a[1]:'',a?'ok':'check',a?a[0]+' · el rol termina en '+rol.slice(-1):'Escribe el rol arriba.'),
+    p.fecha_citacion?gc('Fecha de citación',p.fecha_citacion,'ok','Fecha impresa en el parte (se respeta aunque el lote tenga otra).')
+      :gc('Fecha de citación',lote,lote?'check':'check',lote?'No pude leerla en el parte: se usó la del lote. Revisa.':'No pude leerla en el parte: escríbela arriba (fecha del lote).'),
+    gc('Hora de citación','','blank','Se deja en blanco.'),
+    gc('Lugar',p.lugar,p.lugar?'ok':'check',p.lugar?'':'No lo pude leer.'),
+    gc('Hora de la infracción',p.hora_infraccion,p.hora_infraccion?'ok':'check','')
+  ]});
+  const sinVeh=carab&&p.tiene_vehiculo===false;
+  S.push({t:'2 · Denunciados: la placa',sub:sinVeh?'Parte sin vehículo (por ejemplo, conducir o transitar en estado de ebriedad).':'Al ingresarla, el sistema completa lo que tenga registrado.',f:[
+    sinVeh?gc('Placa','','blank','Sin vehículo: solo van el RUT y el nombre.',{big:1}):gc('Placa',p.placa,/^([A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3})$/.test(p.placa)?'ok':'check','Sin guion.',{big:1})
+  ]});
+  const it=p.items.length?p.items:[{cod:'',estado:'check',nota:'No hallé la infracción: escribe el código.'}];
+  const fi=[];
+  it.forEach((x,i)=>{
+    fi.push(gc('Infracción '+(i+1)+' · fecha',p.fecha_parte,p.fecha_parte?'ok':'check','Fecha de la boleta.'));
+    fi.push(gc('Infracción '+(i+1)+' · código',x.cod,x.estado,x.nota,{big:i==0}));
+  });
+  S.push({t:'3 · Infracciones',sub:'Al final de la pestaña Denunciados.',f:fi});
+  const c=Object.assign({},p.cert||{},(p.infractores&&p.infractores.length>1)?p.infractores[infIdx(p)]:{}), malRut=(p.cert_avisos||[]).some(x=>/RUT/.test(x)&&!/^(Infractor|El infractor)/.test(x))||(p.avisos||[]).some(x=>/RUT leído/.test(x)), sinC=carab&&!p.img_cert&&!c.rut;
+  const multi=(p.infractores||[]).length>1;
+  const filaInf=multi?[gc('Infractor de esta copia (1, 2)',String(infIdx(p)+1),'check','Este parte trae '+p.infractores.length+' infractores ('+p.infractores.map((x,i)=>(i+1)+': '+x.nombre).join(' · ')+'). Cada copia lleva el suyo: por defecto la 1ª copia es el infractor 1, la 2ª el 2. Escribe el número si no es así.')]:[];
+  S.push({t:(carab||mtt)&&!p.img_cert?'4 · Infractor y vehículo (del parte)':'4 · Certificado del Registro Civil',sub:'Van en el archivo para cargar. Si la placa ya está registrada en el sistema, igual se usan aquí.',f:[
+    ...filaInf,
+    gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),malRut?'Revisa el RUT contra el certificado.':(c.rut?'Dígito verificador válido.':(sinC?'Sin RUT (extranjero o por escrito): el sistema pone SR y el nombre.':'No lo pude leer.'))),
+    gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+(((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:p.placa)||'').trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',sinC&&/^VEHICULO\b/.test(c.nombre||'')?'Sin datos del infractor: «VEHICULO + patente».':''),
+    gc('Dirección (certificado)',c.direccion||'',c.direccion?'ok':(carab?'blank':'check'),''),
+    gc('Comuna (certificado)',c.comuna||'',c.comuna?'ok':'check',c.comuna?(/[^\x00-\x7f]/.test(c.comuna)?'Lleva tilde: en el archivo irá sin tilde.':''):'Sin comuna el sistema no completa el código de comuna.'),
+    gc('Marca (certificado)',c.marca||p.marca||'',(c.marca||p.marca)?'ok':'blank','Opcional: si el parte no la trae, se ingresa sin marca.'),
+    gc('Modelo (certificado)',c.modelo||'',c.modelo?'ok':'blank',mtt?'Va en el archivo.':'Solo informativo: NO va en el archivo; lo agregas tú en el sistema.'),
+    ...(mtt?[gc('Año (certificado)',c.anio||'',c.anio?'ok':'check','Va en el archivo.')]:[]),
+    gc('Tipo de vehículo (certificado)',c.tipo_vehiculo||p.tipo_vehiculo||'',(c.tipo_vehiculo||p.tipo_vehiculo)?'ok':(sinVeh?'blank':'check'),''),
+    gc('Dígito de la placa',c.dv_placa||'',c.dv_placa?'ok':'blank','Es el número o letra que va después del guion en el certificado.')
+  ]});
+  return S;
+}
+function mostrar(){
+  if(!P.length){$('main').hidden=true;return}
+  const p=P[sel]; $('main').hidden=false;
+  const img=$('img'); if(vista==='c'&&!p.img_cert) vista='p';
+  const src='/api/img/'+(vista==='c'?p.img_cert:p.id); if(img.getAttribute('src')!==src) img.src=src;
+  $('tabP').classList.toggle('on',vista==='p'); $('tabC').classList.toggle('on',vista==='c'); $('tabC').disabled=!p.img_cert;
+  const S=campos(p), F=$('form'); F.innerHTML='';
+  const av=p.avisos.filter(x=>!/N° de parte|folio/i.test(x)).concat(p.cert_avisos||[]);
+  const rp=rolPrevisto(p);
+  F.insertAdjacentHTML('beforeend',rp?('<div class="avisos" style="background:var(--okb);color:var(--ok);font-size:17px"><b>Rol previsto de este parte: '+rp+'</b> &nbsp;<small style="color:inherit">anótalo en el parte; compruébalo al cargar el archivo</small></div>')
+    :'<div class="avisos"><b>Escribe arriba el «Rol Disponible»</b> para ver el rol previsto de cada parte.</div>');
+  if(av.length){F.insertAdjacentHTML('beforeend','<div class="avisos"><b>Revisa este parte:</b><br>'+av.map(x=>'· '+x).join('<br>')+'</div>')}
+  const nav=document.createElement('div');nav.className='nav';
+  nav.innerHTML='<button id="ant">← Anterior</button><button id="sig">Saltar →</button><button class="p" id="ing">Ingresado → siguiente parte</button>';
+  F.appendChild(nav);
+  S.forEach(s=>{
+    const d=document.createElement('div');d.className='sec';d.innerHTML='<h3>'+s.t+'</h3>'+(s.sub?'<small>'+s.sub+'</small>':'');
+    s.f.forEach(f=>{
+      const key=f.k, val=(key in p.ed)?p.ed[key]:f.v;
+      const r=document.createElement('div');r.className='row'+(f.big?' big':'')+(key===activeKey?' act':'')+(p.done[key]?' done':'');
+      const esOfi=(key==='Oficina emisora'&&carab0(p));
+      const ctl=esOfi?'<select class="val">'+(OFICINAS_SIS.some(o=>o[1]===val)?'':'<option value="'+String(val).replace(/"/g,'&quot;')+'">'+val+'</option>')+OFICINAS_SIS.map(o=>'<option value="'+o[1]+'"'+(o[1]===val?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>').join('')+'</select>':'<input class="val" value="'+String(val).replace(/"/g,'&quot;')+'" placeholder="(en blanco)">';
+      r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+f.st+'">'+LAB[f.st]+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div><button>Copiar</button></div>';
+      const el=r.querySelector('.val');
+      el.oninput=el.onchange=e=>{p.ed[key]=e.target.value;pintarTira();if(key==='Infractor de esta copia (1, 2)')mostrar()};
+      el.onfocus=()=>{activeKey=key};
+      if(key==='Placa')el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
+        if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();delete p.ed['Nombre (certificado)']}}})});
+      r.querySelector('button').onclick=()=>{activeKey=key;copiarCampo(p,key)};
+      d.appendChild(r);
+    });
+    F.appendChild(d);
+  });
+  $('ant').onclick=()=>ir(sel-1);$('sig').onclick=()=>ir(sel+1);$('ing').onclick=ingresado;
+  if(!F.dataset.k)F.dataset.k=1;
+}
+function valorActual(p,key){ for(const s of campos(p)) for(const f of s.f) if(f.k===key) return (key in p.ed)?p.ed[key]:f.v; return ''}
+function copiarCampo(p,key){
+  const v=valorActual(p,key); copiar(v); p.done[key]=true; toast('Copiado: '+key+(v?'':' (vacío)'));
+  document.querySelectorAll('.row').forEach(r=>{const l=r.querySelector('.lab').textContent;r.classList.toggle('done',!!p.done[l]);r.classList.toggle('act',l===key)});
+}
+function siguienteCampo(p){
+  const ks=[];campos(p).forEach(s=>s.f.forEach(f=>{ if(valorActual(p,f.k).trim()!=='') ks.push(f.k)}));
+  const i=ks.indexOf(activeKey); return ks[i+1]||ks[0];
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='F2'){e.preventDefault(); if(!P.length)return; const p=P[sel];
+    const ks=[];campos(p).forEach(s=>s.f.forEach(f=>{ if(valorActual(p,f.k).trim()!=='') ks.push(f.k)}));
+    const pend=ks.find(k=>!p.done[k])||ks[0]; activeKey=pend; copiarCampo(p,pend);
+    const nx=ks.find(k=>!p.done[k]); if(nx) activeKey=nx;
+    document.querySelectorAll('.row').forEach(r=>r.classList.toggle('act',r.querySelector('.lab').textContent===activeKey));
+  }
+});
+function carab0(p){return p.origen==='carab'}
+function V(p,k){
+  const v=valorActual(p,k);
+  // «VEHICULO + patente» (infractor sin datos): la patente corregida a mano manda sobre la del primer escaneo
+  if(k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
+    const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
+  return v}
+const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>f.st==='check').length,0);
+// motos: 3 letras + 2 dígitos (JHB47) o 2 letras + 3 dígitos (TV880) van con 6 caracteres: JHB047, TV0880
+function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
+const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
+    boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
+    oficina:p.origen==='mtt'?'Ministerio De Transportes':(p.origen==='carab'?(V(p,'Oficina emisora')||(PERFIL?PERFIL.oficina_carabineros:'')):''),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
+    rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
+    placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
+    infracciones:(p.items||[]).map(x=>x.cod).filter(Boolean),causa:p.causa||'',uid:P.indexOf(p),ingresado:!!p.fin});
+$('btnTecleo').onclick=()=>{
+  if(!P.length){toast('Primero carga los partes');return}
+  const ord=P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0));
+  const reg=regTecleo;
+  const d0=new Date(), z=n=>String(n).padStart(2,'0');
+  const nomJson='partes-para-tecleo_'+d0.getFullYear()+'-'+z(d0.getMonth()+1)+'-'+z(d0.getDate())+'_'+z(d0.getHours())+z(d0.getMinutes())+'_'+ord.length+'partes.json';
+  fetch('/api/guardar?nombre='+encodeURIComponent(nomJson),{method:'POST',body:JSON.stringify({version:1,partes:ord.map(reg)},null,1)})
+    .then(r=>r.json()).then(j=>alert('Datos guardados en tu carpeta Descargas:\n'+j.ruta));
+};
+
+// ---- Sesión: guardar / abrir el lote con las correcciones, sin volver a leer los PDF ----
+function estadoSesion(){return JSON.stringify({version:1,partes:P,rol:$('rol').value,cit:$('cit').value,citTocada:citTocada})}
+function aplicarSesion(e){
+  P=(e.partes||[]).map(p=>Object.assign({ed:{},done:{},fin:false},p));
+  if(e.rol) $('rol').value=e.rol;
+  if(e.cit){ $('cit').value=e.cit; citTocada=true; }
+  sel=0;activeKey=null;pintarTira();mostrar();window.scrollTo(0,0);
+  $('btnContinua').hidden=true; ultimoAuto=estadoSesion();
+  toast('Sesión abierta: '+P.length+' partes con tus correcciones');
+}
+let ultimoAuto='';
+$('btnGuardaSes').onclick=async()=>{
+  if(!P.length){toast('No hay nada que guardar');return}
+  const d=new Date(),z=n=>String(n).padStart(2,'0');
+  const nom='sesion_'+d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+'_'+P.length+'partes.partescan';
+  const j=await (await fetch('/api/sesion/guardar?nombre='+encodeURIComponent(nom),{method:'POST',body:estadoSesion()})).json();
+  alert(j.error?j.error:'Sesión guardada en tu carpeta Descargas:\n'+j.ruta+'\n\nPara seguir después: «Abrir sesión…» y elige este archivo.');
+};
+$('btnAbreSes').onclick=()=>$('fileSes').click();
+$('fileSes').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(P.length&&!confirm('Esto reemplaza el lote que tienes en pantalla. ¿Continuar?')) return;
+  const r=await fetch('/api/sesion/abrir',{method:'POST',body:f}); const j=await r.json();
+  if(j.error){alert(j.error);return} aplicarSesion(j);
+};
+$('btnContinua').onclick=async()=>{
+  const j=await (await fetch('/api/sesion/continuar',{method:'POST',body:'{}'})).json();
+  if(j.error){alert(j.error);return} aplicarSesion(j);
+};
+(async()=>{ try{ const r=await (await fetch('/api/sesion/ultima')).json();
+  if(r.existe&&r.partes&&!P.length){ $('btnContinua').textContent='↺ Continuar anterior ('+r.partes+')'; $('btnContinua').title='Sesión guardada el '+r.fecha+' con '+r.partes+' partes y tus correcciones'; $('btnContinua').hidden=false; } }catch(e){} })();
+// guardado automático cada 5 s si hubo cambios (así no se pierde nada si se cierra el programa)
+setInterval(async()=>{ if(!P.length||pend+subiendo>0) return; const s=estadoSesion(); if(s===ultimoAuto) return;
+  try{ const r=await fetch('/api/sesion/auto',{method:'POST',body:s}); if(r.ok) ultimoAuto=s; }catch(e){} },5000);
+function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; pintarTira(); mostrar(); window.scrollTo(0,0) }
+function ingresado(){
+  const p=P[sel]; p.fin=true;
+  let n=P.findIndex((q,i)=>i>sel&&!q.fin); if(n<0) n=P.findIndex(q=>!q.fin);
+  if(n<0){ pintarTira(); toast('¡Lote terminado!'); mostrar(); return }
+  ir(n);
+}
+function semaforo(p){
+  const n=campos(p).reduce((k,s)=>k+s.f.filter(f=>f.st==='check'&&!(f.k in p.ed)).length,0);
+  return {n,c:n===0?'v':(n<3?'a':'r')};
+}
+function pintarTira(){
+  const t=$('tira'); t.innerHTML='';
+  P.forEach((p,i)=>{const c=document.createElement('span');const sm=semaforo(p); c.className='chip'+(p.fin?' fin':' '+sm.c)+(i===sel?' sel':''); c.title=p.fin?'Ingresado':(sm.n?sm.n+' campo(s) por revisar':'Todos los datos completos');
+    const rv=rolPrevisto(p); c.textContent=(p.fin?'✓ ':'')+(p.origen==='carab'?('Carab. '+(p.n_parte_carab||p.folio)):(p.origen==='mtt'?('MTT '+p.folio):(p.folio||('Parte '+(i+1)))))+(rv?' · rol '+rv:'');c.onclick=()=>ir(i);t.appendChild(c)});
+}
+$('img').onclick=e=>e.target.classList.toggle('z');
+$('tabP').onclick=()=>{vista='p';mostrar()}; $('tabC').onclick=()=>{vista='c';mostrar()};
+
+/* ---------- perfil del juzgado ---------- */
+const selOfic=(id,val)=>'<select class="val" id="'+id+'">'+PERFIL.oficinas.map(o=>'<option value="'+esc(o[1])+'"'+(o[1]===val?' selected':'')+'>'+esc(o[0]+' · '+o[1])+'</option>').join('')+'</select>';
+function estadoLista(t){const n=t==='infracciones'?PERFIL.n_infracciones:PERFIL.n_oficinas, p=t==='infracciones'?PERFIL.propia_infracciones:PERFIL.propia_oficinas;
+  return (p?'Lista propia de tu juzgado':'Lista de fábrica (2° Juzgado de Valdivia)')+' · '+n+' códigos'}
+function pintarDlg(){
+  const C=PERFIL, nombres=Object.keys(C.actuarios);
+  let h='<h3>Tu juzgado</h3><div class="g">'+
+   '<label>Nombre del juzgado<input class="val" id="j_juz" value="'+esc(C.juzgado)+'"></label>'+
+   '<label>Ciudad / comuna<input class="val" id="j_comuna" value="'+esc(C.comuna)+'"></label>'+
+   '<label>Oficina emisora si el parte no dice la unidad'+selOfic('j_ofic',C.oficina_carabineros)+'</label>'+
+   '<label>La pantalla de ingreso del sistema empieza con<input class="val" id="j_titulo" value="'+esc(C.titulo_ventana)+'"></label></div>';
+  h+='<h3>Listas del sistema</h3><small>Cada juzgado tiene sus propios códigos. Sácalas del sistema con PartesTeclea (Ajustes → Juzgado → «Leer lista desde el sistema») o impórtalas desde un .csv «codigo;descripcion».</small>'+
+   ['infracciones','oficinas'].map(t=>'<div class="rowa" style="margin-top:8px;align-items:center;flex-wrap:wrap"><b style="min-width:110px">'+(t==='infracciones'?'Infracciones':'Oficinas')+'</b><span class="note" id="est_'+t+'">'+estadoLista(t)+'</span><span style="flex:1"></span><button data-imp="'+t+'">Importar .csv…</button><button data-rest="'+t+'">Volver a la de fábrica</button></div>').join('')+
+   '<input type="file" id="fImp" accept=".csv,.txt" hidden><div id="impRes" class="note"></div>';
+  h+='<h3>Actuarias</h3><div id="actRows">'+nombres.map(n=>filaAct(n,C.actuarios[n])).join('')+'</div><button id="addAct">+ Agregar actuaria</button>'+
+   '<h3>Quién recibe cada causa según el último dígito del Rol</h3><div class="g" id="digs">'+[1,2,3,4,5,6,7,8,9,0].map(d=>'<label>Termina en '+d+'<select class="val" data-d="'+d+'"></select></label>').join('')+'</div>';
+  h+='<h3>Equivalencias de infracciones</h3><small>ParteScan reconoce la infracción por su significado y busca el código en la lista de tu juzgado. Revisa que cada una sea la correcta; lo que confirmes manda siempre. Vale para los partes que cargues desde ahora.</small><div style="margin-top:8px"><button id="verEq">Revisar equivalencias</button></div><div id="eqBox"></div>';
+  $('dBody').innerHTML=h; refrescarDigs();
+  $('dBody').querySelectorAll('[data-imp]').forEach(b=>b.onclick=()=>{impTipo=b.dataset.imp;$('fImp').click()});
+  $('dBody').querySelectorAll('[data-rest]').forEach(b=>b.onclick=async()=>{ if(!confirm('¿Volver a la lista de fábrica?'))return; await fetch('/api/perfil/restaurar?tipo='+b.dataset.rest,{method:'POST',body:'x'}); await cargarPerfil(); pintarDlg()});
+  $('fImp').onchange=async e=>{const f=e.target.files[0]; if(!f)return; const txt=await f.text();
+    const r=await (await fetch('/api/perfil/lista?tipo='+impTipo,{method:'POST',body:txt})).json(); e.target.value='';
+    if(r.error){$('impRes').textContent='⚠ '+r.error;return}
+    const s=r.resumen; await cargarPerfil(); const keep=snapshotDlg(); pintarDlg(); restoreDlg(keep);
+    $('impRes').textContent='Importada: '+s.n+' códigos · '+s.nuevos.length+' nuevos · '+s.cambiados.length+' con descripción distinta · '+s.quitados.length+' que ya no están.'};
+  $('addAct').onclick=()=>{$('actRows').insertAdjacentHTML('beforeend',filaAct('','')); engancharAct(); refrescarDigs()};
+  engancharAct();
+  $('verEq').onclick=verEquivalencias;
+}
+let impTipo='infracciones', EQ=null;
+const filaAct=(n,c)=>'<div class="rowa act"><input class="val an" placeholder="Nombre" value="'+esc(n.charAt(0)+n.slice(1).toLowerCase())+'"><input class="val ac" placeholder="Código" style="width:90px" value="'+esc(c)+'"><button class="qa">Quitar</button></div>';
+function engancharAct(){document.querySelectorAll('#actRows .rowa').forEach(r=>{r.querySelector('.qa').onclick=()=>{r.remove();refrescarDigs()}; r.querySelector('.an').oninput=refrescarDigs})}
+function nombresAct(){return [...document.querySelectorAll('#actRows .an')].map(i=>i.value.trim()).filter(Boolean)}
+function refrescarDigs(){const ns=nombresAct();
+  document.querySelectorAll('#digs select').forEach(s=>{const d=s.dataset.d, act=(s.value||(PERFIL.rol_actuario[d]||'').charAt(0)+(PERFIL.rol_actuario[d]||'').slice(1).toLowerCase());
+    s.innerHTML='<option value="">(elegir a mano)</option>'+ns.map(n=>'<option'+(n.toLowerCase()===String(act).toLowerCase()?' selected':'')+'>'+esc(n)+'</option>').join('')})}
+function snapshotDlg(){const g=id=>$(id)?$(id).value:''; return {j_juz:g('j_juz'),j_comuna:g('j_comuna'),j_ofic:g('j_ofic'),j_titulo:g('j_titulo')}}
+function restoreDlg(s){for(const k in s){if($(k)&&s[k])$(k).value=s[k]}}
+async function verEquivalencias(){
+  const r=await (await fetch('/api/perfil/equivalencias')).json(); EQ=r;
+  const opts=r.lista.map(z=>'<option value="'+esc(z[0])+'">'+esc(z[0]+' · '+z[1])+'</option>').join('');
+  $('eqBox').innerHTML='<table><tr><th>Concepto de ParteScan</th><th>Código en tu juzgado</th><th></th></tr>'+r.filas.map((f,i)=>
+    '<tr><td>'+esc(f.concepto)+'</td><td><select class="val eq" data-ab="'+esc(f.abrev)+'" data-orig="'+esc(f.codigo)+'"><option value="">(sin código)</option>'+opts+'</select></td><td><span class="tag t-'+(f.estado==='ok'?'ok':'check')+'">'+(f.confirmado?'Confirmada':(f.estado==='ok'?'Automática':'Revisar'))+'</span></td></tr>').join('')+'</table>';
+  document.querySelectorAll('#eqBox select.eq').forEach(s=>{s.value=s.dataset.orig; s.onchange=()=>{s.dataset.t=1}});
+}
+$('btnJuz').onclick=async()=>{await cargarPerfil(); if(!PERFIL)return; pintarDlg(); $('dlgJuz').showModal()};
+$('dClose').onclick=()=>$('dlgJuz').close();
+$('dGuardar').onclick=async()=>{
+  const act={}; document.querySelectorAll('#actRows .rowa').forEach(r=>{const n=r.querySelector('.an').value.trim(), c=r.querySelector('.ac').value.trim(); if(n)act[n.toUpperCase()]=c});
+  const rol={}; document.querySelectorAll('#digs select').forEach(s=>{if(s.value)rol[s.dataset.d]=s.value.toUpperCase()});
+  const body={juzgado:$('j_juz').value,comuna:$('j_comuna').value,oficina_carabineros:$('j_ofic').value,titulo_ventana:$('j_titulo').value,actuarios:act,rol_actuario:rol};
+  const r=await (await fetch('/api/perfil',{method:'POST',body:JSON.stringify(body)})).json();
+  if(r.error){alert(r.error);return}
+  const eq={}; document.querySelectorAll('#eqBox select.eq').forEach(s=>{if(s.dataset.t)eq[s.dataset.ab]=s.value});
+  if(Object.keys(eq).length) await fetch('/api/perfil/equivalencias',{method:'POST',body:JSON.stringify(eq)});
+  await cargarPerfil(); $('dlgJuz').close(); toast('Perfil guardado');
+};
+cargarPerfil();
+
+/* ---------- tecleo en el sistema desde esta misma ventana ---------- */
+const TXT_EST={pendiente:'Pendiente',tecleando:'Tecleando…',tecleado:'Por aceptar',ingresado:'Ingresado ✓',interrumpido:'Interrumpido',cancelado:'Cancelado'};
+let tNlog=0,tTimer=null;
+async function tecPost(ruta,cuerpo){ const r=await fetch('/api/tecleo/'+ruta,{method:'POST',body:JSON.stringify(cuerpo||{})}); return r.json(); }
+async function tecEnviar(){
+  const ord=P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0));
+  const j=await tecPost('cargar',{partes:ord.map(regTecleo)});
+  const av=$('tAviso'); if(j.error){av.textContent=j.error;av.hidden=false}else av.hidden=true;
+}
+function tecPintar(r){
+  const lg=$('tLog'); if(r.log.length){lg.textContent+=r.log.join('\n')+'\n'; lg.scrollTop=lg.scrollHeight}
+  tNlog=r.nlog;
+  let cambio=false;
+  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&f.estado==='ingresado'&&!p.fin){p.fin=true;cambio=true}});
+  if(cambio) pintarTira();
+  const a=$('tAct'); if(a.options.length<=1&&r.actuarios) r.actuarios.forEach(n=>a.add(new Option(n.charAt(0)+n.slice(1).toLowerCase(),n)));
+  $('tIniciar').disabled=!r.disponible||r.corriendo; $('tDetener').disabled=!r.corriendo;
+  const nd=$('tNoDisp'); nd.textContent=r.disponible?'':r.motivo; nd.hidden=r.disponible;
+  const pen=r.partes.filter(f=>['pendiente','interrumpido','cancelado'].includes(f.estado)).length;
+  const ing=r.partes.filter(f=>f.estado==='ingresado').length;
+  $('tResumen').textContent=ing+' de '+r.partes.length+' ingresados · '+pen+' pendientes'+(r.corriendo?' · tecleando…':'');
+  $('tTabla').innerHTML='<tr><th>Estado</th><th>N° parte</th><th>Fecha</th><th>Oficina</th><th>Placa</th><th>Inf.</th><th>Avisos</th><th></th></tr>'+r.partes.map(f=>{
+    const msj=[f.aviso].concat(f.errores.map(e=>'ERROR: '+e),f.avisos).filter(Boolean).join(' | ');
+    const fondo=f.errores.length?' style="background:var(--rjb)"':((f.avisos.length||f.aviso)?' style="background:var(--ckb)"':'');
+    const dis=(r.corriendo||!r.disponible)?' disabled':'';
+    return '<tr'+fondo+'><td>'+(TXT_EST[f.estado]||f.estado)+'</td><td>'+esc(f.n_parte)+'</td><td>'+esc(f.fecha_parte)+'</td><td>'+esc(f.oficina)+'</td><td>'+esc(f.placa)+'</td><td>'+esc(f.infraccion)+'</td><td style="max-width:320px">'+esc(msj)+'</td><td style="white-space:nowrap"><button data-corr="'+f.uid+'">Corregir</button> <button data-uno="'+f.uid+'"'+dis+'>Teclear</button> '+(f.estado==='ingresado'?'<button data-pen="'+f.uid+'">Pendiente</button>':'<button data-ing="'+f.uid+'">Ingresado</button>')+'</td></tr>'}).join('');
+}
+async function tecSondear(){ try{ tecPintar(await (await fetch('/api/tecleo/estado?desde='+tNlog)).json()) }catch(e){} }
+async function tecIniciar(uids){
+  const j=await tecPost('iniciar',{uids:uids||null,auto:$('tAuto').checked,actuario:$('tAct').value});
+  if(j.error){alert(j.error);return}
+  tecSondear();
+}
+$('tTabla').onclick=async e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.corr!==undefined){ $('dlgTec').close(); ir(+b.dataset.corr); toast('Corrige y vuelve a «Teclear en el sistema…»'); return }
+  if(b.dataset.uno!==undefined){ await tecIniciar([+b.dataset.uno]); return }
+  const pen=b.dataset.pen!==undefined, uid=+(pen?b.dataset.pen:b.dataset.ing);
+  const j=await tecPost('marcar',{uid,estado:pen?'pendiente':'ingresado'}); if(j.error){alert(j.error);return}
+  if(P[uid]){P[uid].fin=!pen;pintarTira()} tecSondear();
+};
+$('tIniciar').onclick=()=>tecIniciar(null);
+$('tDetener').onclick=async()=>{await tecPost('detener');tecSondear()};
+$('tCerrar').onclick=()=>$('dlgTec').close();
+$('dlgTec').addEventListener('close',()=>clearInterval(tTimer));
+$('btnTec').onclick=async()=>{
+  if(!P.length){toast('Primero carga los partes');return}
+  $('tLog').textContent=''; tNlog=0;
+  await tecEnviar(); await tecSondear();
+  $('dlgTec').showModal(); clearInterval(tTimer); tTimer=setInterval(tecSondear,700);
+};
+</script></body></html>

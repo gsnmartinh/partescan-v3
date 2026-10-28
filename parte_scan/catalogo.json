@@ -1,0 +1,290 @@
+{
+ "infracciones": [
+  {
+   "abrev": "19",
+   "texto": "ESTACIONAR EN SITIO PROHIBIDO Y SEÑALIZADO"
+  },
+  {
+   "abrev": "48",
+   "texto": "ESTACIONAR SOBRE ACERA"
+  },
+  {
+   "abrev": "DOBLE",
+   "texto": "ESTACIONAR EN DOBLE FILA"
+  },
+  {
+   "abrev": "ESQUINA",
+   "texto": "ESTACIONAR A MENOS DE 10 MTS DE ESQUINA"
+  },
+  {
+   "abrev": "DISCA",
+   "texto": "ESTACIONAR EN SITIO RESERVADO PARA DISCAPACITADOS"
+  },
+  {
+   "abrev": "CICLO",
+   "texto": "ESTACIONAR EN CICLOVIA"
+  },
+  {
+   "abrev": "PARAD",
+   "texto": "ESTACIONAR A MENOS DE 20 MTS DE PARADERO"
+  },
+  {
+   "abrev": "PARE",
+   "texto": "ESTACIONAR A MENOS DE 10 MTS DE SIGNO PARE"
+  },
+  {
+   "abrev": "GRIFO",
+   "texto": "ESTACIONAR A MENOS DE 5 MTS DE GRIFO"
+  },
+  {
+   "abrev": "SALI",
+   "texto": "ESTACIONAR EN ENTRADA Y SALIDA DE VEHICULOS"
+  },
+  {
+   "abrev": "SENTID",
+   "texto": "ESTACIONAR EN SENTIDO CONTRARIO"
+  },
+  {
+   "abrev": "SINL",
+   "texto": "CONDUCIR SIN PORTAR LICENCIA"
+  },
+  {
+   "abrev": "HABER",
+   "texto": "CONDUCIR SIN HABER OBTENIDO LICENCIA"
+  },
+  {
+   "abrev": "VENCIDA",
+   "texto": "CON LA TOTALIDAD DE LA DOCUMENTACIÓN VENCIDA"
+  },
+  {
+   "abrev": "TOTAL",
+   "texto": "SIN LA TOTALIDAD DE LA DOCUMENTACION"
+  },
+  {
+   "abrev": "CELULAR",
+   "texto": "CONDUCIR MANIPULANDO TELEFONO MOVIL"
+  },
+  {
+   "abrev": "DERECHA",
+   "texto": "VIRAR A DERECHA CON SEMAFORO EN ROJO"
+  },
+  {
+   "abrev": "ROJA",
+   "texto": "NO RESPETAR LUZ ROJA"
+  },
+  {
+   "abrev": "BEBER",
+   "texto": "BEBER ALCOHOL EN LA VIA PUBLICA"
+  },
+  {
+   "abrev": "EBRIO",
+   "texto": "TRANSITAR EN ESTADO DE EBRIEDAD"
+  },
+  {
+   "abrev": "RUIDOS",
+   "texto": "MANTENER RUIDOS MOLESTOS"
+  },
+  {
+   "abrev": "PERMISO",
+   "texto": "CONDUCIR CON PERMISO DE CIRCULACION VENCIDO"
+  },
+  {
+   "abrev": "SEGURO",
+   "texto": "CONDUCIR CON SEGURO OBLIGATORIO VENCIDO"
+  },
+  {
+   "abrev": "REVISION",
+   "texto": "CONDUCIR CON REVISION TECNICA VENCIDA"
+  },
+  {
+   "abrev": "CHOQUE",
+   "texto": "DAR CUENTA DE DAÑOS EN CHOQUE"
+  },
+  {
+   "abrev": "COLISION",
+   "texto": "DAR CUENTA DE DAÑOS EN COLISION"
+  },
+  {
+   "abrev": "ANIMALES",
+   "texto": "DAR CUENTA DE RESPONSABILIDAD DE DUEÑOS DE ANIMALES"
+  },
+  {
+   "abrev": "VIRAR",
+   "texto": "EFECTUAR VIRAJE EN DONDE LAS SEÑALES LO PROHIBEN"
+  },
+  {
+   "abrev": "FISCAL",
+   "texto": "DESOBEDECER ORDENES DE UN INSPECTOR FISCAL"
+  },
+  {
+   "abrev": "ENTRADA",
+   "texto": "ESTACIONAR EN ENTRADA Y SALIDA DE VEHICULOS"
+  },
+  {
+   "abrev": "IZQ",
+   "texto": "ESTACIONAR AL COSTADO IZQUIERDO DE LA CALZADA"
+  },
+  {
+   "abrev": "SEGURIDAD",
+   "texto": "LEY 3.607 SEGURIDAD PRIVADA"
+  },
+  {
+   "abrev": "CONTRA",
+   "texto": "CONDUCIR EN SENTIDO CONTRARIO"
+  },
+  {
+   "abrev": "CARABI",
+   "texto": "NO DETENERSE ANTE SEÑAL DE CARABINEROS"
+  },
+  {
+   "abrev": "FACILITAR",
+   "texto": "FACILITAR VEHICULO A QUIEN NO HA OBTENIDO LICENCIA DE CONDUCIR"
+  },
+  {
+   "abrev": "MINIS",
+   "texto": "EFECTUAR SERIVICO DE TRANSPORTE SI ESTAR INSCRITO EN MINISTRATEL"
+  },
+  {
+   "abrev": "PATENTE",
+   "texto": "CONDUCIR SIN PLACA PATENTE GRABADO DE FORMA PERMANENTE"
+  },
+  {
+   "abrev": "ESPE",
+   "texto": "ESPECIES ABANDONADAS EN VIA PUBLICA"
+  },
+  {
+   "abrev": "EXTINTOR",
+   "texto": "EFECTUAR SERVICIO DE TRANSPORTE CON EXTINTOR DE INCENDIO VENCIDO"
+  },
+  {
+   "abrev": "BNUP",
+   "texto": "OCUPAR ESPACIO DE BIEN DE USO PUBLICO SIN PERMISO MUNICIPAL"
+  },
+  {
+   "abrev": "AREA",
+   "texto": "ESTACIONAR SOBRE AREA VERDE"
+  },
+  {
+   "abrev": "LOCAL",
+   "texto": "LOCAL SIN PATENTE MUNICIPAL"
+  },
+  {
+   "abrev": "EQUIPAJE",
+   "texto": "EFECTUAR SERVICIO DE BUS ENTREGANDO COMPROBANTE EQUIPAJE SIN INFORMACION"
+  },
+  {
+   "abrev": "AMBU",
+   "texto": "EFECTUAR COMERCIO AMBULANTE SIN PERMISO MUNICIPAL"
+  },
+  {
+   "abrev": "PARAB",
+   "texto": "PERMITIR LA CIRCULACION DE TRANSPORTE PUBLICO CON PARABRISAS TRIZADO"
+  },
+  {
+   "abrev": "TIEMPO",
+   "texto": "EFECTUAR SERVICIO DE BUS INTERURBANO CON DISP. TIEMPO Y DISTANCIA NO FUNCIONA"
+  },
+  {
+   "abrev": "LV",
+   "texto": "CONDUCIR CON LICENCIA FECHA CONTROL VENCIDA"
+  },
+  {
+   "abrev": "DOM",
+   "texto": "EJECUCION DE OBRA SIN PERMISO DE LA DOM"
+  },
+  {
+   "abrev": "PUER",
+   "texto": "CONDUCIR BUS CON LAS PUERTAS ABIERTAS"
+  },
+  {
+   "abrev": "INFANTIL",
+   "texto": "CONDCUIR VEHICULO CON NIÑO SIN USAR SISTEMA DE RETENCION INFANTIL"
+  },
+  {
+   "abrev": "LUCES",
+   "texto": "CONDUCIR CON LUCES DISTINTAS A LAS PERMITIDAS"
+  },
+  {
+   "abrev": "PESO",
+   "texto": "INFRACCION A NORMAS DE PESO MAXIMO"
+  },
+  {
+   "abrev": "VIDEO",
+   "texto": "EFECTUAR SERVICIO DE BUS INTERURBANO SIN EXHIBIR VIDEO DE SEGURIDAD"
+  },
+  {
+   "abrev": "EXCESO",
+   "texto": "CONDUCIR A EXCESO DE VELOCIDAD"
+  },
+  {
+   "abrev": "PASO",
+   "texto": "ESTACIONAR SOBRE PASO PEATONAL"
+  },
+  {
+   "abrev": "CEDA",
+   "texto": "ESTACIONAR A MENOS DE 10 METROS DE SEÑAL CEDA EL PASO"
+  },
+  {
+   "abrev": "DETI",
+   "texto": "DETENERSE DONDE LAS SEÑALES LO PROHIBEN"
+  },
+  {
+   "abrev": "PASA",
+   "texto": "TOMAR PASAJEROS DONDE LAS SEÑALES LO PROHIBEN"
+  },
+  {
+   "abrev": "RECLA",
+   "texto": "RECLAMACION ART.15 L/18290"
+  },
+  {
+   "abrev": "SONO",
+   "texto": "PORTAR APARATO SONORO O BOCINA DE AIRE COMPRIMIDO EN VEHICULO"
+  },
+  {
+   "abrev": "LIMP",
+   "texto": "CIRCULAR CON LIMPIAPARABRISAS EN MAL ESTADO"
+  },
+  {
+   "abrev": "TPI",
+   "texto": "EFECTUAR SERVICIO DE TRANSPORTE PUBLICO DISTINTO AL INSCRITO"
+  }
+ ],
+ "lugares": [
+  {
+   "abrev": "EXPLA",
+   "texto": "AV PRAT SECTOR EXPLANADA"
+  },
+  {
+   "abrev": "TURIS",
+   "texto": "EX PRAT SECTOR BUSES DE TURISMO"
+  },
+  {
+   "abrev": "PESAJE",
+   "texto": "PLAZA DE PESAJE MOVIL RUTA 206 KM 41.000 SECTOR LLANCAHUE"
+  },
+  {
+   "abrev": "HELI",
+   "texto": "AV PRAT CON EX HELIPUERTO"
+  },
+  {
+   "abrev": "950",
+   "texto": "CARLOS ANWANDTER 950"
+  },
+  {
+   "abrev": "100",
+   "texto": "CHACABUCO 100"
+  },
+  {
+   "abrev": "AMAA",
+   "texto": "ANFION MUÑOZ CON AV ALEMANIA"
+  },
+  {
+   "abrev": "AMCC",
+   "texto": "ANFION MUÑOZ CON CARLOS ANWANDTER"
+  },
+  {
+   "abrev": "AFT",
+   "texto": "ANFION MUÑOZ CON TERMINAL DE BUSES"
+  }
+ ]
+}

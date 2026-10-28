@@ -1,0 +1,14 @@
+PartesTeclea - teclea en el sistema "Procesos 2DO. JUZGADO" los partes ya revisados en ParteScan.
+
+1. Abre el sistema del Juzgado (pantalla "Procesos 2DO. JUZGADO") y deja el cursor en Rol.
+   Abrelo con el mismo nivel de permisos que PartesTeclea (los dos normales, o los dos "como administrador").
+2. Abre PartesTeclea.exe y elige el partes-para-tecleo_FECHA_HORA.json (ParteScan lo nombra con día, hora y cantidad de partes).
+3. Elige actuario (automatico segun el Rol), marca o no "Aceptar automaticamente" y pulsa "Teclear pendientes".
+4. Detener corta de inmediato. El avance queda guardado junto al JSON (archivo .estado.json).
+
+PERFIL DEL JUZGADO: las listas de infracciones y de oficinas, las actuarias y el reparto por Rol se guardan en
+%APPDATA%\ParteScan\perfil y las comparten ParteScan y PartesTeclea (en ese computador). Se editan en Ajustes (rueda
+dentada) > Juzgado y Actuarias. Para traer la lista tal como esta en el sistema (por ejemplo cuando se agregan codigos
+nuevos): abre en el sistema el cuadro "Busca Infracciones" y, en Ajustes > Juzgado, pulsa "Leer desde el sistema".
+Sin configurar nada, el programa usa los datos del 2° Juzgado de Policia Local de Valdivia.
+El json contiene RUT y direcciones: guardalo solo en carpetas del Juzgado y borralo al terminar el lote.
