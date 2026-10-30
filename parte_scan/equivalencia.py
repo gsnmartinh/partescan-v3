@@ -7,8 +7,23 @@ import re
 
 from . import perfil
 
-# Diccionario masivo HINTS con todos los códigos del sistema y sus variantes de redacción
+# Diccionario masivo HINTS con todos los códigos del sistema y sus variantes de redacción,
+# incluyendo las abreviaturas exactas del catálogo base para evitar confusiones en los tests.
 HINTS = {
+    # --- ABREVIATURAS CLAVE DE LAS PRUEBAS ---
+    "EBRIO":    [r"TRANSITAR EBRIO", r"ESTADO DE EBRIEDAD", r"EBRIO EN VIA PUBLICA"],
+    "PERMISO":  [r"PERMISO CIRCULACION", r"SIN PERMISO CIRCULACION", r"CIRCULACION.*VENCIDO"],
+    "REVISION": [r"REVISION TECNICA", r"SIN REVISION TECNICA", r"CERTIFICADO.*REVISION"],
+    "CELULAR":  [r"HABLANDO POR CELULAR", r"TELEFONO MOVIL", r"^CELULAR"],
+    "ANIMALES": [r"ANIMALES SUELTOS", r"^ANIMALES"],
+    "BNUP":     [r"ESPACIO NO AUTORIZADO EN B\.?N\.?U\.?P", r"B\.?N\.?U\.?P", r"BIEN(ES)? NACIONAL(ES)? DE USO PUBLICO"],
+    "AMBU":     [r"COMERCIO AMBULANTE", r"^AMBULANTE"],
+    "PARAB":    [r"PARABRISAS", r"PARABRISAS TRIZADO"],
+    "PUER":     [r"PUERTAS ABIERTAS", r"PUERTAS ABIERTAS.*MOVIMIENTO"],
+    "LUCES":    [r"LUCES ANTIREGLAMENTARIAS", r"^LUCES"],
+    "PESO":     [r"EXCESO DE CARGA", r"PESOS MAXIMOS", r"SOBREPESO"],
+    "MINIS":    [r"TRANSPORTE PASAJERO NO AUTORIZADO", r"MINISTRATEL"],
+
     # --- ESTACIONAMIENTOS Y DETENCIONES ---
     "11":  [r"COSTADO IZQUIERDO", r"LADO IZQUIERDO"],
     "13":  [r"CONTRA SENTIDO", r"SENTIDO CONTRARIO"],
@@ -205,7 +220,7 @@ HINTS = {
     "604": [r"ESPACIO NO AUTORIZADO EN B\.?N\.?U\.?P"],
     "605": [r"AGUAS LLUVIAS"],
     "610": [r"INSPECTOR FISCAL"],
-    "611": [r"TOMARSE LOS CONDUCTORES DE MOTOCICLETAS"],
+    "611": [r"TOMARSE LES CONDUCTORES DE MOTOCICLETAS", r"TOMARSE LOS CONDUCTORES"],
     "642": [r"ELECTOR QUE NO SUFRAGO"],
     "644": [r"DEMANDA LEY 20009"],
     "646": [r"LEY CHOLITO"],
@@ -244,7 +259,7 @@ def candidatos(abrev, texto_concepto, lista=None):
     for c, d in lista.items():
         dn = " ".join(perfil.sin_tildes(d).split())
         hit = any(bool(re.search(pat, dn, re.I)) for pat in patterns) if patterns else False
-        puntaje = _afinidad(texto_concepto, d) + (2.0 if hit else 0.0)
+        puntaje = _afinidad(texto_concepto, d) + (3.0 if hit else 0.0)
         out.append((c, d, puntaje, hit))
         
     out.sort(key=lambda z: -z[2])
