@@ -466,29 +466,53 @@ def problemas(r):
         n += not PLACA_OK.fullmatch(r["placa"] or "")
     return n
 
+def _normalizar_fecha_ocr(...)
+def _fecha_valida(...)
+def _extraer_fechas(...)
+def _fecha_citacion_contextual(...)
 
 def parte(texto):
     t = _plano(texto)
     av = []
     secs = _secciones(t)
+
     m = re.search(r"Parte\s*N\w{0,4}[.\s:*°º]*(\d{2,5})", t, re.I)
     n_parte = (m.group(1).lstrip("0") or m.group(1)) if m else ""
-    fecha_parte = _fecha_cabecera(t) or _fecha_texto(t)
-    m = re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{1,2})\s*[:.;,]\s*(\d{2})", t, re.I) \
-        or re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{2})[5S](\d{2})\s*horas", t, re.I) \
-        or re.search(r"\bHORA\s*:\s*\W?\s*(\d{1,2})\s*[:.]\s*(\d{2})", t, re.I)
-    hora = "%d:%s" % (int(m.group(1)), m.group(2)) if m else ""
-seg_cit = _sec(secs, "CITACION", ultimo=True)
 
-fecha_cit = (
-    _fecha_citacion_contextual(seg_cit)
-    or _fecha_citacion_contextual(t)
-    or _fecha_num(seg_cit)
-    or fecha_de(seg_cit)
-)
+    fecha_parte = _fecha_cabecera(t) or _fecha_texto(t)
+
+    m = re.search(
+        r"(?:a\s+las|siendo,?\s+las)\s+(\d{1,2})\s*[:.;,]\s*(\d{2})",
+        t,
+        re.I
+    ) \
+        or re.search(
+            r"(?:a\s+las|siendo,?\s+las)\s+(\d{2})[5S](\d{2})\s*horas",
+            t,
+            re.I
+        ) \
+        or re.search(
+            r"\bHORA\s*:\s*\W?\s*(\d{1,2})\s*[:.]\s*(\d{2})",
+            t,
+            re.I
+        )
+
+    hora = "%d:%s" % (int(m.group(1)), m.group(2)) if m else ""
+
+    seg_cit = _sec(secs, "CITACION", ultimo=True)
+
+    fecha_cit = (
+        _fecha_citacion_contextual(seg_cit)
+        or _fecha_citacion_contextual(t)
+        or _fecha_num(seg_cit)
+        or fecha_de(seg_cit)
+    )
+
     fecha_parte, anio_leido = corregir_anio(fecha_parte)
+
     if fecha_parte.endswith("????"):
         fecha_parte = fecha_parte[:-4] + str(_hoy().year)
+
     boleta = _boleta(secs) or _boleta_texto(texto)
     _of = _oficina(texto)
     infr = _infraccion(t, secs)
