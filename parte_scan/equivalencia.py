@@ -1,30 +1,230 @@
 """Busca, en la lista de infracciones de CUALQUIER juzgado, el código que corresponde a cada concepto del catálogo.
 
-Cada concepto («ESTACIONAR SOBRE ACERA», «seguro obligatorio»…) tiene una frase clave que se busca en las descripciones
-de la lista del juzgado. Si hay un solo candidato, se usa; si hay varios o ninguno claro, se marca «Revisar» y se
-muestran las opciones. Lo que el usuario confirme queda guardado en el perfil («equivalencias») y manda siempre.
+Cada código del sistema cuenta con frases clave alternativas (regex sobre la descripción sin tildes y en mayúsculas)
+para atrapar las distintas formas en que los Carabineros y inspectores redactan las infracciones en los partes.
 """
 import re
 
 from . import perfil
 
-# concepto del catálogo -> frase clave (regex sobre la descripción sin tildes y en mayúsculas)
+# Diccionario masivo HINTS: Código del sistema -> Lista de patrones regex alternativos
 HINTS = {
-    "19": r"SITIO PROHIBIDO", "48": r"ACERA", "DOBLE": r"DOBLE FILA", "ESQUINA": r"ESQUINA",
-    "DISCA": r"MINUSVALID|DISCAPACIT", "GRIFO": r"GRIFO", "PARE": r"(SIGNO|SENAL|DISCO) PARE",
-    "PARAD": r"PARADERO", "CEDA": r"CEDA", "AREA": r"AREA VERDE", "PASO": r"PASO (PEATONAL|DE PEATONES|CEBRA)",
-    "IZQ": r"COSTADO IZQUIERDO", "SENTID": r"ESTACIONAR.*(SENTIDO CONTRARIO|CONTRA SENTIDO)",
-    "CONTRA": r"CONDUCIR.*(SENTIDO CONTRARIO|CONTRA SENTIDO)", "HABER": r"SIN HABER OBTENIDO LICENCIA",
-    "ENTRADA": r"ENTRADA.*SALIDA", "SALI": r"ENTRADA.*SALIDA", "LV": r"LICENCIA.*FECHA CONTROL",
-    "BEBER": r"BEBER.*VIA PUBLICA", "EBRIO": r"TRANSITAR.*EBRI|EBRI.*TRANSITAR", "SEGURO": r"SEGURO OBLIGATORIO",
-    "PERMISO": r"PERMISO.*CIRCULACION", "REVISION": r"REVISION TECNICA", "CELULAR": r"CELULAR|TELEFONO MOVIL",
-    "ROJA": r"LUZ ROJA", "RUIDOS": r"RUIDOS? MOLESTOS?", "CHOQUE": r"DANOS.*CHOQUE", "COLISION": r"DANOS.*COLISION",
-    "ANIMALES": r"^ANIMALES|ANIMALES SUELTOS", "FACILITAR": r"FACILITAR.*VEHICULO", "ESPE": r"ESPECIES ABANDONADAS",
-    "BNUP": r"B\.?N\.?U\.?P|BIEN(ES)? NACIONAL(ES)? DE USO PUBLICO|ESPACIO.*USO PUBLICO", "LOCAL": r"LOCAL.*PATENTE",
-    "AMBU": r"AMBULANTE", "PARAB": r"PARABRISAS", "PUER": r"PUERTAS ABIERTAS",
-    "LUCES": r"LUCES (ANTIREGLAMENTARIAS|DISTINTAS)", "PESO": r"PESOS? MAXIMOS?", "EXCESO": r"EXCESO.*VELOCIDAD",
-    "RECLA": r"RECLAMACION", "FISCAL": r"INSPECTOR FISCAL", "CARABI": r"SENAL.*CARABINEROS|CARABINEROS.*SENAL",
-    "MINIS": r"MINISTRATEL", "SINL": r"SIN (PORTAR )?LICENCIA",
+    # --- VEHÍCULOS Y ABANDONO ---
+    "1":   [r"VEHICULO ABANDONADO", r"ABANDONADO.*VIA PUBLICA"],
+    "461": [r"ESPECIES ABANDONADAS", r"ABANDONO DE ESPECIES"],
+    
+    # --- PLACAS PATENTES Y IDENTIFICACIÓN ---
+    "10":  [r"SIN PLACA PATENTE", r"FALTA PLACA PATENTE", r"SIN PPU", r"EXIGIBLE.*ART 51"],
+    "606": [r"PLACA PATENTE OCULTA", r"OCULTAR.*PATENTE", r"OBJETOS PARA OCULTAR"],
+    "669": [r"SIN LA PLACA PATENTE", r"EXIGIBLE.*ART\.? 51"],
+    "670": [r"PATENTE OCULTA", r"OBSTACULICEN.*PERCEPCION"],
+    "671": [r"PPU.*GRAVADA", r"PPU.*GRABADA"],
+    "74":  [r"PATENTE DETERIORADA"],
+    
+    # --- ESTACIONAMIENTOS Y DETENCIONES ---
+    "11":  [r"ESTACIONAR.*COSTADO IZQUIERDO", r"LADO IZQUIERDO"],
+    "13":  [r"CONTRA SENTIDO", r"SENTIDO CONTRARIO.*TRANSITO"],
+    "17":  [r"DOBLE FILA"],
+    "19":  [r"SITIO PROHIBIDO", r"PROHIBIDO Y SEÑALIZADO"],
+    "20":  [r"MINUSVALID", r"DISCAPACIT"],
+    "21":  [r"SITIO RESERVADO SEÑALIZADO"],
+    "27":  [r"TOMAR PASAJERO EN SEGUNDA FILA", r"DEJAR.*PASAJERO.*SEGUNDA FILA"],
+    "39":  [r"DETENERSE SOBRE PASO PEATONAL", r"SOBRE PASO PEATONAL"],
+    "42":  [r"ESTACIONAR EN CURVA"],
+    "43":  [r"MENOS.*10.*MTS.*ESQUINA", r"10 METROS.*ESQUINA"],
+    "46":  [r"DENTRO DE CRUCE", r"ESTACIONAR.*CRUCE"],
+    "48":  [r"ESTACIONAR SOBRE ACERA", r"SOBRE ACERA"],
+    "49":  [r"ESTACIONAR SOBRE PASO PEATONAL"],
+    "52":  [r"ESTACIONAR.*MENOS.*10.*SIGNO PARE"],
+    "53":  [r"ESTACIONAR.*MENOS.*20.*PARADERO"],
+    "483": [r"ENTRADA Y SALIDA", r"CASA PARTICULAR.*SALIDA"],
+    "492": [r"MENOS.*5.*MTS.*GRIFO", r"5 METROS.*GRIFO"],
+    "494": [r"MENOS.*10.*CEDA EL PASO"],
+    "499": [r"SOBRE AREA VERDE", r"AREA VERDE"],
+    "615": [r"ESTACIONAR.*PUENTES", r"ESTACIONAR.*TUNELES"],
+    "616": [r"ESTACIONAR.*CALZADAS O BERMAS"],
+
+    # --- MOVIMIENTO, ADELANTAMIENTOS Y VIRAJES ---
+    "2":   [r"ADELANTAR EN LINEA CONTINUA", r"LINEA CONTINUA"],
+    "3":   [r"ADELANTAR EN CRUCE"],
+    "4":   [r"ADELANTAR EN CURVA"],
+    "6":   [r"ADELANTAR EN PUENTE"],
+    "15":  [r"CONDUCIR CONTRA SENTIDO", r"CONTRA SENTIDO DEL TRANSITO"],
+    "23":  [r"CAMBIAR PISTA SORPRESIVAMENTE", r"OBTRUYENDO OTRA"],
+    "26":  [r"PASO PREFERENTE PEATON", r"NO RESPETAR.*PEATON"],
+    "38":  [r"DESOBEDECER SEÑAL.*CARABINEROS"],
+    "40":  [r"CARGA SOBREPASA ANCHO", r"ANCHO Y LARGO"],
+    "41":  [r"CARGA MAL ESTIBADA"],
+    "47":  [r"VIRAJE INDEBIDO EN U", r"VIRAR EN U"],
+    "51":  [r"CARRERA DE AUTOS", r"CARRERAS CLANDESTINAS"],
+    "63":  [r"ATENTO A LAS CONDICIONES", r"NO ESTAR ATENTO"],
+    "67":  [r"NO RESPETAR SEÑALES"],
+    "69":  [r"LUZ AMARILLA", r"NO RESPETAR.*AMARILLA"],
+    "91":  [r"LUZ ROJA", r"SEMAFORO.*ROJA", r"NO RESPETAR.*ROJA"],
+    "505": [r"VIRAR A LA IZQUIERDA.*SITIO PROHIBIDO"],
+    "608": [r"SOBREPASAR.*POR LA BERMA"],
+    "613": [r"PISTA IZQUIERDA.*DOS SENTIDOS"],
+    "614": [r"DERECHO DE PASO"],
+    "617": [r"INFRINGIR NORMAS SOBRE VIRAJE"],
+    "631": [r"CRUZAR.*VIA FERREA.*NO AUTORIZADO"],
+    "635": [r"MITAD IZQUIERDA DE LA CALZADA"],
+    "645": [r"VIAS EXCLUSIVAS"],
+
+    # --- VELOCIDAD ---
+    "18":  [r"EXCESO VELOCIDAD ZONA URBANA", r"EXCESO.*URBANA"],
+    "28":  [r"VELOCIDAD NO RAZONABLE", r"NO RAZONABLE NI PRUDENTE"],
+    "29":  [r"ZONA ESCUELA", r"MAYOR VELOCIDAD.*ESCUELA"],
+    "36":  [r"DISPOSITIVO VELOCIDAD.*MAL ESTADO"],
+    "94":  [r"EXCESO DE VELOCIDAD", r"CONDUCIR.*EXCESO"],
+
+    # --- LICENCIAS Y DOCUMENTACIÓN ---
+    "7":   [r"SIN CAMBIO DOMICILIO.*LICENCIA"],
+    "16":  [r"SIN HABER OBTENIDO LICENCIA", r"NO HABER OBTENIDO"],
+    "22":  [r"SIN LENTES", r"CONDUCIR SIN LENTES"],
+    "24":  [r"BOLETA CITACION VENCIDA"],
+    "32":  [r"LICENCIA DISTINTA"],
+    "33":  [r"REVISION TECNICA VIGENTE", r"SIN REVISION TECNICA"],
+    "37":  [r"PERMISO CIRCULACION VIGENTE", r"SIN PERMISO CIRCULACION"],
+    "60":  [r"FECHA CONTROL VENCIDA", r"LICENCIA.*VENCIDA"],
+    "602": [r"PERMISO PROVISORIO VENCIDO"],
+    "66":  [r"CONDUCIR SIN LICENCIA", r"SIN PORTAR LICENCIA"],
+    "92":  [r"SEGURO OBLIGATORIO VENCIDO", r"SIN SEGURO"],
+
+    # --- ALCOHOL Y LEY DE ALCOHOLES ---
+    "12":  [r"CONSUMIR ALCOHOL DENTRO VEHICULO", r"BEBER DENTRO"],
+    "14":  [r"BAJO INFLUENCIA ALCOHOL", r"HASTA 0[,.]5"],
+    "300": [r"BEBER EN LA VIA PUBLICA", r"INGERIR ALCOHOL", r"CONSUMIR ALCOHOL.*VIA PUBLICA"],
+    "301": [r"TRANSITAR EBRIO", r"ESTADO DE EBRIEDAD"],
+    "302": [r"ROTULO EXIGIDO POR LEY"],
+    "303": [r"MENORES.*LOCAL DE ALCOHOLES"],
+    "304": [r"PERSONA EBRIA.*LOCAL ALCOHOLES"],
+    "305": [r"CARTEL LEY ALCOHOLES"],
+    "307": [r"EXPENDER BEBIDAS ALCOHOLICAS"],
+    "484": [r"CONEXION CON CASA PARTICULAR"],
+    "643": [r"SIN PATENTE LOCAL ALCOHOLES"],
+    "647": [r"PATENTE DISTINA A LA REQUERIDA"],
+    "648": [r"VENTA CLANDESTINA.*ALCOHOL"],
+
+    # --- CONDICIONES TÉCNICAS Y MECÁNICAS ---
+    "25":  [r"MENOR 8 AÑOS.*ASIENTO DELANTERO"],
+    "30":  [r"BICICLETA SOBRE ACERA"],
+    "31":  [r"CONDUCIR SOBRE LA ACERA"],
+    "34":  [r"SIN MALLA PROTECTORA"],
+    "50":  [r"SIN EXTINTOR"],
+    "58":  [r"LUCES ANTIREGLAMENTARIAS"],
+    "59":  [r"LUCES DE FRENOS"],
+    "61":  [r"LUCES QUE INDUCEN A ERROR", r"FOCOS NEBLINEROS"],
+    "64":  [r"NEUMATICOS EN MAL ESTADO"],
+    "68":  [r"RUEDA DE REPUESTO"],
+    "72":  [r"BOTIQUIN REGLAMENTARIO"],
+    "75":  [r"PARABRISAS TRIZADO"],
+    "76":  [r"PARABRISAS TRASERO POLARIZADO"],
+    "77":  [r"RUEDA DE REPUESTO.*MAL ESTADO"],
+    "78":  [r"TRABAJOS MECANICOS EN VIA PUBLICA"],
+    "79":  [r"SIN LUCES"],
+    "80":  [r"SIN CASCO"],
+    "81":  [r"SIN TACOGRAFO"],
+    "82":  [r"SIN TUBO DE ESCAPE", r"SIN SILENCIADOR"],
+    "83":  [r"SIN RUEDA DE REPUESTO"],
+    "84":  [r"TAXIMETRO.*SIN FUNCIONAR"],
+    "89":  [r"USO DE BOCINA INDEBIDAMENTE"],
+    "97":  [r"TUBO ESCAPE ANTIRREGLAMENTARIO"],
+    "482": [r"PARACHOQUE ANTIRREGLAMENTARIO"],
+    "496": [r"EMISIONES DE GASES"],
+    "507": [r"VENTANA EN MAL ESTADO"],
+    "600": [r"ASIENTO EN MAL ESTADO"],
+    "601": [r"VIDEO DE SEGURIDAD"],
+    "618": [r"SISTEMA DE DIRECCION DEFICIENTE"],
+    "619": [r"SISTEMA DE FRENOS DEFICIENTES"],
+    "620": [r"NO BAJAR LA LUZ"],
+    "622": [r"CIERROS EN MAL ESTADO"],
+    "623": [r"LINEA FERREA"],
+    "625": [r"TAXIMETRO SIN SELLO"],
+    "626": [r"TAXIMETRO ACONDICIONADO"],
+    "627": [r"PROVEER COMBUSTIBLE.*PASAJEROS"],
+    "628": [r"TACOGRAFO EN MAL ESTADO"],
+    "630": [r"EXCEDIENDO LOS PESOS MAXIMOS"],
+    "632": [r"PUERTAS ABIERTAS.*MOVIMIENTO"],
+    "633": [r"PISADERAS"],
+    "636": [r"EVADIR LA FISCALIZACION"],
+    "640": [r"CINTURON DE SEGURIDAD.*BUSES"],
+    "641": [r"PPU GRABADA.*VIDRIOS"],
+
+    # --- PASAJEROS, TRANSPORTE Y OTROS ---
+    "5":   [r"ABANDONAR EL RECORRIDO"],
+    "8":   [r"USAR CINTURON DE SEGURIDAD", r"NO USAR CINTURON"],
+    "54":  [r"HABLANDO POR CELULAR", r"TELEFONO MOVIL"],
+    "55":  [r"JUGAR EN LA VIA PUBLICA"],
+    "62":  [r"ANIMALES SUELTOS"],
+    "65":  [r"TRANSPORTE PASAJERO NO AUTORIZADO"],
+    "70":  [r"NEGARSE A TRASLADAR PASAJEROS"],
+    "71":  [r"NO LLEVAR A CARABINERO"],
+    "85":  [r"SUSTANCIAS PELIGROSAS"],
+    "86":  [r"TRANSPORTAR PERSONAS EN ESTADO DE EBRIEDAD"],
+    "87":  [r"TOMAR PASAJEROS EN CRUCE"],
+    "88":  [r"CARGA PELIGROSA SIN ROTULO"],
+    "90":  [r"SIN HOJA DE RUTA"],
+    "93":  [r"EXCESO DE CARGA", r"SOBREPESO"],
+    "95":  [r"DAÑOS EN VOLCAMIENTO"],
+    "96":  [r"OFRECER HOSPEDAJE"],
+    "485": [r"PASAJEROS DE PIE"],
+    "486": [r"PEATON NO RESPETA"],
+    "487": [r"PERSONAS EN ZONA DE CARGA"],
+    "488": [r"CARGA/DESCARGA EN HORARIO NO AUTORIZADO"],
+    "503": [r"COMERCIO AMBULANTE"],
+    "508": [r"TARJETA DE IDENTIFICACION"],
+    "509": [r"NOMINA PASAJEROS"],
+    "609": [r"ENTREGAR VEHÍCULO A PERSONA SIN REQUISITOS"],
+    "629": [r"TRANSPORTE DE PASAJEROS O CARGA"],
+    "634": [r"JUNTO A LA ACERA AL TOMAR O DEJAR"],
+    "637": [r"ARROJAR.*CIGARRILLOS"],
+    "638": [r"DISPOSITIVOS ESPECIALES.*EMERGENCIA"],
+    "649": [r"FACILITAR VEHICULO A QUIEN NO POSEE"],
+
+    # --- ACCIDENTES, DAÑOS Y OTROS DELITOS / FALTAS ---
+    "56":  [r"LESIONES LEVES EN ATROPELLO"],
+    "57":  [r"DAÑOS EN COLISION"],
+    "500": [r"DAÑOS EN CHOQUE", r"CHOQUE"],
+    "639": [r"CAUSA PRINCIPAL DE UN ACCIDENTE"],
+    
+    # --- LEYES ESPECIALES Y MUNICIPALES ---
+    "350": [r"RUIDOS? MOLESTOS?"],
+    "400": [r"DS\.? 93", r"VIGILANCIA PRIVADA"],
+    "420": [r"LEY 19\.?496", r"CONSUMIDOR"],
+    "450": [r"LEY DE BOSQUES", r"20\.?283", r"CONAF"],
+    "470": [r"RECLAMACIONES ART\.? 15"],
+    "480": [r"LOCAL SIN PATENTE"],
+    "481": [r"ESCOMBROS EN LA VIA PUBLICA"],
+    "489": [r"AFICHE EN LA VIA PUBLICA"],
+    "490": [r"INDEMNIZACION DE PERJUCIO"],
+    "491": [r"ORDEN DE ALLANAMIENTO"],
+    "493": [r"MEDIO AMBIENTE", r"ORDENANZA LOCAL"],
+    "495": [r"HORARIO DE VEDA"],
+    "497": [r"CONSTRUCCION AMPLIACION SIN PERMISO"],
+    "498": [r"FOLLETERIA"],
+    "501": [r"QUEMA SIN AUTORIZACION"],
+    "502": [r"LEY 18\.?700", r"PROPAGANDA ELECTORAL"],
+    "504": [r"PATENTE A LA VISTA"],
+    "506": [r"PEGATINA AFICHES"],
+    "603": [r"LEY DEL TABACO"],
+    "604": [r"ESPACIO NO AUTORIZADO EN B\.?N\.?U\.?P"],
+    "605": [r"AGUAS LLUVIAS"],
+    "610": [r"INSPECTOR FISCAL"],
+    "611": [r"TOMARSE LOS CONDUCTORES DE MOTOCICLETAS"],
+    "642": [r"ELECTOR QUE NO SUFRAGO"],
+    "644": [r"DEMANDA LEY 20009"],
+    "646": [r"LEY CHOLITO"],
+    "667": [r"VOCAL MESA"],
+    "668": [r"COLEGIO ESCRUTADOR"],
+
+    # --- PREFIXES MIGR / OTROS ---
+    "Mig1":  [r"FALTAS AL CODIGO PENAL"],
+    "Mig2":  [r"INF\.? LEY DE TRANSITO"],
+    "Mig3":  [r"ORDENANZAS MUNICIPALES"],
+    "Mig5":  [r"SERV\.? NAC\.? CONSUMIDOR"],
+    "Mig6":  [r"LEY DE ALCOHOLES"],
+    "Mig7":  [r"LEY ELECTORAL"],
+    "Mig8":  [r"RENTAS MUNICIPALES"],
 }
 
 
@@ -38,14 +238,19 @@ def _afinidad(a, b):
 
 
 def candidatos(abrev, texto_concepto, lista=None):
-    """[(codigo, descripcion, puntaje)] ordenados de mejor a peor para un concepto del catálogo."""
+    """[(codigo, descripcion, puntaje, hit)] ordenados de mejor a peor para un concepto del catálogo."""
     lista = lista if lista is not None else perfil.infracciones()
-    rx = HINTS.get(abrev)
+    
+    patterns = HINTS.get(abrev, [])
+    if isinstance(patterns, str):
+        patterns = [patterns]
+        
     out = []
     for c, d in lista.items():
         dn = " ".join(perfil.sin_tildes(d).split())
-        hit = bool(rx and re.search(rx, dn))
+        hit = any(bool(re.search(pat, dn, re.I)) for pat in patterns) if patterns else False
         out.append((c, d, _afinidad(texto_concepto, d) + (1.0 if hit else 0.0), hit))
+        
     out.sort(key=lambda z: -z[2])
     return [(c, d, round(s, 2), hit) for c, d, s, hit in out[:6]]
 
