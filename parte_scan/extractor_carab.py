@@ -212,7 +212,6 @@ def _infractor(texto_inf):
     
     rut, leido, aviso = "", "", ""
     
-    # Patrón avanzado con cobertura de prefijos, separadores irregulares y errores comunes de OCR
     patron_rut = re.compile(
         r"(?:R\.?U\.?[NTM]?|C\.?\s?I\.?|c[eé]d(?:ula)?\.?\s*(?:(?:nacional\s+)?de\s+)?(?:ident\w*)?|ident\w*)\.?\s*"
         r"(?:Nro\.?|N[°º]|n[uú]mero)?\s*[:.]?\s*"
@@ -419,12 +418,23 @@ def _normalizar_fecha_ocr(s):
     return s
 
 def _fecha_valida(s):
-    return True
+    return bool(re.fullmatch(r"\d{2}/\d{2}/20\d{2}", s or ""))
 
 def _extraer_fechas(t):
-    return []
+    return re.findall(r"\d{1,2}[-/.]\d{1,2}[-/.]20\d{2}", t or "")
 
-def _fecha_citacion_contextual(t):
+def _fecha_citacion_contextual(s):
+    if not s:
+        return ""
+    # Permite extraer fechas escritas como "4 de Noviembre del 2026"
+    m = re.search(r"(\d{1,2})\s+de\s+(" + "|".join(MESES) + r")\s+(?:del?\s+)?(?:a[ñn]o\s+)?(20\d{2})", s, re.I)
+    if m:
+        d = int(m.group(1))
+        mes_str = m.group(2).upper()
+        mes = MESES.get(mes_str, 0)
+        anio = m.group(3)
+        if mes:
+            return "%02d/%02d/%s" % (d, mes, anio)
     return ""
 
 
