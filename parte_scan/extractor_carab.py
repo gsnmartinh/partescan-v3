@@ -279,30 +279,133 @@ def _vehiculo(s):
 
 
 def _boleta(secs):
+
+    patrones = (
+
+        # BOLETA N° 12345
+        r"BOLETA[^\d]{0,80}?(\d{4,8})",
+
+        # BOLETA DE CITACION N° 12345
+        r"BOLETA[^\d]{0,80}?CITACI[OÓ0]N[^\d]{0,40}?(\d{4,8})",
+
+        # B/C 12345
+        r"\b[8B]\s*[/\\|.\-]\s*[CGO]\b[^\d]{0,40}?(\d{4,8})",
+
+        # B C 12345
+        r"\b[8B]\s+[CGO]\b[^\d]{0,40}?(\d{4,8})",
+
+        # BC12345
+        r"\b[8B][CGO]\s*(\d{4,8})",
+
+        # BC N° 12345
+        r"\b[8B][CGO]\b[^\d]{0,40}?(\d{4,8})",
+
+        # CITACION N° 12345
+        r"CITACI[OÓ0]N[^\d]{0,40}?(\d{4,8})",
+
+        # COMPROBANTE 12345
+        r"COMPROBANTE[^\d]{0,30}?(\d{4,8})",
+    )
+
     for nombre in ("CITACION", "OBSERVACION"):
         for r, s in secs:
-            if r.startswith(nombre):
-                m = re.search(r"boleta[^\d]{0,45}?(\d{4,7})|B\s*/\s*C\.?\s*(?:Nro\.?|N[°º])?\s*(\d{4,7})", s, re.I)
+
+            if not r.startswith(nombre):
+                continue
+
+            txt = _normalizar_ocr_boleta(s)
+
+            for rx in patrones:
+                m = re.search(rx, txt, re.I)
+
                 if m:
-                    return m.group(1) or m.group(2)
-    for r, s in secs:
-        if r.startswith("CITACION"):
-            m = re.search(r"(?:citaci[oó]n|\w{3,6}leta)\s+(?:Nro\.?|N[°º]|n[uú]mero)\s*[:.]?\s*(\d{4,7})", s, re.I)
-            if m:
-                return m.group(1)
+                    return re.sub(r"\D", "", m.group(1))
+
+            # último recurso
+            for marca in (
+                "BOLETA",
+                "B/C",
+                "BC",
+                "8/C",
+                "8C",
+                "CITACION",
+            ):
+
+                pos = txt.find(marca)
+
+                if pos >= 0:
+                    ventana = txt[pos:pos + 150]
+
+                    nums = re.findall(r"\d[\d ]{3,10}", ventana)
+
+                    if nums:
+                        return re.sub(r"\D", "", nums[0])
+
     return ""
 
+def _normalizar_ocr_boleta(txt):
+    s = (txt or "").upper()
 
+    # Variantes típicas OCR
+    s = s.replace("Nº", "N°")
+    s = s.replace("NO.", "N°")
+    s = s.replace("NRO.", "N°")
+    s = s.replace("NUMERO", "N°")
+
+    return s
 def _boleta_texto(texto):
-    """Respaldo: busca «boleta de citación número N» en todo el texto (por si el rótulo CITACIÓN salió mal leído)."""
-    t = re.sub(r"\s+", " ", texto or "")
-    for rx in (r"boleta\s+de\s+\w{4,10}\s*(?:n[uú]mero|nro\.?|n[°º])\s*[:.]?\s*(\d{4,7})",
-               r"\w{0,3}leta\s+de\s+\w{4,10}\s*(?:n[uú]mero|nro\.?|n[°º])\s*[:.]?\s*(\d{4,7})",
-               r"mediante\s+\w{3,8}\s+de\s+\w{4,10}\s+(?:n[uú]mero|nro\.?|n[°º])?\s*[:.]?\s*(\d{4,7})",
-               r"(?:n[uú]mero|nro\.?|n[°º])\s*[:.]?\s*(\d{5})\s*,\s*de\s+esta\s+fecha"):
+    """
+    Respaldo global cuando el OCR destruye
+    el rótulo CITACION.
+    """
+
+    t = _normalizar_ocr_boleta(
+        re.sub(r"\s+", " ", texto or "")
+    )
+
+    patrones = (
+
+        r"BOLETA\s+DE\s+\w{4,12}\s*(?:N°)?\s*[:.]?\s*(\d{4,8})",
+
+        r"\w{0,3}LETA\s+DE\s+\w{4,12}\s*(?:N°)?\s*[:.]?\s*(\d{4,8})",
+
+        r"MEDIANTE\s+\w{3,10}\s+DE\s+\w{4,12}\s*(?:N°)?\s*[:.]?\s*(\d{4,8})",
+
+        r"\b[8B]\s*[/\\|.\-]\s*[CGO]\b[^\d]{0,40}?(\d{4,8})",
+
+        r"\b[8B][CGO]\b[^\d]{0,40}?(\d{4,8})",
+
+        r"CITACI[OÓ0]N[^\d]{0,40}?(\d{4,8})",
+
+        r"COMPROBANTE[^\d]{0,30}?(\d{4,8})",
+    )
+
+    for rx in patrones:
         m = re.search(rx, t, re.I)
+
         if m:
-            return m.group(1)
+            return re.sub(r"\D", "", m.group(1))
+
+    # último recurso
+    for marca in (
+        "BOLETA",
+        "B/C",
+        "BC",
+        "8/C",
+        "8C",
+        "CITACION",
+    ):
+
+        pos = t.find(marca)
+
+        if pos >= 0:
+            ventana = t[pos:180 + pos]
+
+            nums = re.findall(r"\d[\d ]{3,10}", ventana)
+
+            if nums:
+                return re.sub(r"\D", "", nums[0])
+
     return ""
 
 
