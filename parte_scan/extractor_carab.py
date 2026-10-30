@@ -3,27 +3,32 @@ campos que extractor.parte, más los propios de este modelo (boleta, infractor, 
 
 Estos partes cambian de orden y de redacción según la unidad (a veces va primero el infractor, a veces la
 infracción; los de alcohol no traen vehículo), así que se separan por rótulos y no por posición."""
-import re, unicodedata
+import re
+import unicodedata
+import datetime
 
 from . import catalogo, certificado, perfil
 from . import semantica as SM
 from .extractor import MESES, fecha_de, limpiar
 
+# Para reconocer un parte de Carabineros basta con que aparezcan varios de estos rasgos
 RASGOS = [
     r"CAR\w{0,3}BINEROS", r"Parte\s*N\w{0,4}[.\s:*°º]*\d{2,5}", r"POL\w{0,3}\.?\s?LOCAL\s+V",
     r"SUBOFICIAL|\bGUARDIA\b", r"DA\s+CUENTA\s+(?:DE|AL)", r"INFRACTOR\s*:", r"\bCIUDAD\b|C\s?I\s?U\s?D\s?A\s?D", r"J[GC]DO\W{0,3}POL",
 ]
 RE_ROTULO = re.compile(r"(INFRACTOR(?:ES)?(?:\s*\(A\))?(?:\s*(?:N[°º]\s*)?[12])?|INFRACCI[OÓ]N|VEH[IÍ]CULO|LICENCIA|REINCIDENCIAS?|DENUNCIANTE|TESTIGO|"
-                        r"OBSERVACI[OÓ]N(?:ES)?|CITACI[OÓ]N)\s*[:;]|(?-i:\b(INFRACTOR|VEH[IÍ]CULO))\s+(?:[O0](?=\s+[A-ZÁÉÍÓÚÑ]{3})|\.(?=\s+\w))", re.I)
+                         r"OBSERVACI[OÓ]N(?:ES)?|CITACI[OÓ]N)\s*[:;]|(?-i:\b(INFRACTOR|VEH[IÍ]CULO))\s+(?:[O0](?=\s+[A-ZÁÉÍÓÚÑ]{3})|\.(?=\s+\w))", re.I)
 PLACA_OK = re.compile(r"[A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3}")
 CONSONANTES = "BCDFGHJKLPRSTVWXYZ"
 
 
 def placa_puntaje(p):
+    """2 = formato válido y solo consonantes; 1 = formato válido; 0 = no sirve."""
     if not PLACA_OK.fullmatch(p or ""):
         return 0
     letras = re.sub(r"\d", "", p)
     return 2 if all(c in CONSONANTES for c in letras) else 1
+
 
 NACION = (r"venezolan|chilen|peruan|colombian|haitian|bolivian|argentin|ecuatorian|brasile|dominican|cubano|cubana|"
          r"paraguay|uruguay|espa[ñn]ol")
@@ -38,12 +43,11 @@ def _plano(t):
 
 
 def _hoy():
-    import datetime
     return datetime.date.today()
 
 
 def corregir_anio(fecha, hoy=None):
-    import datetime
+    """Los partes son de infracciones recientes: el año es el en curso."""
     hoy = hoy or _hoy()
     m = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", fecha or "")
     if not m:
@@ -198,23 +202,57 @@ def _fin_nombre(s):
 
 
 def _infractor(texto_inf):
+    """-> (nombre, rut, direccion, comuna, aviso, rut_leido) con soporte ampliado para variantes OCR de Cédula/RUT."""
     s = re.sub(r"^[\W_]+", "", limpiar(texto_inf))
     if not s or re.match(r"(?:por\s+escrito|ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
     s = re.split(r"\bDISP\.?\s*INFR\w*|\bD[I1l|]SP[O0]S[I1l|]C\w{0,3}\b", s, 1, flags=re.I)[0].strip()
     cut = _fin_nombre(s)
     nombre = limpiar((s[:cut] if cut else s.split(".")[0]).replace(",", " ")).upper()
+    
     rut, leido, aviso = "", "", ""
-    mr = re.search(r"(?:R\.?U\.?[NT]\.?|C\.?\s?I\.?|c[eé]d(?:ula)?\.?\s*(?:(?:nacional\s+)?de\s+)?(?:ident\w*)?|ident\w*)\.?\s*(?:Nro\.?|N[°º]|n[uú]mero)?\s*:?\s*"
-                     r"(\d{1,2}\s*[.,]?\s*\d{3}\s*[.,]?\s*\d{3})\s*[-–—]\s*([\dKk])", s, re.I)
+    
+    # Patrón avanzado con cobertura de prefijos, separadores irregulares y errores comunes de OCR
+    patron_rut = re.compile(
+        r"(?:R\.?U\.?[NTM]?|C\.?\s?I\.?|c[eé]d(?:ula)?\.?\s*(?:(?:nacional\s+)?de\s+)?(?:ident\w*)?|ident\w*)\.?\s*"
+        r"(?:Nro\.?|N[°º]|n[uú]mero)?\s*[:.]?\s*"
+        r"([0-9OIlS_. ,\-]{5,12})\s*[-–—./_]?\s*([0-9Kk])",
+        re.I
+    )
+    
+    mr = patron_rut.search(s)
+    
+    if not mr:
+        patron_rut_suelto = re.compile(r"\b([0-9OIlS_. ,\-]{5,12})\s*[-–—./_]\s*([0-9Kk])\b")
+        mr = patron_rut_suelto.search(s)
+
     if mr:
-        leido = re.sub(r"\D", "", mr.group(1)) + "-" + mr.group(2).upper()
-        if certificado.rut_ok(leido):
-            rut = leido
+        cuerpo_bruto = mr.group(1)
+        dv_bruto = mr.group(2)
+        
+        cuerpo_limpio = (
+            cuerpo_bruto.upper()
+            .replace("O", "0")
+            .replace("I", "1")
+            .replace("L", "1")
+            .replace("S", "5")
+        )
+        cuerpo_digitos = re.sub(r"\D", "", cuerpo_limpio)
+        dv = dv_bruto.upper()
+        
+        if 6 <= len(cuerpo_digitos) <= 8:
+            leido = f"{cuerpo_digitos}-{dv}"
+            if certificado.rut_ok(leido):
+                rut = leido
+            else:
+                aviso = f"El RUT del infractor ({leido}) no cuadra con su dígito verificador: compáralo con el parte."
         else:
-            aviso = "El RUT del infractor (%s) no cuadra con su dígito verificador: compáralo con el parte." % leido
+            leido = f"{cuerpo_digitos}-{dv}" if cuerpo_digitos else f"{cuerpo_bruto}-{dv}"
+            aviso = f"El RUT leído ({leido}) tiene un formato atípico: revísalo."
+            
     elif re.search(r"\bDNI\b|pasaporte|(?:" + NACION + r")", s, re.I):
         aviso = "Infractor extranjero (sin RUT): irá con SR y su nombre."
+
     direccion, comuna = "", ""
     md = re.search(r"domicili\w+\s*:?\s*(?:en\s+)?(.+?)[\s.]*$", s, re.I)
     if md:
@@ -234,6 +272,7 @@ def _infractor(texto_inf):
         d = re.sub(r"\bsin\s+(?:Nro\.?|N[°º]|n[uú]mero)\b\.?", "S/N", d, flags=re.I)
         d = re.sub(r"\b(?:Nro\.?|N[°º]|n[uú]mero)\s*", "", d, flags=re.I)
         direccion = limpiar(d).upper().strip(" ,.")
+        
     return nombre, rut, direccion, comuna, aviso, leido
 
 
@@ -341,7 +380,6 @@ def _norm(t):
 
 def _oficina(texto):
     import difflib
-    from . import perfil
     cab = _norm(texto)[:700]
     corte = re.search(r"\bD[AO]Y?\s+CUENTA|\bAL\s+2\s*D?O", cab)
     cab = cab[:corte.start()] if corte and corte.start() > 25 else cab[:300]
@@ -377,7 +415,6 @@ def problemas(r):
     return n
 
 
-# Funciones auxiliares de fecha que faltaban en el snippet original
 def _normalizar_fecha_ocr(s):
     return s
 
@@ -437,6 +474,7 @@ def parte(texto):
     if len(boletas) == len(infractores) > 1:
         for x, bol in zip(infractores, boletas):
             x["boleta"] = bol
+            
     pers = [x for x in (_infractor(p) for p in SM.personas(texto)) if x[0]]
     if not nombre and pers:
         nombre, rut, direccion, comuna, aviso_inf, rut_leido = pers[0]
@@ -446,6 +484,7 @@ def parte(texto):
         if len(boletas) == len(infractores) > 1:
             for x, bol in zip(infractores, boletas):
                 x["boleta"] = bol
+                
     tiene_vehiculo = any(r.startswith("VEHICULO") for r, _ in secs)
     v = _vehiculo(_sec(secs, "VEHICULO")) if tiene_vehiculo else _vehiculo("")
     if not tiene_vehiculo or not (v["placa"] or v["marca"] or v["tipo"]):
@@ -454,6 +493,7 @@ def parte(texto):
             v2 = _vehiculo(clausula)
             if v2["placa"] or v2["marca"] or v2["tipo"]:
                 tiene_vehiculo, v = True, v2
+                
     if not n_parte:
         av.append("No pude leer el número del parte de Carabineros.")
     if not boleta:
@@ -466,6 +506,7 @@ def parte(texto):
         av.append("La patente leída (%s) no tiene un formato válido: revísala." % v["placa"])
     if not fecha_parte:
         av.append("No pude leer la fecha del parte.")
+        
     return {
         "origen": "carab", "departamento": "CARABINEROS", "oficina": _of[0], "oficina_reconocida": _of[1], "n_parte": boleta, "n_parte_final": boleta,
         "n_parte_carab": n_parte, "boleta": boleta, "n_citacion_adjunta": "",
