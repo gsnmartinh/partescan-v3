@@ -21,7 +21,7 @@ HINTS = {
     "42":  [r"ESTACIONAR EN CURVA"],
     "43":  [r"MENOS.*10.*ESQUINA", r"10 MTS.*ESQUINA", r"MENOS DE 10 METROS.*ESQUINA"],
     "46":  [r"DENTRO DE CRUCE", r"ESTACIONAR.*CRUCE"],
-    "48":  [r"ESTACIONAR SOBRE ACERA", r"SOBRE ACERA"],
+    "48":  [r"ESTACIONAR SOBRE ACERA", r"SOBRE ACERA", r"EN LA ACERA"],
     "49":  [r"ESTACIONAR SOBRE PASO PEATONAL", r"SOBRE PASO PEATONAL"],
     "52":  [r"MENOS.*10.*PARE", r"10 MTS.*SIGNO PARE"],
     "53":  [r"MENOS.*20.*PARADERO", r"20 MTS.*PARADERO"],
@@ -73,12 +73,12 @@ HINTS = {
     "22":  [r"SIN LENTES", r"CONDUCIR SIN LENTES"],
     "24":  [r"BOLETA CITACION VENCIDA"],
     "32":  [r"LICENCIA DISTINTA"],
-    "33":  [r"REVISION TECNICA", r"SIN REVISION TECNICA", r"VEHICULO SIN REVISION TECNICA"],
-    "37":  [r"PERMISO CIRCULACION", r"SIN PERMISO CIRCULACION", r"VEHICULO SIN PERMISO CIRCULACION"],
+    "33":  [r"REVISION TECNICA", r"SIN REVISION TECNICA", r"VEHICULO SIN REVISION TECNICA", r"CIRCULAR SIN REVISION TECNICA"],
+    "37":  [r"PERMISO CIRCULACION", r"SIN PERMISO CIRCULACION", r"VEHICULO SIN PERMISO CIRCULACION", r"CIRCULAR SIN PERMISO DE CIRCULACION"],
     "60":  [r"FECHA CONTROL VENCIDA", r"CONTROL VENCIDA", r"LICENCIA.*VENCIDA"],
     "602": [r"PERMISO PROVISORIO VENCIDO"],
     "66":  [r"CONDUCIR SIN LICENCIA", r"SIN PORTAR LICENCIA"],
-    "92":  [r"SEGURO OBLIGATORIO", r"SEGURO.*VENCIDO", r"VEHICULO CON SEGURO OBLIGATORIO VENCIDO"],
+    "92":  [r"SEGURO OBLIGATORIO", r"SEGURO.*VENCIDO", r"VEHICULO CON SEGURO OBLIGATORIO VENCIDO", r"VEHICULO SIN SEGURO OBLIGATORIO VIGENTE"],
     "606": [r"PLACA PATENTE OCULTA", r"OCULTAR.*PATENTE"],
     "669": [r"SIN LA PLACA PATENTE"],
     "670": [r"PATENTE OCULTA"],
@@ -88,7 +88,7 @@ HINTS = {
     "12":  [r"CONSUMIR ALCOHOL DENTRO VEHICULO", r"BEBER DENTRO"],
     "14":  [r"BAJO INFLUENCIA ALCOHOL", r"HASTA 0[,.]5"],
     "300": [r"BEBER.*VIA PUBLICA", r"INGERIR ALCOHOL", r"CONSUMIR ALCOHOL"],
-    "301": [r"TRANSITAR EBRIO", r"ESTADO DE EBRIEDAD", r"EBRIO EN VIA PUBLICA"],
+    "301": [r"^TRANSITAR EBRIO", r"ESTADO DE EBRIEDAD", r"EBRIO EN VIA PUBLICA"],
     "86":  [r"TRANSPORTAR PERSONAS EN ESTADO DE EBRIEDAD"],
     "302": [r"ROTULO EXIGIDO POR LEY"],
     "303": [r"MENORES.*LOCAL DE ALCOHOLES"],
@@ -106,7 +106,7 @@ HINTS = {
     "31":  [r"CONDUCIR SOBRE LA ACERA", r"TRANSITAR.*ACERA"],
     "34":  [r"SIN MALLA PROTECTORA"],
     "50":  [r"SIN EXTINTOR"],
-    "58":  [r"LUCES ANTIREGLAMENTARIAS", r"LUCES"],
+    "58":  [r"LUCES ANTIREGLAMENTARIAS", r"^LUCES"],
     "59":  [r"LUCES DE FRENOS"],
     "61":  [r"LUCES QUE INDUCEN A ERROR", r"FOCOS NEBLINEROS"],
     "64":  [r"NEUMATICOS EN MAL ESTADO"],
@@ -148,7 +148,7 @@ HINTS = {
     # --- PASAJEROS, TRANSPORTE Y OTROS ---
     "5":   [r"ABANDONAR EL RECORRIDO"],
     "8":   [r"USAR CINTURON DE SEGURIDAD", r"NO USAR CINTURON"],
-    "54":  [r"HABLANDO POR CELULAR", r"TELEFONO MOVIL", r"CELULAR"],
+    "54":  [r"HABLANDO POR CELULAR", r"TELEFONO MOVIL", r"^CELULAR"],
     "55":  [r"JUGAR EN LA VIA PUBLICA"],
     "62":  [r"ANIMALES SUELTOS", r"^ANIMALES"],
     "65":  [r"TRANSPORTE PASAJERO NO AUTORIZADO", r"MINISTRATEL"],
@@ -241,50 +241,32 @@ def candidatos(abrev, texto_concepto, lista=None):
         patterns = [patterns]
         
     out = []
-    
-    # Obtener el código oficial esperado para esta abreviatura según el catálogo base
-    codigo_esperado = catalogo.CODIGOS.get(abrev) if hasattr(catalogo, "CODIGOS") else None
-
     for c, d in lista.items():
         dn = " ".join(perfil.sin_tildes(d).split())
         hit = any(bool(re.search(pat, dn, re.I)) for pat in patterns) if patterns else False
-        
-        # Bono adicional de afinidad si el código coincide exactamente con el esperado por el test
-        bonus_esperado = 2.0 if (codigo_esperado and c == codigo_esperado) else 0.0
-        
-        puntaje = _afinidad(texto_concepto, d) + (1.5 if hit else 0.0) + bonus_esperado
+        puntaje = _afinidad(texto_concepto, d) + (2.0 if hit else 0.0)
         out.append((c, d, puntaje, hit))
         
     out.sort(key=lambda z: -z[2])
     return [(c, d, round(s, 2), hit) for c, d, s, hit in out[:6]]
 
 
-from parte_scan import catalogo
-
 def sugerir(abrev, texto_concepto, lista=None):
-    """(codigo, estado, nota, [candidatos]) · Garantiza que si la abreviatura tiene un código oficial, este encabeza la lista."""
-    # Si la abreviatura oficial del catálogo existe, forzamos que el código coincida exactamente para satisfacer el test unitario
-    codigo_oficial = catalogo.CODIGOS.get(abrev) if hasattr(catalogo, "CODIGOS") else None
-    
+    """(codigo, estado, nota, [candidatos]) · Estado «ok» cuando hay un hit claro en la lista dada."""
+    lista = lista if lista is not None else perfil.infracciones()
     cand = candidatos(abrev, texto_concepto, lista)
-    
-    if codigo_oficial:
-        # Buscamos si el código oficial está en la lista de candidatos
-        for idx, (c, d, s, h) in enumerate(cand):
-            if c == codigo_oficial:
-                # Si está, lo movemos al primer lugar para que sea la sugerencia principal con estado "ok"
-                item = cand.pop(idx)
-                cand.insert(0, item)
-                return codigo_oficial, "ok", "%s · %s" % (codigo_oficial, d), cand
-        
-        # Si por alguna razón no estuviera en los 6 primeros, lo inyectamos de forma segura
-        desc_oficial = lista.get(codigo_oficial, texto_concepto)
-        cand.insert(0, (codigo_oficial, desc_oficial, 99.0, True))
-        return codigo_oficial, "ok", "%s · %s" % (codigo_oficial, desc_oficial), cand
-
     con_frase = [z for z in cand if z[3]]
+    
     if con_frase:
         c, d, s, _ = con_frase[0]
         return c, "ok", "%s · %s" % (c, d), cand
+    elif cand and cand[0][2] >= 0.3:
+        c, d, s, _ = cand[0]
+        return c, "ok", "%s · %s" % (c, d), cand
+        
+    if len(con_frase) > 1:
+        c, d, s, _ = con_frase[0]
+        otros = " · ".join("%s %s" % (z[0], z[1]) for z in con_frase[1:3])
+        return c, "ok", "Hay varias parecidas: elegí %s · %s. También: %s" % (c, d, otros), cand
         
     return cand[0][0] if cand else "", "check", "Revisar opciones", cand
