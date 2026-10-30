@@ -478,8 +478,14 @@ def parte(texto):
         or re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{2})[5S](\d{2})\s*horas", t, re.I) \
         or re.search(r"\bHORA\s*:\s*\W?\s*(\d{1,2})\s*[:.]\s*(\d{2})", t, re.I)
     hora = "%d:%s" % (int(m.group(1)), m.group(2)) if m else ""
-    seg_cit = _sec(secs, "CITACION", ultimo=True)
-    fecha_cit = _fecha_num(seg_cit) or fecha_de(seg_cit)
+seg_cit = _sec(secs, "CITACION", ultimo=True)
+
+fecha_cit = (
+    _fecha_citacion_contextual(seg_cit)
+    or _fecha_citacion_contextual(t)
+    or _fecha_num(seg_cit)
+    or fecha_de(seg_cit)
+)
     fecha_parte, anio_leido = corregir_anio(fecha_parte)
     if fecha_parte.endswith("????"):
         fecha_parte = fecha_parte[:-4] + str(_hoy().year)
