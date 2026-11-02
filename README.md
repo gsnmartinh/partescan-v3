@@ -18,7 +18,10 @@ Los códigos de infracciones y oficinas, las actuarias y otros datos propios de 
 
 ## Para quien mantiene el proyecto
 - Nueva versión: **Actions** → «Compilar ParteScan…» y «Compilar PartesTeclea…» → *Run workflow* con el mismo número (ej. `v1.2.0`).
-- Pruebas: `python tests/prueba_perfil.py`.
+- Pruebas (desde la raíz): `python tests/prueba_perfil.py`,
+  `python tests/prueba_tecleador.py` y `python tests/prueba_actualizador.py`.
+  Ejecutar las tres; la del actualizador usa un servidor local sin internet.
+- Estructura, duplicados conservados y revisión de ramas: [AUDITORIA.md](AUDITORIA.md).
 - `RELEASE_NOTES.md` es el texto de cada Release.
 
 > El archivo `.json` de tecleo trae RUT, nombres y direcciones: guardarlo solo en carpetas del Juzgado y borrarlo al terminar.
