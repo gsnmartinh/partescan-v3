@@ -275,7 +275,7 @@ function campos(p){
   S.push({t:'4 · Certificado del Registro Civil',sub:'',f:[
     ...filaInf,
     gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
-    gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+(((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:p.placa||'').trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',''),
+    gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:(p.placa||'')).trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',''),
     gc('Dirección (certificado)',c.direccion||'',c.direccion?'ok':(carab?'blank':'check'),''),
     gc('Comuna (certificado)',c.comuna||'',c.comuna?'ok':'check',''),
     gc('Marca (certificado)',c.marca||p.marca||'',(c.marca||p.marca)?'ok':'blank',''),
