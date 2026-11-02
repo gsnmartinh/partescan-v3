@@ -1,11 +1,11 @@
-"""Motor de lectura: imagen/PDF -> campos del parte. Todo local (Tesseract), sin internet."""
+"""Motor de lectura: imagen/PDF -> campos del parte. RapidOCR como principal y Tesseract como respaldo."""
 import os, re, sys
 from collections import Counter
 
 import pytesseract
 from PIL import Image
 
-from . import extractor, tablas
+from . import extractor, tablas, ocr2
 
 
 def _base():
@@ -15,7 +15,7 @@ def _base():
 
 
 def configurar_tesseract():
-    """Usa el Tesseract incluido junto al programa; en desarrollo usa el del sistema."""
+    """Usa el Tesseract incluido junto al programa como respaldo; en desarrollo usa el del sistema."""
     emb = os.path.join(_base(), "tesseract")
     exe = os.path.join(emb, "tesseract.exe")
     if os.path.exists(exe):
@@ -53,19 +53,40 @@ def paginas(ruta, dpi=200):
     return []
 
 
-def _lineas(d):
-    L = {}
-    for i, w in enumerate(d["text"]):
-        if w.strip():
-            L.setdefault((d["block_num"][i], d["par_num"][i], d["line_num"][i]), []).append(i)
-    return sorted(L.values(), key=lambda idx: min(d["top"][i] for i in idx))
+def preparar(img):
+    g = img.convert("L")
+    if g.width > 2600:  # fotos grandes: bajar a un tamaño razonable
+        f = 2600 / g.width
+        g = g.resize((2600, int(g.height * f)), Image.BICUBIC)
+    return g
+
+
+def texto_pagina(g):
+    """OCR principal con RapidOCR; si no está disponible o falla, utiliza Tesseract como respaldo."""
+    # 1. Intentar con RapidOCR (motor principal)
+    if ocr2.disponible():
+        txt_rapid = ocr2.leer(g)
+        if txt_rapid and len(txt_rapid.strip()) > 15:
+            return txt_rapid
+
+    # 2. Respaldo con Tesseract si RapidOCR falla
+    big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
+    return pytesseract.image_to_string(big, lang="spa", config="--psm 6")
 
 
 def _folio_recorte(g):
-    """Lee el N° de parte recortando a la derecha de 'DENUNCIO' solo con dígitos."""
+    """Lee el N° de parte recortando el encabezado. Usa Tesseract para recortes específicos de alta precisión."""
     W = g.width
-    top = g.crop((0, 0, W, int(g.height * 0.30)))   # el folio está en el encabezado
+    top = g.crop((0, 0, W, int(g.height * 0.30)))
     d = pytesseract.image_to_data(top, lang="spa", config="--psm 6", output_type=pytesseract.Output.DICT)
+    
+    def _lineas(dt):
+        L = {}
+        for i, w in enumerate(dt["text"]):
+            if w.strip():
+                L.setdefault((dt["block_num"][i], dt["par_num"][i], dt["line_num"][i]), []).append(i)
+        return sorted(L.values(), key=lambda idx: min(dt["top"][i] for i in idx))
+
     for idx in _lineas(d):
         w = [i for i in idx if d["text"][i].upper().startswith("DENUNC")]
         if w:
@@ -95,52 +116,8 @@ def votar(*lecturas):
     return v, av
 
 
-def preparar(img):
-    g = img.convert("L")
-    if g.width > 2600:  # fotos grandes: bajar a un tamaño razonable
-        f = 2600 / g.width
-        g = g.resize((2600, int(g.height * f)), Image.BICUBIC)
-    return g
-
-
-def texto_pagina(g):
-    """OCR de la página completa (una sola pasada)."""
-    big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
-    return pytesseract.image_to_string(big, lang="spa", config="--psm 6")
-
-
-def leer_rut_certificado(g):
-    """Respaldo cuando el OCR de la hoja completa no leyó el RUT del certificado: se ubica el rótulo «R.U.N./R.U.T.» y se lee
-    solo esa línea, ampliada y con los caracteres permitidos (dígitos, punto, guion y K). Devuelve '12345678-5' o ''."""
-    from . import certificado
-    big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
-    d = pytesseract.image_to_data(big, lang="spa", config="--psm 6", output_type=pytesseract.Output.DICT)
-    cajas = []          # (x0, y0, y1): zonas donde puede estar el valor del RUT
-    pal = [(i, (w or "").strip()) for i, w in enumerate(d["text"]) if (w or "").strip()]
-    for i, w in pal:
-        if re.fullmatch(r"R\.?U\.?[NT]\.?:?", w, re.I):
-            cajas.append((d["left"][i] + d["width"][i] + 6, d["top"][i] - 8, d["top"][i] + d["height"][i] + 8))
-    if not cajas:       # rótulo ilegible: el RUT es la línea que queda entre «Nombre» y «Domicilio»
-        nom = [i for i, w in pal if re.fullmatch(r"Nombre|Nobre", w, re.I)]
-        dom = [i for i, w in pal if re.fullmatch(r"Domicilio|Domiclio", w, re.I)]
-        if nom and dom and d["top"][dom[-1]] > d["top"][nom[-1]]:
-            y0, y1 = d["top"][nom[-1]] + d["height"][nom[-1]], d["top"][dom[-1]]
-            cajas.append((d["left"][nom[-1]] + d["width"][nom[-1]] + 6, y0 - 4, y1 + 4))
-    for x0, y0, y1 in cajas:
-        fila = big.crop((x0, max(0, y0), min(big.width, x0 + int(big.width * 0.45)), y1))
-        fila = fila.resize((fila.width * 2, fila.height * 2), Image.LANCZOS)
-        for psm in (7, 13):
-            txt = pytesseract.image_to_string(fila, lang="eng", config="--psm %d -c tessedit_char_whitelist=0123456789.-Kk:" % psm)
-            m = re.search(r"(\d{1,2})[.,\s]*(\d{3})[.,\s]*(\d{3})\s*[-–]\s*([\dKk])", txt)
-            if m:
-                rut = m.group(1) + m.group(2) + m.group(3) + "-" + m.group(4).upper()
-                if certificado.rut_ok(rut):
-                    return rut
-    return ""
-
-
 def tipo_pagina(texto):
-    """'parte', 'carab' (parte de Carabineros), 'mtt' (denuncia del MTT), 'certificado' u 'otra' (hoja que no sirve, p. ej. segunda hoja del certificado)."""
+    """'parte', 'carab' (parte de Carabineros), 'mtt' (denuncia del MTT), 'certificado' u 'otra'."""
     from . import certificado, extractor_carab, extractor_mtt
     if certificado.es_certificado(texto):
         return "certificado"
@@ -154,7 +131,7 @@ def tipo_pagina(texto):
 
 
 def leer_parte(img, texto=None, g=None):
-    """Imagen PIL (gris) -> dict con los campos leídos."""
+    """Imagen PIL (gris) -> dict con los campos leídos usando RapidOCR como base."""
     g = g or preparar(img)
     texto = texto if texto is not None else texto_pagina(g)
     r = extractor.parte(texto)
@@ -182,7 +159,6 @@ def _leer(c, cfg, lang="spa", punto=False):
 
 
 def _celda_placa(c):
-    """Las patentes nuevas solo usan consonantes: así 'I' y 'J' no se confunden."""
     v = _leer(c, _cfg(7, CONSONANTES + "0123456789-K"))
     if re.fullmatch(r"[%s]{4}\d{2}-?[\dK]" % CONSONANTES, v):
         return v
@@ -196,7 +172,7 @@ def _celda_placa(c):
 def _celda_rut(c):
     from . import certificado
     vistos = []
-    for cfg, lang in ((_cfg(7, "0123456789Kk-."), "spa"), (_cfg(7), "spa"), (_cfg(7, "0123456789Kk-."), "eng"), (_cfg(8, "0123456789Kk-."), "spa")):
+    for cfg, lang in ((_cfg(7, "0123456789Kk-."), "spa"), (_cfg(7), "spa")):
         v = re.sub(r"[^0-9Kk-]", "", _leer(c, cfg, lang)).upper()
         m = re.fullmatch(r"(\d{6,9})-?([\dK])", v)
         if m:
@@ -208,7 +184,7 @@ def _celda_rut(c):
 
 
 def leer_celdas(g):
-    """Imagen gris de una denuncia del MTT -> {clave: valor} leyendo cada celda por separado, o None."""
+    """Imagen gris de una denuncia del MTT -> {clave: valor} leyendo cada celda."""
     g2 = tablas.enderezar(g)
     tb = tablas.tablas(g2)
     if [len(t[0]) - 1 for t in tb] != [5, 5, 4]:
@@ -233,240 +209,67 @@ def leer_celdas(g):
     return out
 
 
-# ---------- parte de Carabineros: releer con otros contrastes si faltan datos ----------
-def _realzar(g, modo):
-    import numpy as np
-    from PIL import ImageOps
-    if modo == "auto":
-        return ImageOps.autocontrast(g, cutoff=2)
-    a = np.array(ImageOps.autocontrast(g, cutoff=1))
-    fondo = np.percentile(a, 90)
-    return Image.fromarray(np.where(a < fondo * 0.8, 0, 255).astype(np.uint8))
-
-
+# ---------- parte de Carabineros con RapidOCR principal ----------
 CAMPOS_CARAB = ("n_parte_carab", "boleta", "fecha_parte", "hora_infraccion", "lugar", "infraccion_texto",
                 "infractor_nombre", "fecha_citacion")
 
 
-def _combinar_carab(pasadas):
+def cotejar_con_tesseract(g, r):
+    """Usa Tesseract como motor secundario para cotejar datos críticos (boleta, patente, RUT) frente a RapidOCR."""
     from . import extractor_carab as EC
-    mejor = min(pasadas, key=lambda r: (EC.problemas(r), -EC.placa_puntaje(r["placa"])))
-    r = dict(mejor)
-    for k in CAMPOS_CARAB:
-        if not r[k]:
-            for o in pasadas:
-                if o[k]:
-                    r[k] = o[k]
-                    break
-    if r["tiene_vehiculo"]:
-        cand = [o["placa"] for o in pasadas if o["placa"]]
-        if cand:
-            r["placa"] = max(cand, key=lambda p: (EC.placa_puntaje(p), cand.count(p)))
-            r["placas_leidas"] = sorted(set(cand))
-    if not r["infractor_rut"]:
-        for o in pasadas:
-            if o["infractor_rut"]:
-                r["infractor_rut"] = o["infractor_rut"]
-                r["aviso_infractor"] = o["aviso_infractor"]
-                break
-    return r
+    try:
+        big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
+        txt_tess = pytesseract.image_to_string(big, lang="spa", config="--psm 6")
+        b = EC.parte(txt_tess)
+        av = []
+        
+        # Cotejar boleta
+        n = lambda x: (x or "").lstrip("0")
+        if b["boleta"] and r["boleta"] and n(b["boleta"]) != n(r["boleta"]):
+            r["boleta_tess"] = b["boleta"]
+            av.append("N° de boleta: los dos motores difieren (RapidOCR: %s / Tesseract: %s). Revísalo." % (r["boleta"], b["boleta"]))
+        elif b["boleta"] and not r["boleta"]:
+            r["boleta"] = b["boleta"]
+            av.append("N° de boleta (%s) recuperado por Tesseract como respaldo." % b["boleta"])
 
-
-def _dudoso_carab(r):
-    from . import extractor_carab as EC
-    return (EC.problemas(r) > 0 or (r["tiene_vehiculo"] and EC.placa_puntaje(r["placa"]) < 2)
-            or "?" in r["fecha_parte"])
+        # Cotejar patente
+        if r.get("tiene_vehiculo") and b["placa"] and EC.placa_puntaje(b["placa"]) >= 1:
+            if r["placa"] and b["placa"] != r["placa"]:
+                r["placa_tess"] = b["placa"]
+                av.append("Patente: los dos motores difieren (RapidOCR: %s / Tesseract: %s). Revísala." % (r["placa"], b["placa"]))
+            elif not r["placa"]:
+                r["placa"] = b["placa"]
+                av.append("Patente (%s) recuperada por Tesseract como respaldo." % b["placa"])
+        return av
+    except Exception:
+        return []
 
 
 def leer_carab(g, texto):
-    """Lee un parte de Carabineros. Los escaneos tenues a veces salen con datos que faltan o dudosos: en ese caso
-    se vuelve a leer la hoja con más contraste y se completa con lo mejor de cada lectura."""
+    """Lee un parte de Carabineros priorizando RapidOCR y utilizando validación cruzada con Tesseract."""
     from . import extractor_carab as EC
-    pasadas = [EC.parte(texto)]
-    r = _combinar_carab(pasadas)
-    for modo in ("auto", "thr"):
-        if not _dudoso_carab(r):
-            break
-        big = _realzar(g, modo)
-        big = big.resize((int(big.width * 1.4), int(big.height * 1.4)), Image.BICUBIC)
-        pasadas.append(EC.parte(pytesseract.image_to_string(big, lang="spa", config="--psm 6")))
-        r = _combinar_carab(pasadas)
-    if r["tiene_vehiculo"]:   # siempre se relee la patente: un 8 leído como 3 también «parece» una patente válida
-        otra = releer_placa(g)
-        if otra and otra != r["placa"] and r["placa"]:
-            r["placas_leidas"] = sorted({otra, r["placa"]})
-        if otra and EC.placa_puntaje(otra) > EC.placa_puntaje(r["placa"]) or (otra and not r["placa"]):
-            r["placa"] = otra
-    if not r["boleta"]:
-        otras = releer_boleta(g)
-        if len(otras) == 1:
-            r["boleta"] = otras[0]
+    
+    # El texto de entrada ya viene procesado por RapidOCR desde texto_pagina()
+    r = EC.parte(texto)
     av = []
+
+    # Validaciones y respaldos secundarios
+    av += cotejar_con_tesseract(g, r)
+
     if not r["n_parte_carab"]:
         av.append("No pude leer el número del parte de Carabineros.")
     if not r["boleta"]:
         av.append("No pude leer el N° de la boleta; escríbelo a mano.")
-    else:
-        conf = boleta_confianza(g)
-        if conf is not None and conf < 80:
-            av.append("N° de boleta (folio) leído con poca seguridad (%s): puede haber una firma encima; compáralo con el parte." % r["boleta"])
-
-    av += cotejar_segundo_motor(g, r)
-
     if not r["infraccion_texto"]:
         av.append("No pude leer la infracción.")
     if r["tiene_vehiculo"] and not r["placa"]:
         av.append("No pude leer la patente.")
     elif r["placa"] and EC.placa_puntaje(r["placa"]) == 0:
         av.append("La patente leída (%s) no tiene un formato válido: revísala." % r["placa"])
-    elif r["placa"] and EC.placa_puntaje(r["placa"]) == 1:
-        av.append("La patente leída (%s) tiene una vocal, poco común: compárala con el parte." % r["placa"])
-    if len(r.get("placas_leidas", [])) > 1:
-        av.append("La patente se leyó distinto en las pasadas (%s): compárala con el parte." % " / ".join(r["placas_leidas"]))
     if not r["fecha_parte"]:
         av.append("No pude leer la fecha del parte.")
-    elif r.get("anio_leido"):
-        av.append("El año de la fecha del parte se leyó «%s»: se corrigió al año en curso (%s)." % (r["anio_leido"], r["fecha_parte"][-4:]))
+
     r["avisos"] = av
     r["texto_ocr"] = texto
-    r["pasadas"] = len(pasadas)
+    r["pasadas"] = 1
     return r
-
-
-def boleta_confianza(g):
-    """Seguridad (0-100) con que el OCR leyó el número que sigue a «BOLETA … NRO.»; None si no lo ubica.
-    Una firma encima del número baja mucho este valor."""
-    from pytesseract import Output
-    big = _realzar(g, "auto")
-    big = big.resize((int(big.width * 1.4), int(big.height * 1.4)), Image.BICUBIC)
-    d = pytesseract.image_to_data(big, lang="spa", config="--psm 6", output_type=Output.DICT)
-    ws = [i for i in range(len(d["text"])) if d["text"][i].strip()]
-    vals = []
-    for k, i in enumerate(ws):
-        if re.fullmatch(r"(?i)boleta", d["text"][i].strip()):
-            for j in range(k + 1, min(k + 7, len(ws))):
-                if re.fullmatch(r"(?i)(nro\.?|n[°º*]|n[uú]mero),?", d["text"][ws[j]].strip()) and j + 1 < len(ws):
-                    t = ws[j + 1]
-                    if re.search(r"\d{4}", d["text"][t]):
-                        vals.append(float(d["conf"][t]))
-                    break
-    return min(vals) if vals else None
-
-
-def _boleta_cerca(plano):
-    """El segundo lector entrega los cuadros de texto en otro orden: el número puede quedar antes o después de la
-    palabra BOLETA. Busca un número de 5-6 dígitos a menos de 70 caracteres (primero después, luego antes)."""
-    rx = r"(?<![\d.])\d{5,6}(?![\d.])"
-    for m in re.finditer(r"BOLETA", plano, re.I):
-        despues = [x for x in re.findall(rx, plano[m.end():m.end() + 70]) if x not in ("18290", "19925")]
-        antes = [x for x in re.findall(rx, plano[max(0, m.start() - 70):m.start()]) if x not in ("18290", "19925")]
-        if despues:
-            return despues[0]
-        if antes:
-            return antes[-1]
-    return ""
-
-
-def cotejar_segundo_motor(g, r):
-    """Relee con un segundo OCR (RapidOCR) la boleta, la patente y el RUT. Completa lo que Tesseract no leyó y avisa
-    cuando los dos motores leen distinto. Devuelve la lista de avisos; si el motor no está instalado, no hace nada."""
-    from . import extractor_carab as EC, ocr2
-    if not ocr2.disponible():
-        return []
-    txt = ocr2.leer(g)
-    if not txt:
-        return []
-    b = EC.parte(txt)
-    av = []
-    plano = re.sub(r"\s+", " ", txt)
-    bol2 = b["boleta"] or _boleta_cerca(plano)
-    n = lambda x: (x or "").lstrip("0")
-    if bol2:
-        if not r["boleta"]:
-            r["boleta"] = bol2
-            av.append("N° de boleta (%s) leído solo por el segundo lector: compáralo con el parte." % bol2)
-        elif n(bol2) != n(r["boleta"]):
-            r["boleta_alt"] = bol2
-            av.append("N° de boleta: los dos lectores leyeron distinto (%s / %s). Mira el parte y elige el correcto." % (r["boleta"], bol2))
-    if r["tiene_vehiculo"] and b["placa"] and EC.placa_puntaje(b["placa"]) >= 1:
-        if not r["placa"]:
-            r["placa"] = b["placa"]
-            av.append("Patente (%s) leída solo por el segundo lector: compárala con el parte." % b["placa"])
-        elif b["placa"] != r["placa"]:
-            r["placa_alt"] = b["placa"]
-            av.append("Patente: los dos lectores leyeron distinto (%s / %s). Mira el parte y elige la correcta." % (r["placa"], b["placa"]))
-    rut1 = r.get("rut_leido") or r.get("infractor_rut") or ""
-    rut2 = b.get("rut_leido") or b.get("infractor_rut") or ""
-    if rut1 and rut2 and rut1 != rut2:
-        av.append("RUT del infractor: los dos lectores leyeron distinto (%s / %s). Compáralo con el parte." % (rut1, rut2))
-    return av
-
-
-def releer_boleta(g):
-    """Vuelve a leer, ampliado y solo con dígitos, el número que sigue a «BOLETA … NRO.» (a veces la firma lo cruza).
-    Devuelve la lista de lecturas distintas de 4 a 7 dígitos (puede ser vacía)."""
-    from pytesseract import Output
-    from PIL import ImageOps
-    out = []
-    for modo in ("auto", "thr"):
-        big = _realzar(g, modo)
-        big = big.resize((int(big.width * 1.4), int(big.height * 1.4)), Image.BICUBIC)
-        d = pytesseract.image_to_data(big, lang="spa", config="--psm 6", output_type=Output.DICT)
-        ws = [i for i in range(len(d["text"])) if d["text"][i].strip()]
-        txt = lambda i: d["text"][i].strip()
-        ks = [k for k, i in enumerate(ws) if re.fullmatch(r"(?i)boleta", txt(i))]
-        for k in ks:
-            for j in range(k + 1, min(k + 7, len(ws))):
-                if re.fullmatch(r"(?i)(nro\.?|n[°º*]|n[uú]mero),?", txt(ws[j])) and j + 1 < len(ws):
-                    sel = [ws[j + 1]]
-                    box = (max(0, d["left"][sel[0]] - 20), max(0, d["top"][sel[0]] - 14),
-                           min(big.width, d["left"][sel[0]] + d["width"][sel[0]] + 20), min(big.height, d["top"][sel[0]] + d["height"][sel[0]] + 14))
-                    c = big.crop(box)
-                    c = ImageOps.expand(c.resize((c.width * 3, c.height * 3), Image.BICUBIC), border=25, fill=255)
-                    v = re.sub(r"\D", "", pytesseract.image_to_string(c, lang="spa", config="--psm 7 -c tessedit_char_whitelist=0123456789"))
-                    if 4 <= len(v) <= 7 and v not in out:
-                        out.append(v)
-                    break
-    return out
-
-
-def releer_placa(g):
-    """Ubica el párrafo «VEHICULO: …» de la hoja y lee solo su última palabra (la patente), ampliada y con el
-    alfabeto de las patentes (consonantes y números). Devuelve '' si no la encuentra."""
-    from pytesseract import Output
-    from PIL import ImageOps
-    from . import extractor_carab as EC
-    big = _realzar(g, "auto")
-    big = big.resize((int(big.width * 1.4), int(big.height * 1.4)), Image.BICUBIC)
-    d = pytesseract.image_to_data(big, lang="spa", config="--psm 6", output_type=Output.DICT)
-    ws = [i for i in range(len(d["text"])) if d["text"][i].strip()]
-    txt = lambda i: d["text"][i].strip()
-    etiquetas = [k for k, i in enumerate(ws) if re.fullmatch(r"(?i)veh[ií]culo\s*:", txt(i)) or
-                 (re.fullmatch(r"(?i)veh[ií]culo", txt(i)) and k + 1 < len(ws) and txt(ws[k + 1]).startswith(":"))]
-    if not etiquetas:
-        etiquetas = [k for k, i in enumerate(ws) if re.fullmatch(r"(?i)veh[ií]culo", txt(i)) and
-                     any(re.search(r"(?i)marca|modelo|tipo", txt(j)) for j in ws[k + 1:k + 4])]
-    if not etiquetas:
-        return ""
-    k0 = etiquetas[-1]
-    fin = len(ws)
-    for k in range(k0 + 1, len(ws)):
-        if re.fullmatch(r"(?i)(TESTIGO|DENUNCIANTE|OBSERVACI\w*|CITACI\w*|LICENCIA|DOCUMENTOS|REINCIDENCIAS?|INFRACCI\w*|INFRACTOR)\s*:?", txt(ws[k])):
-            fin = k
-            break
-    par = ws[k0 + 1:fin]
-    if len(par) < 2:
-        return ""
-    for n in (1, 2):
-        sel = par[-n:]
-        box = (max(0, min(d["left"][i] for i in sel) - 14), max(0, min(d["top"][i] for i in sel) - 12),
-               min(big.width, max(d["left"][i] + d["width"][i] for i in sel) + 14),
-               min(big.height, max(d["top"][i] + d["height"][i] for i in sel) + 12))
-        c = big.crop(box)
-        c = ImageOps.expand(c.resize((c.width * 2, c.height * 2), Image.BICUBIC), border=25, fill=255)
-        cfg = "--psm 7 -c tessedit_char_whitelist=" + EC.CONSONANTES + "0123456789-. "
-        v = re.sub(r"\s+", " ", pytesseract.image_to_string(c, lang="spa", config=cfg)).upper()
-        m = re.findall(r"([A-Z]{2,4})\s*[-.]?\s*(\d{2})(?:\s*[-.]?\s*(\d{2}))?", v)
-        if m:
-            return "".join(m[-1])
-    return ""
