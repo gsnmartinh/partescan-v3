@@ -98,8 +98,10 @@ def cargar(registros):
             uid = r.get("uid")
             ant = previos.get(uid)
             p["_uid"] = uid
-            if r.get("ingresado") or (ant and ant["_estado"] in ("ingresado", "tecleado")):
-                p["_estado"] = ant["_estado"] if ant and ant["_estado"] in ("ingresado", "tecleado") else "ingresado"
+            if r.get("ingresado"):
+                p["_estado"] = "ingresado"
+            elif ant and ant["_estado"] in ("ingresado", "tecleado"):
+                p["_estado"] = ant["_estado"]
             else:
                 p["_estado"] = "pendiente"
             p["_aviso"] = ant["_aviso"] if ant and ant["_estado"] == p["_estado"] else ""
@@ -174,7 +176,8 @@ def iniciar(uids=None, auto=False, actuario=""):
             idx = [i for i, p in enumerate(LISTA) if p["_estado"] in ESTADOS_PENDIENTES]
         else:
             quiero = set(uids)
-            idx = [i for i, p in enumerate(LISTA) if p["_uid"] in quiero]
+            idx = [i for i, p in enumerate(LISTA)
+                   if p["_uid"] in quiero and p["_estado"] in ESTADOS_PENDIENTES]
         if not idx:
             raise ValueError("No hay partes para teclear.")
         graves = []
@@ -208,6 +211,8 @@ def marcar(uid, nuevo):
     if nuevo not in ("ingresado", "pendiente"):
         raise ValueError("Estado no válido.")
     with LOCK:
+        if corriendo():
+            raise ValueError("Hay un ingreso en curso: detenlo o espera a que termine antes de marcar.")
         for p in LISTA:
             if p["_uid"] == uid:
                 p["_estado"], p["_aviso"] = nuevo, ""
