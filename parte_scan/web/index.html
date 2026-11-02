@@ -251,7 +251,7 @@ function campos(p){
     gc('Fecha de ingreso',hoy(),'ok','Día en que ingresas el parte.'),
     ...((carab||mtt)?[gc(carab?'N° de parte (Carabineros)':'N° de denuncia (MTT)',p.n_parte_carab||'',p.n_parte_carab?'ok':'check',(carab?'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.':'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.'))]:[]),
     ...((!carab&&!mtt)?[gc('N° de parte',p.folio,p.folio?'ok':'check','Paso 4 al ingresar: «Nº Parte». En Inspección es el mismo número de la boleta.')]:[]),
-    gc('N° de boleta (folio)',folioBase(p),folioBase(p)&&!folioAv&&!folioDup?'ok':'check',folioDup?'Este folio se repite en el lote: el cargador rechaza folios repetidos'+(mtt&&p.n_parte_carab?'. Usa el N° de denuncia ('+p.n_parte_carab+') como folio de uno de ellos.':'. Cambia uno de ellos.'):folioAv?p.avisos.filter(x=>/N° de parte|folio/i.test(x)).join(' '):(carab?'Paso 5 al ingresar: «Bol/N.Parte». Es el número que va en el archivo.':(mtt?'Paso 5 al ingresar: «Bol/N.Parte». Primeros 6 dígitos de la boleta de citación (al pie del parte)'+(p.boleta_completa?': '+p.boleta_completa:'')+'.':'Paso 5 al ingresar: «Bol/N.Parte».')),{big:1}),
+    gc('N° de boleta (folio)',folioBase(p),folioBase(p)&&!folioAv&&!folioDup?'ok':'check',folioDup?'Este folio se repite en el lote: el cargador rechaza folios repetidos'+(mtt&&p.n_parte_carab?'. Usa el N° de denuncia ('+p.n_parte_carab+') como folio de uno de ellos.':'. Cambia one de ellos.'):folioAv?p.avisos.filter(x=>/N° de parte|folio/i.test(x)).join(' '):(carab?'Paso 5 al ingresar: «Bol/N.Parte». Es el número que va en el archivo.':(mtt?'Paso 5 al ingresar: «Bol/N.Parte». Primeros 6 dígitos de la boleta de citación (al pie del parte)'+(p.boleta_completa?': '+p.boleta_completa:'')+'.':'Paso 5 al ingresar: «Bol/N.Parte».')),{big:1}),
     gc('Fecha del parte',p.fecha_parte,p.fecha_parte?'ok':'check',carab?'Fecha en que Carabineros hizo el parte.':'Igual a la de la boleta.'),
     gc('Descripción de la causa',p.causa,p.causa?'ok':'check',p.causa?(p.causa_literal?'Lo que dice el parte (la infracción va con el código comodín).':'Igual a la infracción.'):'Escríbela a mano.'),
     gc('Actuario (código)',a?a[1]:'',a?'ok':'check',a?a[0]+' · el rol termina en '+rol.slice(-1):'Escribe el rol arriba.'),
@@ -278,7 +278,7 @@ function campos(p){
   S.push({t:(carab||mtt)&&!p.img_cert?'4 · Infractor y vehículo (del parte)':'4 · Certificado del Registro Civil',sub:'Van en el archivo para cargar. Si la placa ya está registrada en el sistema, igual se usan aquí.',f:[
     ...filaInf,
     gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),malRut?'Revisa el RUT contra el certificado.':(c.rut?'Dígito verificador válido.':(sinC?'Sin RUT (extranjero o por escrito): el sistema pone SR y el nombre.':'No lo pude leer.'))),
-    gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+(((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:p.placa)||'').trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',sinC&&/^VEHICULO\b/.test(c.nombre||'')?'Sin datos del infractor: «VEHICULO + patente».':''),
+    gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+(((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:p.placa||'').trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',sinC&&/^VEHICULO\b/.test(c.nombre||'')?'Sin datos del infractor: «VEHICULO + patente».':''),
     gc('Dirección (certificado)',c.direccion||'',c.direccion?'ok':(carab?'blank':'check'),''),
     gc('Comuna (certificado)',c.comuna||'',c.comuna?'ok':'check',c.comuna?(/[^\x00-\x7f]/.test(c.comuna)?'Lleva tilde: en el archivo irá sin tilde.':''):'Sin comuna el sistema no completa el código de comuna.'),
     gc('Marca (certificado)',c.marca||p.marca||'',(c.marca||p.marca)?'ok':'blank','Opcional: si el parte no la trae, se ingresa sin marca.'),
@@ -314,16 +314,22 @@ function mostrar(){
   S.forEach(s=>{
     const d=document.createElement('div');d.className='sec';d.innerHTML='<h3>'+s.t+'</h3>'+(s.sub?'<small>'+s.sub+'</small>':'');
     s.f.forEach(f=>{
-      const key=f.k, val=(key in p.ed)?p.ed[key]:f.v;
+      const key=f.k, val=valorActual(p,key);
       const r=document.createElement('div');r.className='row'+(f.big?' big':'')+(key===activeKey?' act':'')+(p.done[key]?' done':'');
       const esOfi=(key==='Oficina emisora'&&carab0(p));
       const ctl=esOfi?'<select class="val">'+(OFICINAS_SIS.some(o=>o[1]===val)?'':'<option value="'+String(val).replace(/"/g,'&quot;')+'">'+val+'</option>')+OFICINAS_SIS.map(o=>'<option value="'+o[1]+'"'+(o[1]===val?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>').join('')+'</select>':'<input class="val" value="'+String(val).replace(/"/g,'&quot;')+'" placeholder="(en blanco)">';
       r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+((p.ok&&p.ok[key])?'ok':f.st)+'">'+((p.ok&&p.ok[key])?'Confirmado':LAB[f.st])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((f.st==='check'&&!(p.ok&&p.ok[key]))?'<button class="cf" title="Revisé este dato y está bien">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
-      el.oninput=el.onchange=e=>{p.ed[key]=e.target.value;pintarTira();if(key==='Infractor de esta copia (1, 2)')mostrar()};
+      el.oninput=el.onchange=e=>{
+        p.ed[key]=e.target.value;
+        p.ok=p.ok||{};
+        p.ok[key]=true; // Confirmado automáticamente al editar
+        pintarTira();
+        if(key==='Infractor de esta copia (1, 2)') mostrar();
+      };
       el.onfocus=()=>{activeKey=key};
       if(key==='Placa')el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
-        if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();delete p.ed['Nombre (certificado)']}}})});
+        if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
       r.querySelector('button').onclick=()=>{activeKey=key;copiarCampo(p,key)};
       const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; p.ok[key]=true; pintarTira(); mostrar() };
       d.appendChild(r);
@@ -335,7 +341,11 @@ function mostrar(){
   if($('avOk')) $('avOk').onclick=()=>{ p.ok=p.ok||{}; p.avOk=true; campos(p).forEach(s=>s.f.forEach(f=>{ if(f.st==='check') p.ok[f.k]=true })); pintarTira(); mostrar(); toast('Marcado como revisado') };
   if(!F.dataset.k)F.dataset.k=1;
 }
-function valorActual(p,key){ for(const s of campos(p)) for(const f of s.f) if(f.k===key) return (key in p.ed)?p.ed[key]:f.v; return ''}
+function valorActual(p,key){ 
+  if (p.ed && key in p.ed) return p.ed[key];
+  for(const s of campos(p)) for(const f of s.f) if(f.k===key) return f.v; 
+  return '';
+}
 function copiarCampo(p,key){
   const v=valorActual(p,key); copiar(v); p.done[key]=true; toast('Copiado: '+key+(v?'':' (vacío)'));
   document.querySelectorAll('.row').forEach(r=>{const l=r.querySelector('.lab').textContent;r.classList.toggle('done',!!p.done[l]);r.classList.toggle('act',l===key)});
@@ -359,7 +369,7 @@ function V(p,k){
   if(k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}
-const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>f.st==='check').length,0);
+const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>f.st==='check'&&!(f.k in p.ed)&&!(p.ok&&p.ok[f.k])).length,0);
 // motos: 3 letras + 2 dígitos (JHB47) o 2 letras + 3 dígitos (TV880) van con 6 caracteres: JHB047, TV0880
 function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
 const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
@@ -466,7 +476,7 @@ function engancharAct(){document.querySelectorAll('#actRows .rowa').forEach(r=>{
 function nombresAct(){return [...document.querySelectorAll('#actRows .an')].map(i=>i.value.trim()).filter(Boolean)}
 function refrescarDigs(){const ns=nombresAct();
   document.querySelectorAll('#digs select').forEach(s=>{const d=s.dataset.d, act=(s.value||(PERFIL.rol_actuario[d]||'').charAt(0)+(PERFIL.rol_actuario[d]||'').slice(1).toLowerCase());
-    s.innerHTML='<option value="">(elegir a mano)</option>'+ns.map(n=>'<option'+(n.toLowerCase()===String(act).toLowerCase()?' selected':'')+'>'+esc(n)+'</option>').join('')})}
+    s.innerHTML='<option value="">(elegir a mano)</option>'+ns.map(n=>'<option'+(n.toLowerCase()===String(act).toLowerCase()?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select>')}
 function snapshotDlg(){const g=id=>$(id)?$(id).value:''; return {j_juz:g('j_juz'),j_comuna:g('j_comuna'),j_ofic:g('j_ofic'),j_titulo:g('j_titulo')}}
 function restoreDlg(s){for(const k in s){if($(k)&&s[k])$(k).value=s[k]}}
 async function verEquivalencias(){
