@@ -457,8 +457,6 @@ def validar_parte(p):
         nota = resolver_infraccion(p["infracciones"][0])[2]
         if nota:
             avi.append(nota)
-    if len(p["infracciones"]) > 1:
-        avi.append("varias infracciones: solo se tecleara la primera")
     return fat, avi
 
 
@@ -1362,32 +1360,34 @@ class Sistema:
         infs = p["infracciones"]
         if not infs:
             return True
-        if len(infs) > 1:
-            self.avisos.append(f"Hay {len(infs)} infracciones; solo tecleo la primera. Agrega las demas tu.")
-        # La grilla parte en la columna Fecha: Enter abre su caja, otro Enter la acepta y pasa a Descripcion.
-        self.enter()
-        self.foco_estable(lambda c: c.id == ID_OVERLAY_INF and c.hwnd in self.todos, 3.0,
-                          "la caja de la columna Fecha de Infracciones")
-        self.enter()
-        self.foco_estable(lambda c: c.clase == "MSFlexGridWndClass", 3.0,
-                          "que el cursor pase a la columna Descripcion")
-        cod, desc, _ = resolver_infraccion(infs[0])
-        if desc:
-            print(f"  [info] Infraccion {cod}: {desc}")
-        self.escribir_en_grilla(cod, ID_OVERLAY_INF, "Infraccion")
-        self.enter()
-        t0, w = time.time(), 0
-        while time.time() - t0 < 2.5:
+        # Al confirmar una infraccion, el sistema vuelve automaticamente a
+        # Fecha de la fila siguiente. No se crea una nueva causa.
+        for indice, inf in enumerate(infs):
             revisar_teclas()
-            w = self.ventana_busca()
+            # Fecha: Enter abre el editor y el segundo Enter conserva la fecha
+            # y mueve el foco a Descripcion.
+            self.enter()
+            self.foco_estable(lambda c: c.id == ID_OVERLAY_INF and c.hwnd in self.todos, 3.0,
+                              "la caja Fecha de Infracciones (fila %d)" % (indice + 1))
+            self.enter()
+            self.foco_estable(lambda c: c.clase == "MSFlexGridWndClass", 3.0,
+                              "la columna Descripcion (fila %d)" % (indice + 1))
+            cod, desc, _ = resolver_infraccion(inf)
+            if desc:
+                print(f"  [info] Infraccion {indice + 1}/{len(infs)}: {cod}: {desc}")
+            self.escribir_en_grilla(cod, ID_OVERLAY_INF, "Infraccion")
+            self.enter()
+            t0, w = time.time(), 0
+            while time.time() - t0 < 2.5:
+                revisar_teclas()
+                w = self.ventana_busca()
+                if w:
+                    break
+                time.sleep(0.05)
             if w:
-                break
-            time.sleep(0.05)
-        if not w:
-            self.foco_estable(lambda c: c.clase == "MSFlexGridWndClass", 4.0, "que vuelva el cursor a la grilla")
-            return True
-        self.resolver_busca(w, infs[0])
-        self.foco_estable(lambda c: c.clase == "MSFlexGridWndClass", 4.0, "que vuelva el cursor a la grilla")
+                self.resolver_busca(w, inf)
+            self.foco_estable(lambda c: c.clase == "MSFlexGridWndClass", 4.0,
+                              "que vuelva el cursor a la grilla tras infraccion %d" % (indice + 1))
         return True
 
     # ---- un parte completo ----
