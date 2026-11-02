@@ -188,22 +188,36 @@ def _lugar_hasta(t):
 
 def _infraccion(t, secs):
     v = _sec(secs, "INFRACCION", ultimo=False)
-    # «…la siguiente infracción:» es el primer rótulo; si está vacío, la infracción va después de INFRACTOR
     todas = [s for r, s in secs if r.startswith("INFRACCION") and s]
     v = todas[0] if todas else ""
     if not v:
-        # «…notificaron la siguiente infracción.» y después, entre comillas, lo que hizo (a veces mal escrito: «INGRINGIR»)
         m = re.search(r"siguiente\s+infracci[oó]n\W{0,4}\s*[\"“”']?\s*(.{10,450}?)(?=\bINFRACTOR|\bREINCIDENCIA|\bDISP\.?\s*INFR|\bCITACI)",
                       re.sub(r"\s+", " ", t), re.I)
         v = m.group(1) if m else ""
     if not v:
         return ""
     v = limpiar(re.sub(r"\s+", " ", v)).strip()
-    mq = re.match(r"[\"“”']\s*([^\"“”']+)", v)       # si viene entre comillas, solo lo que está dentro
+    mq = re.match(r"[\"“”']\s*([^\"“”']+)", v)
     v = mq.group(1) if mq else v
     v = re.split(r"[\"“”]|\s+(?:HORA\s*:|LUGAR\s*:|NOMBRE\s+DEL\b|DISP\.?\s*INFR)", v, 1, flags=re.I)[0]
-    v = v.strip("\"“”' ")
-    return v.upper()
+    return v.strip("\"“”' ").upper()
+
+
+def _extraer_multiples_infracciones(infr_texto):
+    """Detecta múltiples infracciones separadas por comas, conjunciones (y, e), puntos y comas o conectores en el texto."""
+    if not infr_texto:
+        return []
+    texto_limpio = re.sub(r'\s+', ' ', infr_texto).strip()
+    # Separa por comas, puntos y comas, o conjunciones como 'y' / 'e' rodeadas de espacios
+    trozos = re.split(r'\s*,\s+|\s+(?:y|e)\s+|\s*;\s+', texto_limpio, flags=re.I)
+    
+    lista_final = []
+    for t in trozos:
+        limpio = t.strip(" ,.")
+        if len(limpio) > 4:  # Evita residuos muy cortos
+            lista_final.append(limpio)
+            
+    return lista_final if lista_final else [infr_texto]
 
 
 def _fin_nombre(s):
@@ -217,7 +231,6 @@ def _infractor(texto_inf):
     s = re.sub(r"^[\W_]+", "", limpiar(texto_inf))
     if not s or re.match(r"(?:por\s+escrito|ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
-    # «DISP. INFR.» / «DISPOSICION INFRINGIDA» también cuando el OCR confunde letras (INFRINCIDA, DlSPOSICION, 1NFRINGIDA…)
     s = re.split(r"\bD[I1l]SP\.?\s*[I1l]NFR\w*|\bD[I1l]SP[O0]S[I1lÍ]C[I1l][OÓ0]N\s+[I1l]NFR\w*", s, 1, flags=re.I)[0].strip()
     cut = _fin_nombre(s)
     nombre = limpiar((s[:cut] if cut else s.split(".")[0]).replace(",", " ")).upper()
@@ -240,15 +253,15 @@ def _infractor(texto_inf):
             or re.search(r"\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d) \
             or re.search(r",\s*([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d)
         if mc and not catalogo.comuna_en_sistema(limpiar(mc.group(1))):
-            mc = None          # no es una comuna (arrastró otra frase del parte): se queda en la dirección y se supone la del juzgado
+            mc = None
         if mc:
             comuna = limpiar(mc.group(1)).upper()
             d = d[:mc.start()]
             if re.match(r"(?:LAS\s+ANIMAS|NIEBLA|ISLA\s+TEJA|COLLICO|GUACAMAYO|PUNUCAPA|CURI[NÑ]ANCO|BARRIOS\s+BAJOS|LA\s+AGUADA|SECTOR\b)", comuna):
-                d = d + ", " + comuna   # es un sector, no una comuna: queda en la dirección
+                d = d + ", " + comuna
                 comuna = ""
         d = re.sub(r"^(?:calle|pasaje\s+)?\s*", "", d.strip(), flags=re.I) if re.match(r"calle\b", d.strip(), re.I) else d
-        d = re.sub(r"\bsin\s+(?:Nro\.?|N[°º]|n[uú]mero)(?!\w)\.?", "S/N", d, flags=re.I)   # «sin Nro.» = S/N
+        d = re.sub(r"\bsin\s+(?:Nro\.?|N[°º]|n[uú]mero)(?!\w)\.?", "S/N", d, flags=re.I)
         d = re.sub(r"\b(?:Nro\.?|N[°º]|n[uú]mero)\s*", "", d, flags=re.I)
         direccion = limpiar(d).strip(" ,").upper()
     return nombre, rut, direccion, comuna, aviso, leido
@@ -270,7 +283,7 @@ def _vehiculo(s):
     NO_PLACA = ("NRO", "KM", "TO", "LEY", "ART", "INC", "DISP", "NO", "AO")
     RX = r"(?<![A-Z0-9])([A-Z]{2,5})\s*[-–—.]?\s*(\d{2})(?:\s*[-–—.]?\s*(\d{1,2}))?(?!\d)"
     ml = re.search(r"(?:PLACA\s+PATENTE(?:\s+UNICA)?|P\.?\s?P\.?\s?U\.?|PATENTE(?:\s+UNICA)?)\s*[:.]?\s*", s.upper())
-    zona = re.sub(r"\b([A-Z]{4})0\s*-\s*(\d{2})\b", r"\1-\2", s.upper()[ml.end():]) if ml else ""   # «SVTO0-76» -> SVTO-76
+    zona = re.sub(r"\b([A-Z]{4})0\s*-\s*(\d{2})\b", r"\1-\2", s.upper()[ml.end():]) if ml else ""
     cz = [a + b + c for a, b, c in re.findall(RX, zona) if a not in NO_PLACA]
     cands = [a + b + c for a, b, c in re.findall(RX, s.upper()) if a not in NO_PLACA]
     placa = cz[0] if cz else (cands[-1] if cands else "")
@@ -295,7 +308,6 @@ def _boleta(secs):
 
 
 def _boleta_texto(texto):
-    """Respaldo: busca «boleta de citación número N» en todo el texto (por si el rótulo CITACIÓN salió mal leído)."""
     t = re.sub(r"\s+", " ", texto or "")
     for rx in (r"copia\s+(?:de\s+(?:la\s+)?)?[B8][\s./\\]*[CG]\b\.?\s*(?:n[uú]mero|nro\.?|n[°º])?\s*[:.]?\s*(\d{4,7})",
                r"copia\s+(?:de\s+(?:la\s+)?)?boleta\s+de\s+\w{4,10}\s*(?:n[uú]mero|nro\.?|n[°º])?\s*[:.]?\s*(\d{4,7})",
@@ -309,7 +321,6 @@ def _boleta_texto(texto):
     return ""
 
 
-# Palabras que no sirven para reconocer una unidad (aparecen en casi todos los encabezados).
 _GENERICAS = {"CARABINEROS", "CHILE", "COMISARIA", "SUBCOMISARIA", "TENENCIA", "RETEN", "PREFECTURA", "DIRECCION",
               "OFICINA", "DEPARTAMENTO", "LOCAL", "POLICIA", "INVESTIGACIONES", "MUNICIPAL", "JUZGADO", "DISTRITO",
               "SECCION", "UNIDAD", "SEGURIDAD", "PRIVADA", "TRANSITO", "TRANSPORTES", "MINISTERIO", "SERVICIO",
@@ -324,25 +335,20 @@ def _norm(t):
 
 
 def _oficina(texto):
-    """Unidad de Carabineros que emite el parte, según el encabezado y la lista de oficinas de ESTE juzgado.
-    Devuelve (nombre exacto de la oficina en el sistema, reconocida: bool). Si no la reconoce, la unidad por defecto."""
     import difflib
     from . import perfil
     cab = _norm(texto)[:700]
-    corte = re.search(r"\bD[AO]Y?\s+CUENTA|\bAL\s+2\s*D?O", cab)   # el encabezado termina donde empieza el cuerpo
+    corte = re.search(r"\bD[AO]Y?\s+CUENTA|\bAL\s+2\s*D?O", cab)
     cab = cab[:corte.start()] if corte and corte.start() > 25 else cab[:300]
     oficinas = perfil.oficinas_ordenadas()
-    # 1) palabra propia de la unidad (Punucapa, Corral, Mogollones…), tolerando errores del OCR
     palabras_cab = re.findall(r"[A-Z]{4,}", cab)
     for _cod, desc in oficinas:
         pal = [w for w in re.findall(r"[A-Z]{4,}", _norm(desc)) if w not in _GENERICAS and w not in ("LOS", "LAS")]
         if not pal:
             continue
-        # cada palabra propia de la unidad debe aparecer (las cortas, tal cual; las largas, tolerando errores del OCR)
         if all((w in palabras_cab) if len(w) < 6 else any(difflib.SequenceMatcher(None, p, w).ratio() >= 0.8 for p in palabras_cab)
                for w in pal):
             return desc, True
-    # 2) «1ra. Comisaría», «2da. Comisaría»…
     m = re.search(r"\b(\d)\s*(?:RA|DA|ERA|TA|MA|VA|[ªº°])?\W*\s*COM", cab)
     num = int(m.group(1)) if m else next((n for n, (_, w) in _ORDINALES.items() if re.search(w + r"\s*COM", cab)), 0)
     if num in _ORDINALES:
@@ -354,7 +360,6 @@ def _oficina(texto):
 
 
 def problemas(r):
-    """Cantidad de datos que faltan o salen raros (sirve para decidir si conviene releer la hoja)."""
     n = 0
     n += not r["n_parte_carab"]
     n += not r["boleta"]
@@ -386,9 +391,13 @@ def parte(texto):
     boleta = _boleta(secs) or _boleta_texto(texto)
     _of = _oficina(texto)
     infr = _infraccion(t, secs)
+    
+    # Extrae múltiples infracciones separadas por comas, 'y', 'e' o puntos y comas
+    bloques_infr = _extraer_multiples_infracciones(infr)
+    
     nombre, rut, direccion, comuna, aviso_inf, rut_leido = _infractor(_sec(secs, "INFRACTOR"))
     infractores = []
-    for rot, sec in secs:   # partes con varios infractores: uno por rótulo INFRACTOR, o varios seguidos en el mismo párrafo
+    for rot, sec in secs:
         if rot.startswith("INFRACTOR") and sec:
             for trozo in re.split(r"(?<=[.])\s+(?=[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{5,},)", limpiar(sec)):
                 n_, r_, d_, c_, a_, l_ = _infractor(trozo)
@@ -399,7 +408,6 @@ def parte(texto):
     if len(boletas) == len(infractores) > 1:
         for x, bol in zip(infractores, boletas):
             x["boleta"] = bol
-    # respaldo «por significado»: personas con cédula/domicilio aunque no lleven el rótulo INFRACTOR o vengan fuera de lugar
     pers = [x for x in (_infractor(p) for p in SM.personas(texto)) if x[0]]
     if not nombre and pers:
         nombre, rut, direccion, comuna, aviso_inf, rut_leido = pers[0]
@@ -412,7 +420,7 @@ def parte(texto):
     tiene_vehiculo = any(r.startswith("VEHICULO") for r, _ in secs)
     v = _vehiculo(_sec(secs, "VEHICULO")) if tiene_vehiculo else _vehiculo("")
     if not tiene_vehiculo or not (v["placa"] or v["marca"] or v["tipo"]):
-        clausula = SM.vehiculo(texto)       # vehículo sin rótulo («AUTOMOVIL, MARCA TOYOTA… PATENTE XX-99»)
+        clausula = SM.vehiculo(texto)
         if clausula:
             v2 = _vehiculo(clausula)
             if v2["placa"] or v2["marca"] or v2["tipo"]:
@@ -433,7 +441,7 @@ def parte(texto):
         "origen": "carab", "departamento": "CARABINEROS", "oficina": _of[0], "oficina_reconocida": _of[1], "n_parte": boleta, "n_parte_final": boleta,
         "n_parte_carab": n_parte, "boleta": boleta, "n_citacion_adjunta": "",
         "fecha_parte": fecha_parte, "anio_leido": anio_leido, "fecha_infraccion": fecha_parte, "hora_infraccion": hora,
-        "lugar": _u(_lugar_final(t)), "infraccion_texto": infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
+        "lugar": _u(_lugar_final(t)), "infraccion_texto": infr, "bloques_infraccion": bloques_infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
         "modelo": v["modelo"], "color": v["color"], "anio": v["anio"], "placa": v["placa"],
         "tiene_vehiculo": tiene_vehiculo,
         "fecha_citacion": fecha_cit, "hora_citacion": "", "articulo": "",
