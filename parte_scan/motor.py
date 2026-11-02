@@ -1,4 +1,4 @@
-"""Motor de lectura: imagen/PDF -> campos del parte. RapidOCR como principal y Tesseract como respaldo."""
+"""Motor de lectura: imagen/PDF -> campos del parte. Tesseract como principal y respaldo secundario."""
 import os, re, sys
 from collections import Counter
 
@@ -62,20 +62,25 @@ def preparar(img):
 
 
 def texto_pagina(g):
-    """OCR principal con RapidOCR; si no está disponible o falla, utiliza Tesseract como respaldo."""
-    # 1. Intentar con RapidOCR (motor principal)
+    """OCR principal con Tesseract; si no entrega suficiente texto, utiliza RapidOCR como respaldo."""
+    big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
+    txt_tess = pytesseract.image_to_string(big, lang="spa", config="--psm 6")
+    
+    # Si Tesseract lee bien y trae suficiente contenido, lo devolvemos como principal
+    if txt_tess and len(txt_tess.strip()) > 15:
+        return txt_tess
+
+    # Respaldo secundario con RapidOCR si Tesseract falla o queda muy pobre
     if ocr2.disponible():
         txt_rapid = ocr2.leer(g)
         if txt_rapid and len(txt_rapid.strip()) > 15:
             return txt_rapid
 
-    # 2. Respaldo con Tesseract si RapidOCR falla
-    big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
-    return pytesseract.image_to_string(big, lang="spa", config="--psm 6")
+    return txt_tess
 
 
 def _folio_recorte(g):
-    """Lee el N° de parte recortando el encabezado. Usa Tesseract para recortes específicos de alta precisión."""
+    """Lee el N° de parte recortando el encabezado usando Tesseract."""
     W = g.width
     top = g.crop((0, 0, W, int(g.height * 0.30)))
     d = pytesseract.image_to_data(top, lang="spa", config="--psm 6", output_type=pytesseract.Output.DICT)
@@ -131,7 +136,7 @@ def tipo_pagina(texto):
 
 
 def leer_parte(img, texto=None, g=None):
-    """Imagen PIL (gris) -> dict con los campos leídos usando RapidOCR como base."""
+    """Imagen PIL (gris) -> dict con los campos leídos usando Tesseract como base."""
     g = g or preparar(img)
     texto = texto if texto is not None else texto_pagina(g)
     r = extractor.parte(texto)
@@ -209,52 +214,53 @@ def leer_celdas(g):
     return out
 
 
-# ---------- parte de Carabineros con RapidOCR principal ----------
+# ---------- parte de Carabineros con Tesseract principal ----------
 CAMPOS_CARAB = ("n_parte_carab", "boleta", "fecha_parte", "hora_infraccion", "lugar", "infraccion_texto",
                 "infractor_nombre", "fecha_citacion")
 
 
-def cotejar_con_tesseract(g, r):
-    """Usa Tesseract como motor secundario para cotejar datos críticos (boleta, patente, RUT) frente a RapidOCR."""
+def cotejar_con_rapidocr(g, r):
+    """Usa RapidOCR como motor secundario para cotejar datos críticos frente a Tesseract."""
+    if not ocr2.disponible():
+        return []
     from . import extractor_carab as EC
     try:
-        big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
-        txt_tess = pytesseract.image_to_string(big, lang="spa", config="--psm 6")
-        b = EC.parte(txt_tess)
+        txt_rapid = ocr2.leer(g)
+        b = EC.parte(txt_rapid)
         av = []
         
         # Cotejar boleta
         n = lambda x: (x or "").lstrip("0")
         if b["boleta"] and r["boleta"] and n(b["boleta"]) != n(r["boleta"]):
-            r["boleta_tess"] = b["boleta"]
-            av.append("N° de boleta: los dos motores difieren (RapidOCR: %s / Tesseract: %s). Revísalo." % (r["boleta"], b["boleta"]))
+            r["boleta_rapid"] = b["boleta"]
+            av.append("N° de boleta: los dos motores difieren (Tesseract: %s / RapidOCR: %s). Revísalo." % (r["boleta"], b["boleta"]))
         elif b["boleta"] and not r["boleta"]:
             r["boleta"] = b["boleta"]
-            av.append("N° de boleta (%s) recuperado por Tesseract como respaldo." % b["boleta"])
+            av.append("N° de boleta (%s) recuperado por RapidOCR como respaldo." % b["boleta"])
 
         # Cotejar patente
         if r.get("tiene_vehiculo") and b["placa"] and EC.placa_puntaje(b["placa"]) >= 1:
             if r["placa"] and b["placa"] != r["placa"]:
-                r["placa_tess"] = b["placa"]
-                av.append("Patente: los dos motores difieren (RapidOCR: %s / Tesseract: %s). Revísala." % (r["placa"], b["placa"]))
+                r["placa_rapid"] = b["placa"]
+                av.append("Patente: los dos motores difieren (Tesseract: %s / RapidOCR: %s). Revísala." % (r["placa"], b["placa"]))
             elif not r["placa"]:
                 r["placa"] = b["placa"]
-                av.append("Patente (%s) recuperada por Tesseract como respaldo." % b["placa"])
+                av.append("Patente (%s) recuperada por RapidOCR como respaldo." % b["placa"])
         return av
     except Exception:
         return []
 
 
 def leer_carab(g, texto):
-    """Lee un parte de Carabineros priorizando RapidOCR y utilizando validación cruzada con Tesseract."""
+    """Lee un parte de Carabineros priorizando Tesseract y utilizando validación cruzada con RapidOCR."""
     from . import extractor_carab as EC
     
-    # El texto de entrada ya viene procesado por RapidOCR desde texto_pagina()
+    # El texto de entrada ya viene procesado por Tesseract desde texto_pagina()
     r = EC.parte(texto)
     av = []
 
-    # Validaciones y respaldos secundarios
-    av += cotejar_con_tesseract(g, r)
+    # Validaciones y respaldos secundarios con RapidOCR
+    av += cotejar_con_rapidocr(g, r)
 
     if not r["n_parte_carab"]:
         av.append("No pude leer el número del parte de Carabineros.")
