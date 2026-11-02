@@ -314,7 +314,8 @@ function mostrar(){
       const key=f.k, val=valorActual(p,key);
       const r=document.createElement('div');r.className='row'+(f.big?' big':'')+(key===activeKey?' act':'')+(p.done[key]?' done':'');
       const esOfi=(key==='Oficina emisora'&&carab0(p));
-      const ctl=esOfi?'<select class="val">'+(OFICINAS_SIS.some(o=>o[1]===val)?'':'<option value="'+String(val).replace(/"/g,'&quot;')+'">'+val+'</option>')+OFICINAS_SIS.map(o=>'<option value="'+o[1]+'"'+(o[1]===val?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>').join('')+'</select>':'<input class="val" value="'+String(val).replace(/"/g,'&quot;')+'" placeholder="(en blanco)">';
+      const esInf=/^Infracción \d+ · código$/.test(key);
+      const ctl=esOfi?'<select class="val">'+(OFICINAS_SIS.some(o=>o[1]===val)?'':'<option value="'+String(val).replace(/"/g,'&quot;')+'">'+val+'</option>')+OFICINAS_SIS.map(o=>'<option value="'+o[1]+'"'+(o[1]===val?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>').join('')+'</select>':'<input class="val"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+String(val).replace(/"/g,'&quot;')+'" placeholder="(en blanco)">';
       r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+((p.ok&&p.ok[key])?'ok':f.st)+'">'+((p.ok&&p.ok[key])?'Confirmado':LAB[f.st])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((f.st==='check'&&!(p.ok&&p.ok[key]))?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
       el.oninput=el.onchange=e=>{
@@ -324,6 +325,19 @@ function mostrar(){
         pintarTira();
         if(key==='Infractor de esta copia (1, 2)') mostrar();
       };
+      if(esInf){
+        // Same searchable catalog used when adding an infringement.
+        // Store the selected code, not the display label, for tecleo.
+        el.addEventListener('change',()=>{
+          const hit=buscarInfr(el.value);
+          if(hit){
+            p.ed[key]=String(hit[0]);
+            p.ok=p.ok||{};p.ok[key]=true;
+            el.value=String(hit[0]);
+            pintarTira();
+          }
+        });
+      }
       el.onfocus=()=>{activeKey=key};
       if(key==='Placa')el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
