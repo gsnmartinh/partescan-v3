@@ -92,7 +92,7 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <dialog id="dlgJuz"><div class="dh"><h2>Perfil del juzgado</h2><button id="dClose">Cerrar</button></div><div class="db" id="dBody"></div><div class="df"><button id="dGuardar" class="p">Guardar cambios</button></div></dialog>
 <dialog id="dlgTec" style="width:min(1150px,96vw)"><div class="dh"><h2>Teclear en el sistema del Juzgado</h2><button id="tCerrar">Cerrar</button></div>
 <div class="db"><div id="tAviso" class="avisos" hidden></div><div id="tNoDisp" class="avisos" hidden></div>
-<small>Abre en el sistema la pantalla de ingreso («Procesos…»), deja el cursor en Rol y pulsa «Teclear pendientes»; después haz clic en la ventana del sistema. ESC detiene. Si un dato está mal, pulsa «Corregir», arréglalo y vuelve aquí: lo ya ingresado no se pierde.</small>
+<small>Abre en el sistema la pantalla de ingreso («Procesos…»), deja el cursor en Rol y pulsa «Teclear pendientes»; después haz clic en la ventana del sistema. ESC detiene. Si un dato está mal, pulsa «Corregir», arréglalo y vuelve aquí: lo ya ingresado no se pierde. Si comprobaste que un parte ya se guardó, pulsa «Confirmar ingreso»; «Volver a pendiente» permite ingresarlo nuevamente. Estas acciones se habilitan al terminar o detener el tecleo.</small>
 <div class="rowa" style="align-items:center;flex-wrap:wrap;margin:10px 0">
 <label style="flex-direction:row;align-items:center;gap:6px">Actuario <select id="tAct" class="val" style="width:auto"><option value="">Automático (según el Rol)</option></select></label>
 <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tAuto" style="width:auto"> Aceptar automáticamente (solo partes sin avisos)</label>
@@ -427,8 +427,19 @@ $('btnContinua').onclick=async()=>{
 };
 (async()=>{ try{ const r=await (await fetch('/api/sesion/ultima')).json();
   if(r.existe&&r.partes&&!P.length){ $('btnContinua').textContent='↺ Continuar anterior ('+r.partes+')'; $('btnContinua').hidden=false; } }catch(e){} })();
-setInterval(async()=>{ if(!P.length||pend+subiendo>0) return; const s=estadoSesion(); if(s===ultimoAuto) return;
-  try{ const r=await fetch('/api/sesion/auto',{method:'POST',body:s}); if(r.ok) ultimoAuto=s; }catch(e){} },5000);
+let colaAuto=Promise.resolve();
+function autoguardar(){
+  colaAuto=colaAuto.catch(()=>{}).then(async()=>{
+    if(!P.length||pend+subiendo>0) return;
+    const s=estadoSesion(); if(s===ultimoAuto) return;
+    const r=await fetch('/api/sesion/auto',{method:'POST',body:s});
+    const j=await r.json();
+    if(!r.ok||j.error) throw new Error(j.error||'No se pudo autoguardar');
+    ultimoAuto=s;
+  });
+  return colaAuto;
+}
+setInterval(()=>{autoguardar().catch(()=>{})},5000);
 function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; pintarTira(); mostrar(); window.scrollTo(0,0) }
 function ingresado(){
   const p=P[sel]; p.fin=true;
@@ -492,7 +503,7 @@ $('dGuardar').onclick=async()=>{
 cargarPerfil();
 
 const TXT_EST={pendiente:'Pendiente',tecleando:'Tecleando…',tecleado:'Por aceptar',ingresado:'Ingresado ✓',interrumpido:'Interrumpido',cancelado:'Cancelado'};
-let tNlog=0,tTimer=null;
+let tNlog=0,tTimer=null,tMarcando=false,tVersion=0;
 async function tecPost(ruta,cuerpo){ const r=await fetch('/api/tecleo/'+ruta,{method:'POST',body:JSON.stringify(cuerpo||{})}); return r.json(); }
 async function tecEnviar(){
   const ord = P.slice();
@@ -503,10 +514,10 @@ function tecPintar(r){
   const lg=$('tLog'); if(r.log.length){lg.textContent+=r.log.join('\n')+'\n'; lg.scrollTop=lg.scrollHeight}
   tNlog=r.nlog;
   let cambio=false;
-  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&f.estado==='ingresado'&&!p.fin){p.fin=true;cambio=true}});
-  if(cambio) pintarTira();
+  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&!!p.fin!==(f.estado==='ingresado')){p.fin=f.estado==='ingresado';cambio=true}});
+  if(cambio){pintarTira();mostrar();}
   const a=$('tAct'); if(a.options.length<=1&&r.actuarios) r.actuarios.forEach(n=>a.add(new Option(n.charAt(0)+n.slice(1).toLowerCase(),n)));
-  $('tIniciar').disabled=!r.disponible||r.corriendo; $('tDetener').disabled=!r.corriendo;
+  $('tIniciar').disabled=!r.disponible||r.corriendo||tMarcando; $('tDetener').disabled=!r.corriendo;
   const nd=$('tNoDisp'); nd.textContent=r.disponible?'':r.motivo; nd.hidden=r.disponible;
   const pen=r.partes.filter(f=>['pendiente','interrumpido','cancelado'].includes(f.estado)).length;
   const ing=r.partes.filter(f=>['ingresado'].includes(f.estado)).length;
@@ -514,17 +525,40 @@ function tecPintar(r){
   $('tTabla').innerHTML='<tr><th>Estado</th><th>N° parte</th><th>Fecha</th><th>Oficina</th><th>Placa</th><th>Inf.</th><th>Avisos</th><th></th></tr>'+r.partes.map(f=>{
     const msj=[f.aviso].concat(f.errores.map(e=>'ERROR: '+e),f.avisos).filter(Boolean).join(' | ');
     const fondo=f.errores.length?' style="background:var(--rjb)"':((f.avisos.length||f.aviso)?' style="background:var(--ckb)"':'');
-    const dis=(r.corriendo||!r.disponible)?' disabled':'';
-    return '<tr'+fondo+'><td>'+(TXT_EST[f.estado]||f.estado)+'</td><td>'+esc(f.n_parte)+'</td><td>'+esc(f.fecha_parte)+'</td><td>'+esc(f.oficina)+'</td><td>'+esc(f.placa)+'</td><td>'+esc(f.infraccion)+'</td><td style="max-width:320px">'+esc(msj)+'</td><td style="white-space:nowrap"><button data-corr="'+f.uid+'">Corregir</button> <button data-uno="'+f.uid+'"'+dis+'>Teclear</button></td></tr>'}).join('');
+    const bloqueo=(r.corriendo||tMarcando)?' disabled':'';
+    const dis=(r.corriendo||tMarcando||!r.disponible||!['pendiente','interrumpido','cancelado'].includes(f.estado))?' disabled':'';
+    return '<tr'+fondo+'><td>'+(TXT_EST[f.estado]||f.estado)+'</td><td>'+esc(f.n_parte)+'</td><td>'+esc(f.fecha_parte)+'</td><td>'+esc(f.oficina)+'</td><td>'+esc(f.placa)+'</td><td>'+esc(f.infraccion)+'</td><td style="max-width:320px">'+esc(msj)+'</td><td style="white-space:nowrap"><button data-corr="'+f.uid+'"'+bloqueo+'>Corregir</button> <button data-uno="'+f.uid+'"'+dis+'>Teclear</button> <button data-marcar="'+f.uid+'" data-estado="'+(f.estado==='ingresado'?'pendiente':'ingresado')+'"'+bloqueo+'>'+(f.estado==='ingresado'?'Volver a pendiente':'Confirmar ingreso')+'</button></td></tr>'}).join('');
 }
-async function tecSondear(){ try{ tecPintar(await (await fetch('/api/tecleo/estado?desde='+tNlog)).json()) }catch(e){} }
+async function tecSondear(){
+  if(tMarcando) return;
+  const version=++tVersion;
+  try{const r=await (await fetch('/api/tecleo/estado?desde='+tNlog)).json();
+    if(version===tVersion&&!tMarcando) tecPintar(r);
+  }catch(e){}
+}
+async function tecMarcar(uid,estado){
+  if(tMarcando) return;
+  tMarcando=true; ++tVersion;
+  $('tIniciar').disabled=true;
+  $('tTabla').querySelectorAll('button').forEach(b=>b.disabled=true);
+  try{
+    const j=await tecPost('marcar',{uid,estado});
+    if(j.error){alert(j.error);return}
+    const p=P[uid]; if(p) p.fin=estado==='ingresado';
+    pintarTira(); mostrar();
+    await autoguardar();
+  }catch(e){alert('No se pudo completar la confirmación o su autoguardado: '+e.message)}
+  finally{tMarcando=false; await tecSondear()}
+}
 async function tecIniciar(uids){
+  if(tMarcando) return;
   const j=await tecPost('iniciar',{uids:uids||null,auto:$('tAuto').checked,actuario:$('tAct').value});
   if(j.error){alert(j.error);return}
   tecSondear();
 }
 $('tTabla').onclick=async e=>{
-  const b=e.target.closest('button'); if(!b) return;
+  const b=e.target.closest('button'); if(!b||b.disabled||tMarcando) return;
+  if(b.dataset.marcar!==undefined){await tecMarcar(+b.dataset.marcar,b.dataset.estado);return}
   if(b.dataset.corr!==undefined){ $('dlgTec').close(); ir(+b.dataset.corr); return }
   if(b.dataset.uno!==undefined){ await tecIniciar([+b.dataset.uno]); return }
 };
