@@ -208,13 +208,12 @@ def _extraer_multiples_infracciones(infr_texto):
     if not infr_texto:
         return []
     texto_limpio = re.sub(r'\s+', ' ', infr_texto).strip()
-    # Separa por comas, puntos y comas, o conjunciones como 'y' / 'e' rodeadas de espacios
     trozos = re.split(r'\s*,\s+|\s+(?:y|e)\s+|\s*;\s+', texto_limpio, flags=re.I)
     
     lista_final = []
     for t in trozos:
         limpio = t.strip(" ,.")
-        if len(limpio) > 4:  # Evita residuos muy cortos
+        if len(limpio) > 4:
             lista_final.append(limpio)
             
     return lista_final if lista_final else [infr_texto]
@@ -248,7 +247,7 @@ def _fin_nombre(s):
 
 
 def _tokens_nombre(bruto):
-    """Queda solo con palabras de un nombre chileno (compuestos, DE/DEL/SAN, guion)."""
+    """Queda solo con palabras de un nombre (preservando espacios correctamente entre nombres y apellidos)."""
     bruto = re.sub(r"(?<=[A-Za-z])\*(?=[A-Za-z])", "U", bruto or "")
     bruto = bruto.replace(",", " ")
     bruto = re.sub(r"[|\\/_*=~<>\[\]{}()«»“”\"']+", " ", bruto)
@@ -274,6 +273,7 @@ def _tokens_nombre(bruto):
         toks.pop(0)
     if len(toks) < 2:
         return ""
+    # Asegurar unión limpia respetando los espacios entre palabras
     return limpiar(" ".join(toks)).upper()
 
 
@@ -310,10 +310,15 @@ def _infractor(texto_inf):
             aviso = "El RUT del infractor (%s) no cuadra con su dígito verificador: compáralo con el parte." % leido
     elif re.search(r"\bDNI\b|pasaporte|(?:" + NACION + r")", s, re.I):
         aviso = "Infractor extranjero (sin RUT): irá con SR y su nombre."
+    
     direccion, comuna = "", ""
     md = re.search(r"domicili\w+\s*:?\s*(?:en\s+)?(.+?)[\s.]*$", s, re.I)
     if md:
-        d = re.sub(r"\bSituaci[oó]n\s+calle\b.*$", "", md.group(1), flags=re.I).strip(" .,")
+        d = md.group(1).strip()
+        # CORRECCIÓN: Cortar estrictamente si se cola texto de secciones posteriores (como DOCUMENTOS, CITACION, OBSERVACIONES)
+        d = re.split(r"\b(?:DOCUMENTOS?|OBSERVACI[OÓ]NES?|CITACI[OÓ]N|NOTIFICACI[OÓ]N|TESTIGOS?|DENUNCIANTE)\b.*$", d, flags=re.I)[0]
+        
+        d = re.sub(r"\bSituaci[oó]n\s+calle\b.*$", "", d, flags=re.I).strip(" .,")
         mc = re.search(r",?\s*comuna\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d, re.I) \
             or re.search(r"\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d) \
             or re.search(r",\s*([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d)
@@ -457,7 +462,6 @@ def parte(texto):
     _of = _oficina(texto)
     infr = _infraccion(t, secs)
     
-    # Extrae múltiples infracciones separadas por comas, 'y', 'e' o puntos y comas
     bloques_infr = _extraer_multiples_infracciones(infr)
     
     nombre, rut, direccion, comuna, aviso_inf, rut_leido = _infractor(_sec(secs, "INFRACTOR"))
