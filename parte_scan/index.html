@@ -141,7 +141,6 @@ async function sondear(){
   try{
     const r=await (await fetch('/api/estado')).json();
     pend=r.pendientes; err=r.error;
-    // el certificado puede llegar después del parte: actualizar los partes ya mostrados
     let cambio=false;
     P.forEach(q=>{const n=r.partes.find(z=>z.id===q.id); if(n&&n.img_cert!==q.img_cert){
       ['img_cert','cert','cert_avisos','placa','marca','tipo_vehiculo'].forEach(k=>{q[k]=n[k]}); cambio=true; }});
@@ -172,7 +171,6 @@ $('rol').oninput=()=>{try{localStorage.setItem('rol',$('rol').value)}catch(e){};
 
 /* ---------- campos ---------- */
 function folioBase(p){const L=p.infractores||[];return (L.length>1&&L[infIdx(p)]&&L[infIdx(p)].boleta)||p.folio||''}
-// ---- Orden de los partes: por defecto, como se escanearon (el orden de P). Opcional: por N° de boleta ----
 function ordenados(){ return ORDEN==='boleta' ? P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0)) : P.slice() }
 $('orden').onchange=()=>{ORDEN=$('orden').value;pintarTira();mostrar()};
 function mover(d){
@@ -180,8 +178,9 @@ function mover(d){
   const j=sel+d; if(j<0||j>=P.length) return;
   [P[sel],P[j]]=[P[j],P[sel]]; sel=j; pintarTira(); mostrar();
 }
-// ---- Infracciones: agregar y quitar a mano ----
-function bakeEdits(p){   // pasa a p.items lo corregido a mano en «Infracción N · código» antes de agregar o quitar
+
+/* ---- Infracciones: agregar y quitar a mano con el botón + ---- */
+function bakeEdits(p){
   const ks=Object.keys(p.ed).filter(k=>/^Infracción \d+ · código$/.test(k));
   if(!p.items.length&&ks.length) p.items.push({x:{abrev:'',t:''},cod:'',estado:'check',nota:''});
   p.items.forEach((x,i)=>{const k='Infracción '+(i+1)+' · código'; if(k in p.ed){x.cod=p.ed[k]; x.estado='ok'}});
@@ -192,7 +191,7 @@ function refrescarConScroll(){const y=window.scrollY; pintarTira(); mostrar(); w
 function barraInfracciones(p){
   const d=document.createElement('div'); d.className='row'; d.style.display='block';
   let h='<div class="lab" style="margin-bottom:6px">Agregar o quitar infracciones</div>';
-  p.items.forEach((x,i)=>{ h+='<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><span class="note" style="flex:1">'+(i+1)+' · '+esc(V(p,'Infracción '+(i+1)+' · código'))+' '+esc((x.x&&x.x.t)||'')+'</span><button data-q="'+i+'">Quitar</button></div>'});
+  p.items.forEach((x,i)=>{ h+='<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><span class="note" style="flex:1">'+(i+1)+' · '+esc(V(p,'Infracción '+(i+1)+' · código'))+' '+esc((x.x&&x.x.t)||x.nota||'')+'</span><button data-q="'+i+'">Quitar</button></div>'});
   h+='<div style="display:flex;gap:8px;margin-top:8px"><input class="val" list="dlInf" id="infNueva" placeholder="Busca por código o por palabra (ej. 19 o amarilla)"><button class="p" id="infAgrega">+ Agregar infracción</button></div>';
   d.innerHTML=h;
   d.querySelectorAll('button[data-q]').forEach(b=>b.onclick=()=>{ bakeEdits(p); p.items.splice(+b.dataset.q,1); refrescarConScroll() });
@@ -208,7 +207,7 @@ function barraInfracciones(p){
   };
   return d;
 }
-function infrVigentes(p){   // códigos de infracción que valen ahora (incluye lo corregido a mano)
+function infrVigentes(p){
   const n=Math.max(p.items.length,1);
   return Array.from({length:n},(_,i)=>V(p,'Infracción '+(i+1)+' · código')).filter(Boolean);
 }
@@ -231,7 +230,7 @@ function campos(p){
     gc('Fecha de ingreso',hoy(),'ok','Día en que ingresas el parte.'),
     ...((carab||mtt)?[gc(carab?'N° de parte (Carabineros)':'N° de denuncia (MTT)',p.n_parte_carab||'',p.n_parte_carab?'ok':'check',(carab?'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.':'Paso 4 al ingresar: «Nº Parte». NO va en el archivo; lo corriges a mano tras cargar.'))]:[]),
     ...((!carab&&!mtt)?[gc('N° de parte',p.folio,p.folio?'ok':'check','Paso 4 al ingresar: «Nº Parte». En Inspección es el mismo número de la boleta.')]:[]),
-    gc('N° de boleta (folio)',folioBase(p),folioBase(p)&&!folioAv&&!folioDup?'ok':'check',folioDup?'Este folio se repite en el lote: el cargador rechaza folios repetidos'+(mtt&&p.n_parte_carab?'. Usa el N° de denuncia ('+p.n_parte_carab+') como folio de uno de ellos.':'. Cambia uno de ellos.'):folioAv?p.avisos.filter(x=>/N° de parte|folio/i.test(x)).join(' '):(carab?'Paso 5 al ingresar: «Bol/N.Parte». Es el número que va en el archivo.':(mtt?'Paso 5 al ingresar: «Bol/N.Parte». Primeros 6 dígitos de la boleta de citación (al pie del parte)'+(p.boleta_completa?': '+p.boleta_completa:'')+'.':'Paso 5 al ingresar: «Bol/N.Parte».')),{big:1}),
+    gc('N° de boleta (folio)',folioBase(p),folioBase(p)&&!folioAv&&!folioDup?'ok':'check',folioDup?'Este folio se repite en el lote: el cargador rechaza folios repetidos'+(mtt&&p.n_parte_carab?'. Usa el N° de denuncia ('+p.n_parte_carab+') como folio de uno de ellos.':'. Cambia one of them.'):folioAv?p.avisos.filter(x=>/N° de parte|folio/i.test(x)).join(' '):(carab?'Paso 5 al ingresar: «Bol/N.Parte». Es el número que va en el archivo.':(mtt?'Paso 5 al ingresar: «Bol/N.Parte». Primeros 6 dígitos de la boleta de citación (al pie del parte)'+(p.boleta_completa?': '+p.boleta_completa:'')+'.':'Paso 5 al ingresar: «Bol/N.Parte».')):{big:1}),
     gc('Fecha del parte',p.fecha_parte,p.fecha_parte?'ok':'check',carab?'Fecha en que Carabineros hizo el parte.':'Igual a la de la boleta.'),
     gc('Descripción de la causa',p.causa,p.causa?'ok':'check',p.causa?(p.causa_literal?'Lo que dice el parte (la infracción va con el código comodín).':'Igual a la infracción.'):'Escríbela a mano.'),
     gc('Actuario (código)',a?a[1]:'',a?'ok':'check',a?a[0]+' · el rol termina en '+rol.slice(-1):'Escribe el rol arriba.'),
@@ -327,12 +326,10 @@ document.addEventListener('keydown',e=>{
 function carab0(p){return p.origen==='carab'}
 function V(p,k){
   const v=valorActual(p,k);
-  // «VEHICULO + patente» (infractor sin datos): la patente corregida a mano manda sobre la del primer escaneo
   if(k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}
 const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>f.st==='check').length,0);
-// motos: 3 letras + 2 dígitos (JHB47) o 2 letras + 3 dígitos (TV880) van con 6 caracteres: JHB047, TV0880
 function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
 const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
     boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
@@ -350,7 +347,6 @@ $('btnTecleo').onclick=()=>{
     .then(r=>r.json()).then(j=>alert('Datos guardados en tu carpeta Descargas:\n'+j.ruta));
 };
 
-// ---- Sesión: guardar / abrir el lote con las correcciones, sin volver a leer los PDF ----
 function estadoSesion(){return JSON.stringify({version:1,partes:P,rol:$('rol').value,cit:$('cit').value,citTocada:citTocada,orden:ORDEN})}
 function aplicarSesion(e){
   P=(e.partes||[]).map(p=>Object.assign({ed:{},done:{},fin:false},p));
@@ -382,7 +378,6 @@ $('btnContinua').onclick=async()=>{
 };
 (async()=>{ try{ const r=await (await fetch('/api/sesion/ultima')).json();
   if(r.existe&&r.partes&&!P.length){ $('btnContinua').textContent='↺ Continuar anterior ('+r.partes+')'; $('btnContinua').title='Sesión guardada el '+r.fecha+' con '+r.partes+' partes y tus correcciones'; $('btnContinua').hidden=false; } }catch(e){} })();
-// guardado automático cada 5 s si hubo cambios (así no se pierde nada si se cierra el programa)
 setInterval(async()=>{ if(!P.length||pend+subiendo>0) return; const s=estadoSesion(); if(s===ultimoAuto) return;
   try{ const r=await fetch('/api/sesion/auto',{method:'POST',body:s}); if(r.ok) ultimoAuto=s; }catch(e){} },5000);
 function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; pintarTira(); mostrar(); window.scrollTo(0,0) }
@@ -404,7 +399,6 @@ function pintarTira(){
 $('img').onclick=e=>e.target.classList.toggle('z');
 $('tabP').onclick=()=>{vista='p';mostrar()}; $('tabC').onclick=()=>{vista='c';mostrar()};
 
-/* ---------- perfil del juzgado ---------- */
 const selOfic=(id,val)=>'<select class="val" id="'+id+'">'+PERFIL.oficinas.map(o=>'<option value="'+esc(o[1])+'"'+(o[1]===val?' selected':'')+'>'+esc(o[0]+' · '+o[1])+'</option>').join('')+'</select>';
 function estadoLista(t){const n=t==='infracciones'?PERFIL.n_infracciones:PERFIL.n_oficinas, p=t==='infracciones'?PERFIL.propia_infracciones:PERFIL.propia_oficinas;
   return (p?'Lista propia de tu juzgado':'Lista de fábrica (2° Juzgado de Valdivia)')+' · '+n+' códigos'}
@@ -439,7 +433,7 @@ function engancharAct(){document.querySelectorAll('#actRows .rowa').forEach(r=>{
 function nombresAct(){return [...document.querySelectorAll('#actRows .an')].map(i=>i.value.trim()).filter(Boolean)}
 function refrescarDigs(){const ns=nombresAct();
   document.querySelectorAll('#digs select').forEach(s=>{const d=s.dataset.d, act=(s.value||(PERFIL.rol_actuario[d]||'').charAt(0)+(PERFIL.rol_actuario[d]||'').slice(1).toLowerCase());
-    s.innerHTML='<option value="">(elegir a mano)</option>'+ns.map(n=>'<option'+(n.toLowerCase()===String(act).toLowerCase()?' selected':'')+'>'+esc(n)+'</option>').join('')})}
+    s.innerHTML='<option value="">(elegir a mano)</option>'+ns.map(n=>'<option'+(n.toLowerCase()===String(act).toLowerCase()?' selected':'')+'>'+esc(n)+'</option>').join('')+'end'})}
 function snapshotDlg(){const g=id=>$(id)?$(id).value:''; return {j_juz:g('j_juz'),j_comuna:g('j_comuna'),j_ofic:g('j_ofic'),j_titulo:g('j_titulo')}}
 function restoreDlg(s){for(const k in s){if($(k)&&s[k])$(k).value=s[k]}}
 async function verEquivalencias(){
@@ -463,7 +457,6 @@ $('dGuardar').onclick=async()=>{
 };
 cargarPerfil();
 
-/* ---------- tecleo en el sistema desde esta misma ventana ---------- */
 const TXT_EST={pendiente:'Pendiente',tecleando:'Tecleando…',tecleado:'Por aceptar',ingresado:'Ingresado ✓',interrumpido:'Interrumpido',cancelado:'Cancelado'};
 let tNlog=0,tTimer=null;
 async function tecPost(ruta,cuerpo){ const r=await fetch('/api/tecleo/'+ruta,{method:'POST',body:JSON.stringify(cuerpo||{})}); return r.json(); }
