@@ -4,7 +4,7 @@ import io, json, os, sys, zipfile, time, queue, re, shutil, tempfile, threading,
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import actualizador, catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
+from . import catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
 
 WEB = os.path.join(motor._base(), "parte_scan", "web")
 if not os.path.isdir(WEB):
@@ -31,7 +31,7 @@ def armar(r, archivo, pagina, pid):
                       "Revísalo." % catalogo.comodin())
     return {
         "id": pid, "archivo": archivo, "pagina": pagina, "img_cert": 0,
-        "depto": r["departamento"], "folio": r["n_parte_final"], "oficina": perfil.oficina_municipal(r["departamento"]),
+        "depto": r["departamento"], "folio": r["n_parte_final"],
         "fecha_parte": r["fecha_parte"], "fecha_infraccion": r["fecha_infraccion"],
         "hora_infraccion": hora(r["hora_infraccion"]), "lugar": r["lugar"],
         "infraccion_texto": r["infraccion_texto"], "tipo_vehiculo": exportar.tipo_limpio(r["tipo_vehiculo"]),
@@ -166,14 +166,6 @@ def trabajador():
                         PARTES.append(ultimo)
                 elif tipo == "certificado":
                     c = certificado.leer(texto)
-                    if not certificado.rut_ok(c.get("rut")):       # respaldo: se lee solo la línea del RUT, ampliada
-                        try:
-                            rut2 = motor.leer_rut_certificado(g)
-                        except Exception:       # noqa: BLE001 - el respaldo nunca debe impedir leer el certificado
-                            rut2 = ""
-                        if rut2:
-                            c["rut"] = rut2
-                            c["avisos"] = [a for a in c["avisos"] if "RUT" not in a]
                     with LOCK:
                         pid = len(IMAGENES) + 1
                         IMAGENES[pid] = img
@@ -221,12 +213,15 @@ class H(BaseHTTPRequestHandler):
                                         "partes": PARTES})
         if u.path == "/api/sesion/ultima":
             return self._send(200, info_sesion_auto())
+        if u.path == "/api/infracciones":
+            lista = perfil.infracciones()
+            ordenadas = sorted(([c, d] for c, d in lista.items()),
+                               key=lambda x: (not str(x[0]).isdigit(), int(x[0]) if str(x[0]).isdigit() else 0, str(x[0])))
+            return self._send(200, ordenadas)
         if u.path == "/api/perfil":
             return self._send(200, estado_perfil())
         if u.path == "/api/perfil/equivalencias":
             return self._send(200, equivalencias_actuales())
-        if u.path == "/api/actualizacion":
-            return self._send(200, actualizador.estado())
         if u.path == "/api/tecleo/estado":
             try:
                 return self._send(200, tecleador.estado(int(parse_qs(u.query).get("desde", ["0"])[0] or 0)))
@@ -300,19 +295,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {"error": str(e)})
             except Exception as e:
                 return self._send(500, {"error": "No se pudo: %s" % e})
-        if u.path == "/api/actualizacion/instalar":
-            if tecleador.corriendo():
-                return self._send(400, {"error": "Hay un ingreso en curso: espera a que termine para actualizar."})
-            try:
-                actualizador.instalar()
-            except Exception as e:      # noqa: BLE001
-                return self._send(400, {"error": str(e)})
-            return self._send(200, {"ok": True})
         if u.path == "/api/limpiar":
-            try:
-                tecleador.limpiar()
-            except ValueError as e:
-                return self._send(400, {"error": str(e)})
             with LOCK:
                 PARTES.clear()
                 IMAGENES.clear()
@@ -505,7 +488,6 @@ def _abrir_ventana(url):
 def main():
     _registro_en_archivo()
     threading.Thread(target=trabajador, daemon=True).start()
-    actualizador.revisar_en_segundo_plano()          # sin internet no pasa nada
     for puerto in range(8765, 8785):
         try:
             srv = ThreadingHTTPServer(("127.0.0.1", puerto), H)
