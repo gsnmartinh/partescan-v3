@@ -23,6 +23,11 @@ def hora(h):
     return "%02d:%s" % (int(m.group(1)), m.group(2)) if m else ""
 
 
+def orden_natural(text):
+    """Ordena los nombres de archivo de forma natural (ej. parte_2 va antes que parte_10)."""
+    return [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', text)]
+
+
 def armar(r, archivo, pagina, pid):
     causa, items, comodin = catalogo.resolver_o_comodin(r["infraccion_texto"])
     avisos = list(r["avisos"])
@@ -136,55 +141,63 @@ def aplicar_certificado(p, c, pid_img):
 
 def trabajador():
     while True:
-        ruta, nombre = COLA.get()
-        try:
-            ultimo = None          # último parte leído del archivo, para pegarle su certificado
-            for n, img in enumerate(motor.paginas(ruta), 1):
-                g = motor.preparar(img)
-                texto = motor.texto_pagina(g)
-                tipo = motor.tipo_pagina(texto)
-                if tipo == "parte":
-                    r = motor.leer_parte(img, texto, g)
-                    with LOCK:
-                        pid = len(IMAGENES) + 1
-                        IMAGENES[pid] = img
-                        ultimo = armar(r, nombre, n, pid)
-                        PARTES.append(ultimo)
-                elif tipo == "mtt":
-                    r = extractor_mtt.parte(texto, motor.leer_celdas(g))
-                    with LOCK:
-                        pid = len(IMAGENES) + 1
-                        IMAGENES[pid] = img
-                        ultimo = armar_mtt(r, nombre, n, pid)
-                        PARTES.append(ultimo)
-                elif tipo == "carab":
-                    r = motor.leer_carab(g, texto)
-                    with LOCK:
-                        pid = len(IMAGENES) + 1
-                        IMAGENES[pid] = img
-                        ultimo = armar_carab(r, nombre, n, pid)
-                        PARTES.append(ultimo)
-                elif tipo == "certificado":
-                    c = certificado.leer(texto)
-                    with LOCK:
-                        pid = len(IMAGENES) + 1
-                        IMAGENES[pid] = img
-                        if ultimo is not None and ultimo["img_cert"] == 0:
-                            aplicar_certificado(ultimo, c, pid)
-                        else:
-                            ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
-                else:
-                    ESTADO["error"] = "«%s» pág. %d: hoja que no es un parte ni un certificado; la ignoré." % (nombre, n)
-        except Exception as e:  # no detener el programa por un archivo malo
-            traceback.print_exc()
-            ESTADO["error"] = "No pude leer «%s»: %s" % (nombre, e)
-        finally:
-            with LOCK:
-                ESTADO["pendientes"] -= 1
+        primero = COLA.get()
+        lote_actual = [primero]
+        while not COLA.empty():
+            lote_actual.append(COLA.get())
+        
+        # Ordenar estrictamente por nombre de archivo usando orden natural
+        lote_actual.sort(key=lambda x: orden_natural(x[1]))
+        
+        for ruta, nombre in lote_actual:
             try:
-                os.remove(ruta)
-            except OSError:
-                pass
+                ultimo = None          # último parte leído del archivo, para pegarle su certificado
+                for n, img in enumerate(motor.paginas(ruta), 1):
+                    g = motor.preparar(img)
+                    texto = motor.texto_pagina(g)
+                    tipo = motor.tipo_pagina(texto)
+                    if tipo == "parte":
+                        r = motor.leer_parte(img, texto, g)
+                        with LOCK:
+                            pid = len(IMAGENES) + 1
+                            IMAGENES[pid] = img
+                            ultimo = armar(r, nombre, n, pid)
+                            PARTES.append(ultimo)
+                    elif tipo == "mtt":
+                        r = extractor_mtt.parte(texto, motor.leer_celdas(g))
+                        with LOCK:
+                            pid = len(IMAGENES) + 1
+                            IMAGENES[pid] = img
+                            ultimo = armar_mtt(r, nombre, n, pid)
+                            PARTES.append(ultimo)
+                    elif tipo == "carab":
+                        r = motor.leer_carab(g, texto)
+                        with LOCK:
+                            pid = len(IMAGENES) + 1
+                            IMAGENES[pid] = img
+                            ultimo = armar_carab(r, nombre, n, pid)
+                            PARTES.append(ultimo)
+                    elif tipo == "certificado":
+                        c = certificado.leer(texto)
+                        with LOCK:
+                            pid = len(IMAGENES) + 1
+                            IMAGENES[pid] = img
+                            if ultimo is not None and ultimo["img_cert"] == 0:
+                                aplicar_certificado(ultimo, c, pid)
+                            else:
+                                ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
+                    else:
+                        ESTADO["error"] = "«%s» pág. %d: hoja que no es un parte ni un certificado; la ignoré." % (nombre, n)
+            except Exception as e:  # no detener el programa por un archivo malo
+                traceback.print_exc()
+                ESTADO["error"] = "No pude leer «%s»: %s" % (nombre, e)
+            finally:
+                with LOCK:
+                    ESTADO["pendientes"] -= 1
+                try:
+                    os.remove(ruta)
+                except OSError:
+                    pass
 
 
 class H(BaseHTTPRequestHandler):
