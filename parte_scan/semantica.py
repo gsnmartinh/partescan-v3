@@ -8,17 +8,22 @@ import unicodedata
 RUT_RX = r"\d{1,2}\s*[.,]?\s*\d{3}\s*[.,]?\s*\d{3}\s*[-–—]\s*[\dKk]"
 # lo que sigue al nombre de una persona en estos partes
 MARCADOR = re.compile(
-    r"[,.]?\s*(?:fecha\s+de\s+nacim\w*|c[eé]d(?:ula)?\b|\d{1,2}\s+a[ñn]os\b|chilen[oa]\b|venezolan[oa]\b|peruan[oa]\b|"
+    r"[,.]?\s*(?:fecha\s+de\s+nacim\w*|c[eé]d(?:ula)?\b|c\.?\s*i\.?\s*[:\d]|DNI\b|pasaporte\b|"
+    r"\d{1,2}\s+a[ñn]os\b|chilen[oa]\b|venezolan[oa]\b|peruan[oa]\b|"
     r"colombian[oa]\b|haitian[oa]\b|bolivian[oa]\b|argentin[oa]\b|ecuatorian[oa]\b|R\.?U\.?[NT]\b|"
     r"domicili\w*)", re.I)
 FIN_PERSONA = re.compile(r"\b(?:DENUNCIANTE|TESTIGOS?|REINCIDENCIAS?|CITACI[OÓ]N|OBSERVACI[OÓ]N(?:ES)?|DISP\.?\s*INFR\w*|"
                          r"VEH[IÍ]CULO|LICENCIA|INFRACCI[OÓ]N)\b|\b(?:AUTOM[OÓ]VIL|STATION\s+WAGON|CAMIONETA|FURG[OÓ]N|MOTOCICLETA|"
                          r"MOTO|CAMI[OÓ]N|BUS|TAXI|JEEP)\s*,\s*MARCA\b|\b(?:PLACA\s+PATENTE|P\.?\s?P\.?\s?U\.?)\s*[:.]", re.I)
-NO_NOMBRE = {"INFRACTOR", "INFRACTORES", "NOMBRE", "DEL", "DE", "LA", "EL", "LOS", "LAS", "A", "CEDULA", "CARABINEROS",
+NO_NOMBRE = {"INFRACTOR", "INFRACTORES", "INFRACTORA", "NOMBRE", "DEL", "DE", "LA", "EL", "LOS", "LAS", "A", "CEDULA", "CARABINEROS",
              "INFRACCION", "DENUNCIANTE", "TESTIGO", "CITACION", "VEHICULO", "LEY", "TRANSITO", "TRIBUNAL", "JUZGADO",
              "POR", "PARA", "ANTE", "SIGUIENTE", "OBSERVACION", "REINCIDENCIA", "PATENTE", "PLACA", "MARCA", "CIUDAD",
              "DESTACAMENTO", "SGTO", "CABO", "SARGENTO", "SUBOFICIAL", "ESCRITO", "DOMICILIO", "DOMICILIADO", "NRO",
-             "VALDIVIA", "CHILE", "ART", "ARTICULO", "INGERIR", "ESTACIONAR", "CONDUCIR", "BEBER", "TRANSITAR", "INFRINGIR"}
+             "VALDIVIA", "CHILE", "ART", "ARTICULO", "INGERIR", "ESTACIONAR", "CONDUCIR", "BEBER", "TRANSITAR", "INFRINGIR",
+             "SORPRENDIO", "SORPRENDIERON", "NOTIFICO", "NOTIFICARON", "CONTRA", "IDENTIFICADO", "IDENTIFICADA",
+             "INDIVIDUALIZADO", "INDIVIDUALIZADA", "LLAMADO", "LLAMADA", "QUIEN", "CUAL", "INDIVIDUO", "PERSONA",
+             "CONDUCTOR", "CONDUCTORA", "PEATON", "CICLISTA", "RESULTO", "SER", "AL", "SE", "LE", "ENCONTRO"}
+_PARTICULA = {"DE", "DEL", "LA", "LAS", "LOS", "Y", "E", "DA", "DO", "SAN", "SANTA", "SANTO"}
 TIPOS = (r"AUTOM[OÓ]VIL|STATION\s+WAGON|CAMIONETA|FURG[OÓ]N|MOTOCICLETA|MOTO|CAMI[OÓ]N|TRACTOCAMI[OÓ]N|BUS|MINIBUS|"
          r"MICROBUS|TAXI|JEEP|SEMIRREMOLQUE|CARRO|BICICLETA|SEDAN|SED[AÁ]N|SUV|VEH[IÍ]CULO")
 PLACA = r"[A-Z]{2,5}\s*[-–—.]?\s*\d{2}(?:\s*[-–—.]?\s*\d{1,2})?"
@@ -33,22 +38,39 @@ def _plano(t):
     return re.sub(r"\s+", " ", t or "").strip()
 
 
+def _palabra_nombre(w):
+    w = (w or "").strip(".,;:\"'«»“”")
+    if not w:
+        return False
+    if _sin_acentos(w).strip(".") in _PARTICULA:
+        return True
+    return bool(re.fullmatch(r"[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ'’\-]{0,}\.?", w))
+
+
 def _nombre_antes(t, pos):
     """Nombre propio que termina justo antes de t[pos]: desde el último límite («. », «: », rótulo) hasta pos."""
-    ini = max(0, pos - 110)
+    ini = max(0, pos - 140)
     previo = t[ini:pos]
-    cortes = [m.end() for m in re.finditer(r"[.:;]\s+|INFRACTOR(?:ES)?(?:\s*\(A\))?\s*[:;]?\s*", previo)]
+    cortes = [m.end() for m in re.finditer(
+        r"[.:;]\s+|INFRACTOR(?:ES|A|AS)?(?:\s*\(A\))?\s*[:;]?\s*|"
+        r"\b(?:llamad[oa]|identificad[oa]|individualizad[oa]|result[oó]\s+ser|quien\s+result[oó])\s+",
+        previo, re.I)]
     previo = previo[cortes[-1]:] if cortes else previo
-    palabras = [w for w in re.split(r"[\s,]+", previo.strip(" ,.:;")) if w]
-    while palabras and (_sin_acentos(palabras[0]) in NO_NOMBRE and not (len(palabras) <= 2)):
+    palabras = [w for w in re.split(r"[\s,|/]+", previo.strip(" ,.:;|")) if w]
+    acc = []
+    for w in reversed(palabras):
+        u = _sin_acentos(w).strip(".")
+        if not _palabra_nombre(w) or (u in NO_NOMBRE and u not in _PARTICULA):
+            break
+        acc.append(w.strip(".,;:\"'"))
+        if len(acc) >= 8:
+            break
+    palabras = list(reversed(acc))
+    while palabras and _sin_acentos(palabras[0]).strip(".") in _PARTICULA:
         palabras.pop(0)
-    while palabras and _sin_acentos(palabras[0]).strip(".") in NO_NOMBRE and len(palabras) > 2:
-        palabras.pop(0)
-    if not 2 <= len(palabras) <= 7:
+    if not 2 <= len(palabras) <= 8:
         return "", pos
-    if any(not re.fullmatch(r"[A-Za-zÁÉÍÓÚÑáéíóúñ'’]+\.?", w) for w in palabras):
-        return "", pos
-    if sum(_sin_acentos(w).strip(".") in NO_NOMBRE for w in palabras) > len(palabras) // 2:
+    if sum(_sin_acentos(w).strip(".") in NO_NOMBRE and _sin_acentos(w).strip(".") not in _PARTICULA for w in palabras):
         return "", pos
     nombre = " ".join(palabras)
     return nombre, pos - len(previo.rstrip(" ,.:;")) if previo.strip() else pos

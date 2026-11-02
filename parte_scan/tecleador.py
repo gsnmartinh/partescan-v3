@@ -110,14 +110,18 @@ def cargar(registros):
 def _fila(T, p):
     fat, avi = T.validar_parte(p)
     avi = [a for a in avi if not a.startswith("sin rut")]
-    
-    # Soporta múltiples infracciones para mostrarlas unidas en la tabla de tecleo
+
+    # Manuales y detectadas: códigos (o texto) unidos para la tabla de tecleo
     infr_list = []
     for inf_code in (p.get("infracciones") or []):
+        inf_code = str(inf_code or "").strip()
+        if not inf_code:
+            continue
         res_inf = T.resolver_infraccion(inf_code)
-        if res_inf and res_inf[0]:
-            infr_list.append(res_inf[0])
-    infr = " / ".join(infr_list) if infr_list else ""
+        etiqueta = (res_inf[0] if res_inf and res_inf[0] else inf_code).strip()
+        if etiqueta and etiqueta not in infr_list:
+            infr_list.append(etiqueta)
+    infr = " / ".join(infr_list)
 
     return {"uid": p["_uid"], "estado": p["_estado"], "aviso": p["_aviso"], "errores": fat, "avisos": avi,
             "n_parte": p["n_parte"], "fecha_parte": p["fecha_parte"], "oficina": p.get("oficina", ""),

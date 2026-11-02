@@ -73,6 +73,7 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <input type="file" id="fileSes" accept=".partescan" hidden>
 <span id="estado" class="note"></span><span style="flex:1"></span>
 <button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">⚙ Juzgado</button><button id="btnNueva" title="Borra el lote de la pantalla y deja el programa en blanco para una tanda nueva (no cierra el programa)">🧹 Nueva tanda</button><button id="btnSalir">Cerrar programa</button></header>
+<datalist id="dlInf"></datalist>
 <div id="barAct" hidden style="background:#e8f1ff;border-bottom:1px solid #b6d0ff;padding:8px 16px;display:flex;gap:12px;align-items:center">
  <span id="actTxt" style="flex:1"></span><button class="p" id="actSi">Actualizar ahora</button><button id="actNo">Más tarde</button></div>
 
@@ -101,12 +102,13 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <div id="toast"></div>
 <script>
 const $=id=>document.getElementById(id);
-let ACT={}, PERFIL=null, OFICINAS_SIS=[];
+let ACT={}, PERFIL=null, OFICINAS_SIS=[], INFR=[];
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 async function cargarPerfil(){
   try{PERFIL=await (await fetch('/api/perfil')).json()}catch(e){return}
   ACT={}; for(let d=0;d<10;d++){const n=PERFIL.rol_actuario[String(d)]; ACT[d]=n?[n.charAt(0)+n.slice(1).toLowerCase(),PERFIL.actuarios[n]]:null}
   OFICINAS_SIS=PERFIL.oficinas;
+  try{INFR=await (await fetch('/api/infracciones')).json(); if($('dlInf')) $('dlInf').innerHTML=INFR.map(z=>'<option value="'+esc(z[0]+' · '+z[1])+'">').join('')}catch(e){}
   $('juz').textContent=PERFIL.juzgado;
   if(P.length&&!$('main').hidden){pintarTira();mostrar()}
 }
@@ -187,6 +189,48 @@ $('rol').oninput=()=>{try{localStorage.setItem('rol',$('rol').value)}catch(e){};
 
 /* ---------- campos ---------- */
 function folioBase(p){const L=p.infractores||[];return (L.length>1&&L[infIdx(p)]&&L[infIdx(p)].boleta)||p.folio||''}
+/* ---- Infracciones: agregar y quitar a mano con el botón + ---- */
+function bakeEdits(p){
+  p.items=p.items||[];
+  const ks=Object.keys(p.ed||{}).filter(k=>/^Infracción \d+ · código$/.test(k));
+  if(!p.items.length&&ks.length) p.items.push({x:{abrev:'',t:''},cod:'',estado:'check',nota:''});
+  p.items.forEach((x,i)=>{const k='Infracción '+(i+1)+' · código'; if(k in p.ed){x.cod=p.ed[k]; x.estado='ok'}});
+  Object.keys(p.ed||{}).filter(k=>k.startsWith('Infracción ')).forEach(k=>delete p.ed[k]);
+  Object.keys(p.done||{}).filter(k=>k.startsWith('Infracción ')).forEach(k=>delete p.done[k]);
+}
+function refrescarConScroll(){const y=window.scrollY; pintarTira(); mostrar(); window.scrollTo(0,y)}
+function buscarInfr(v){
+  v=(v||'').trim(); if(!v) return null;
+  const code=v.split(' · ')[0].trim();
+  return INFR.find(z=>String(z[0])===code)||INFR.find(z=>(z[0]+' · '+z[1])===v)||INFR.find(z=>String(z[1]).toLowerCase()===v.toLowerCase())||null;
+}
+function barraInfracciones(p){
+  p.items=p.items||[];
+  const d=document.createElement('div'); d.className='row'; d.style.display='block';
+  let h='<div class="lab" style="margin-bottom:6px">Agregar o quitar infracciones</div>';
+  p.items.forEach((x,i)=>{ h+='<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><span class="note" style="flex:1">'+(i+1)+' · '+esc(V(p,'Infracción '+(i+1)+' · código'))+' '+esc((x.x&&x.x.t)||x.nota||'')+'</span><button type="button" data-q="'+i+'">Quitar</button></div>'});
+  h+='<div style="display:flex;gap:8px;margin-top:8px"><input class="val" list="dlInf" id="infNueva" style="flex:1;width:auto" placeholder="Busca por código o por palabra (ej. 19 o amarilla)"><button class="p" type="button" id="infAgrega">+ Agregar infracción</button></div>';
+  d.innerHTML=h;
+  const agregar=()=>{
+    const hit=buscarInfr(d.querySelector('#infNueva').value);
+    if(!hit){toast('Elige una infracción de la lista');return}
+    if(p.items.some((x,i)=>String(V(p,'Infracción '+(i+1)+' · código'))===String(hit[0]))){toast('Esa infracción ya está en el parte');return}
+    bakeEdits(p);
+    if(p.items.length===1&&!String(p.items[0].cod||'').trim()) p.items.pop();
+    p.items.push({x:{abrev:String(hit[0]),t:hit[1]},cod:String(hit[0]),estado:'ok',nota:hit[1],manual:true});
+    if(!p.causa) p.causa=hit[1];
+    refrescarConScroll();
+  };
+  d.querySelectorAll('button[data-q]').forEach(b=>b.onclick=()=>{ bakeEdits(p); p.items.splice(+b.dataset.q,1); refrescarConScroll() });
+  d.querySelector('#infAgrega').onclick=agregar;
+  d.querySelector('#infNueva').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); agregar(); } });
+  return d;
+}
+function infrVigentes(p){
+  p.items=p.items||[];
+  const n=Math.max(p.items.length,1);
+  return Array.from({length:n},(_,i)=>V(p,'Infracción '+(i+1)+' · código')).filter(Boolean);
+}
 function folioReal(p){const e=p.ed&&p.ed['N° de boleta (folio)'];return String(e!==undefined?e:folioBase(p)).replace(/\D/g,'')}
 function infIdx(p){const e=p.ed&&p.ed['Infractor de esta copia (1, 2)'];const n=(e!==undefined&&e!=='')?(+e-1):(p.inf_idx0||0);const L=(p.infractores||[]).length;return L?Math.min(Math.max(n,0),L-1):0}
 function rolPrevisto(p){
@@ -284,6 +328,7 @@ function mostrar(){
       const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; p.ok[key]=true; pintarTira(); mostrar() };
       d.appendChild(r);
     });
+    if(s.t.startsWith('3 · Infracciones')) d.appendChild(barraInfracciones(p));
     F.appendChild(d);
   });
   $('ant').onclick=()=>ir(sel-1);$('sig').onclick=()=>ir(sel+1);$('ing').onclick=ingresado;
@@ -322,7 +367,7 @@ const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.orig
     oficina:p.origen==='mtt'?'Ministerio De Transportes':(p.origen==='carab'?(V(p,'Oficina emisora')||(PERFIL?PERFIL.oficina_carabineros:'')):(p.oficina||'')),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
     rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
     placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
-    infracciones:(p.items||[]).map(x=>x.cod).filter(Boolean),causa:p.causa||'',uid:P.indexOf(p),ingresado:!!p.fin});
+    infracciones:infrVigentes(p),causa:p.causa||'',uid:P.indexOf(p),ingresado:!!p.fin});
 $('btnTecleo').onclick=()=>{
   if(!P.length){toast('Primero carga los partes');return}
   const ord=P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0));

@@ -79,10 +79,25 @@ ok(exportar.sin_tildes("PIÑA CONCEPCIÓN ñuñoa") == "PIÑA CONCEPCION ñuñoa
 
 ok(catalogo.resolver_o_comodin("ñandú señalizado qzx")[0] == "ÑANDU SEÑALIZADO QZX", "la descripción conserva la Ñ y quita acentos")
 
-from parte_scan import extractor_carab  # noqa: E402
+from parte_scan import extractor_carab, semantica  # noqa: E402
 _inf = extractor_carab._infractor("JUAN PEREZ SOTO, 28 años, Run Nro. 11.111.111-1, domiciliado en el sector Ejemplo sin Nro., de Valdivia. "
                                   "DISPOSICION INFRINGIDA: Articulo Nro. 25 de la Ley 19.925, sobre expendio y consumo de bebidas alcoholicas.")
+ok(_inf[0] == "JUAN PEREZ SOTO", "nombre básico: %r" % (_inf[0],))
 ok(_inf[3] == "VALDIVIA" and "BEBIDAS" not in _inf[2], "la comuna no arrastra la «disposición infringida»: %r" % (_inf[2:4],))
+
+_inf = extractor_carab._infractor("|| INFRACTOR: «MARIA DE LOS ANGELES SAN MARTIN» Cédula de Identidad Nro. 11.111.111-1, "
+                                  "domiciliada en calle Uno 123, de Valdivia.")
+ok(_inf[0] == "MARIA DE LOS ANGELES SAN MARTIN", "nombre compuesto y ruido OCR: %r" % (_inf[0],))
+
+_inf = extractor_carab._infractor("JUAN PEREZ SOTO C.I. Nro. 11.111.111-1, 28 años, domiciliado en el sector Ejemplo sin Nro., de Valdivia.")
+ok(_inf[0] == "JUAN PEREZ SOTO" and _inf[1] == "11111111-1", "corte en C.I.: %r" % (_inf[0],))
+
+_txt = ("Personal de Guardia sorprendio a MARIA-JOSE DE LA FUENTE, 32 años, Run Nro. 11.111.111-1, "
+        "domiciliada en calle Dos 10, de Valdivia. DENUNCIANTE: CABO EJEMPLO.")
+_pers = semantica.personas(_txt)
+ok(_pers and _pers[0].upper().startswith("MARIA-JOSE DE LA FUENTE"), "personas() no arrastra el relato: %r" % (_pers[:1],))
+_inf = extractor_carab._infractor(_pers[0] if _pers else "")
+ok(_inf[0] == "MARIA-JOSE DE LA FUENTE", "fallback semantico deja el nombre limpio: %r" % (_inf[0],))
 
 for _ocr in ("DISPOSICION INFRINGIDA", "DISPOSICION INFRINCIDA", "DlSPOSICION INFRlNGIDA"):      # errores típicos del OCR
     _i = extractor_carab._infractor("JUAN PEREZ SOTO, Run Nro. 11.111.111-1, domiciliado en el sector Ejemplo sin Nro., de Valdivia. " + _ocr + ": Articulo 25 de la Ley 19.925")

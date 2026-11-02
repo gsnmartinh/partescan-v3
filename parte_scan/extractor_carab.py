@@ -220,10 +220,76 @@ def _extraer_multiples_infracciones(infr_texto):
     return lista_final if lista_final else [infr_texto]
 
 
+# Palabras que encabezan o rodean el nombre en el OCR y no forman parte de él.
+_ETIQUETA_NOMBRE = re.compile(
+    r"^(?:INFRACTOR(?:ES|A|AS)?(?:\s*\(A\))?|NOMBRE(?:\s+DEL?\s+INFRACTOR(?:A|ES)?)?|"
+    r"(?:EL|LA|LOS|LAS)\s+INFRACTOR(?:A|ES)?|"
+    r"SR\.?A?|SRA\.?|SRTA\.?|DON|DO[NÑ]A|SE[NÑ]OR(?:A|ITA)?)\s*[:.\-–—]?\s*",
+    re.I)
+_PARTICULA_NOM = {"DE", "DEL", "LA", "LAS", "LOS", "Y", "E", "DA", "DO", "SAN", "SANTA", "SANTO", "MC", "MAC"}
+_RX_TOKEN_NOM = re.compile(r"[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ'’\-]{0,}$")
+
+
 def _fin_nombre(s):
-    m = re.search(r"\bC[eé]d(?:ula)?\b|\bC\.?\s?I\.?\s*[:\d]|\bR\.?U\.?[NT]\.?\b|\bDNI\b|\bpasaporte\b|\bnacid\w|\bfecha\s+de\b|"
-                  r"\b\d{1,2}\s+a[ñn]os\b|\bdomicili\w|\bSituaci[oó]n\b|\b(?:" + NACION + r")\w*", s, re.I)
+    """Posición donde termina el nombre: cédula/RUT/DNI, edad, domicilio, nacionalidad u otros datos."""
+    m = re.search(
+        r"\bC[eé]d(?:\.|ula)?(?:\s+(?:nacional\s+)?(?:de\s+)?ident\w*)?\b|"
+        r"\bC\.?\s*N?\.?\s*I\.?\b\s*(?:Nro\.?|N[°º]|n[uú]mero)?\s*[:.\d]|"
+        r"\bR\.?\s*U\.?\s*[NT]\.?\b|"
+        r"\b(?:RUT|RUN|DNI|pasaporte|identificaci[oó]n)\b|"
+        r"\bnacid\w+|\bfecha\s+de\s+nac|"
+        r"\b\d{1,2}\s*a[ñn]os\b|\bde\s+edad\b|"
+        r"\bdomicili\w+|\bSituaci[oó]n\b|"
+        r"\bsexo\b|\bestado\s+civil\b|\bsolter[oa]\b|\bcasad[oa]\b|"
+        r"\b(?:" + NACION + r")\w*|"
+        r"\d{1,2}\s*[.,]\s*\d{3}\s*[.,]\s*\d{3}",
+        s, re.I)
     return m.start() if m else None
+
+
+def _tokens_nombre(bruto):
+    """Queda solo con palabras de un nombre chileno (compuestos, DE/DEL/SAN, guion)."""
+    bruto = re.sub(r"(?<=[A-Za-z])\*(?=[A-Za-z])", "U", bruto or "")
+    bruto = bruto.replace(",", " ")
+    bruto = re.sub(r"[|\\/_*=~<>\[\]{}()«»“”\"']+", " ", bruto)
+    toks = []
+    for w in re.split(r"\s+", bruto):
+        w = w.strip(" .;:`'’")
+        if not w:
+            continue
+        w = re.sub(r"[^A-Za-zÁÉÍÓÚÑáéíóúñ'’\-]", "", w)
+        if not w or not _RX_TOKEN_NOM.fullmatch(w):
+            if toks:
+                break
+            continue
+        nu = _norm(w)
+        if not toks and nu in {"O", "Y", "E", "A", "I", "EL", "LA", "UN", "UNA"}:
+            continue
+        toks.append(w)
+        if len(toks) >= 8:
+            break
+    while toks and _norm(toks[-1]) in _PARTICULA_NOM:
+        toks.pop()
+    while toks and _norm(toks[0]) in _PARTICULA_NOM and len(toks) > 2:
+        toks.pop(0)
+    if len(toks) < 2:
+        return ""
+    return limpiar(" ".join(toks)).upper()
+
+
+def _trozo_nombre(s):
+    """Nombre limpio hasta el marcador de cédula/edad/domicilio, sin basura de OCR ni rótulos."""
+    s = _ETIQUETA_NOMBRE.sub("", re.sub(r"^[\W\d_]+", "", s or "")).strip()
+    s = _ETIQUETA_NOMBRE.sub("", re.sub(r"^[\W\d_]+", "", s)).strip()
+    cut = _fin_nombre(s)
+    if cut is not None:
+        bruto = s[:cut]
+    else:
+        bruto = re.split(r"(?<!\b[A-ZÁÉÍÓÚÑ])\.(?=\s|$)", s, 1)[0]
+        m = re.search(r",\s*(?:\d|\b(?:domicili|c[eé]d|r\.?u\.?[nt]|run|rut|dni)\b)", bruto, re.I)
+        if m:
+            bruto = bruto[:m.start()]
+    return _tokens_nombre(bruto)
 
 
 def _infractor(texto_inf):
@@ -232,8 +298,7 @@ def _infractor(texto_inf):
     if not s or re.match(r"(?:por\s+escrito|ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
     s = re.split(r"\bD[I1l]SP\.?\s*[I1l]NFR\w*|\bD[I1l]SP[O0]S[I1lÍ]C[I1l][OÓ0]N\s+[I1l]NFR\w*", s, 1, flags=re.I)[0].strip()
-    cut = _fin_nombre(s)
-    nombre = limpiar((s[:cut] if cut else s.split(".")[0]).replace(",", " ")).upper()
+    nombre = _trozo_nombre(s)
     rut, leido, aviso = "", "", ""
     mr = re.search(r"(?:R\.?U\.?[NT]\.?|C\.?\s?I\.?|c[eé]d(?:ula)?\.?\s*(?:(?:nacional\s+)?de\s+)?(?:ident\w*)?|ident\w*)\.?\s*(?:Nro\.?|N[°º]|n[uú]mero)?\s*:?\s*"
                    r"(\d{1,2}\s*[.,]?\s*\d{3}\s*[.,]?\s*\d{3})\s*[-–—]\s*([\dKk])", s, re.I)
@@ -408,7 +473,15 @@ def parte(texto):
     if len(boletas) == len(infractores) > 1:
         for x, bol in zip(infractores, boletas):
             x["boleta"] = bol
-    pers = [x for x in (_infractor(p) for p in SM.personas(texto)) if x[0]]
+    pers = []
+    for bloque in SM.personas(texto):
+        x = _infractor(bloque)
+        if not x[0]:
+            cab = _trozo_nombre((bloque.split(",")[0] if "," in bloque else bloque))
+            if cab:
+                x = (cab,) + x[1:]
+        if x[0]:
+            pers.append(x)
     if not nombre and pers:
         nombre, rut, direccion, comuna, aviso_inf, rut_leido = pers[0]
     if len(pers) > len(infractores):

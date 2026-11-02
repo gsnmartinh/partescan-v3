@@ -60,6 +60,12 @@ tecleador.cargar([reg(0, "1", "1", placa="TV0880")])
 f = tecleador.estado()["partes"][0]
 ok(f["placa"] == "TV0880" and not any("placa" in a for a in f["avisos"]), "patente de moto de 6 caracteres")
 
+# 3b) varias infracciones se muestran unidas con « / » en la tabla
+tecleador.LISTA.clear()
+tecleador.cargar([reg(0, "1", "1", infracciones=["300", "19"])])
+f = tecleador.estado()["partes"][0]
+ok(" / " in (f.get("infraccion") or ""), "varias infracciones van unidas con / : %r" % f.get("infraccion"))
+
 # 4) marca vacía y tipo AUTOMOVIL: sin errores ni avisos
 tecleador.LISTA.clear()          # escenario nuevo: lista limpia
 tecleador.cargar([reg(0, "1", "1", placa="ABCD12", tipo_vehiculo="AUTOMOVIL", marca="")])
