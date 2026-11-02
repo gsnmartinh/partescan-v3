@@ -369,7 +369,7 @@ const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>f.st==='check'&&!(f.
 function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
 const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
     boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
-    oficina:p.origen==='mtt'?'Ministerio De Transportes':(p.origen==='carab'?(V(p,'Oficina emisora')||(PERFIL?PERFIL.oficina_carabineros:'')):(p.oficina||'')),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
+    oficina:p.origen==='mtt'?'Ministerio De Transportes':(p.origen==='carab'?(V(p,'Oficina emisora')||(PERFIL?PERFIL.oficina_carabineros:'')):V(p,'Oficina emisora')),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
     rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
     placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
     infracciones:infrVigentes(p),causa:p.causa||'',uid:P.indexOf(p),ingresado:!!p.fin});
