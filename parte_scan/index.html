@@ -81,7 +81,7 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
  <label>Rol Disponible (rol del primer parte)<input id="rol" inputmode="numeric" placeholder="ej. 19952"></label>
  <label>Fecha de citación del lote<input id="cit" placeholder="dd/mm/aaaa"></label>
  <label>Fecha de ingreso (hoy)<input id="hoy" readonly></label>
-<button class="p" id="btnTec" title="Teclea los partes en el sistema del Juzgado desde esta misma ventana: si un dato está mal, lo corriges y sigues">Teclear in el sistema…</button>
+<button class="p" id="btnTec" title="Teclea los partes en el sistema del Juzgado desde esta misma ventana: si un dato está mal, lo corriges y sigues">Teclear en el sistema…</button>
 <button id="btnTecleo" title="Guarda el archivo que abre PartesTeclea para ingresar los partes en el sistema">Guardar datos para tecleo (.json)</button>
  <small style="max-width:520px">El rol es opcional: sirve para mostrar el actuario previsto. La fecha de citación se propone con la que más se repite en el lote. Al terminar, tecléalos desde aquí mismo con «Teclear en el sistema…» (el .json queda como alternativa para PartesTeclea).</small>
 </div>
@@ -232,9 +232,9 @@ function infrVigentes(p){
 function folioReal(p){const e=p.ed&&p.ed['N° de boleta (folio)'];return String(e!==undefined?e:folioBase(p)).replace(/\D/g,'')}
 function infIdx(p){const e=p.ed&&p.ed['Infractor de esta copia (1, 2)'];const n=(e!==undefined&&e!=='')?(+e-1):(p.inf_idx0||0);const L=(p.infractores||[]).length;return L?Math.min(Math.max(n,0),L-1):0}
 function rolPrevisto(p){
-  const rol0=+($('rol').value.replace(/\D/g,''))||0; if(!rol0) return 0;
-  const ord=P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0));
-  return rol0+ord.indexOf(p);
+  const rol0 = +($('rol').value.replace(/\D/g,'')) || 0;
+  if(!rol0) return 0;
+  return rol0 + P.indexOf(p);
 }
 function campos(p){
   const rp=rolPrevisto(p), rol=rp?String(rp):'', lote=$('cit').value.trim();
@@ -375,7 +375,7 @@ const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.orig
     infracciones:infrVigentes(p),causa:p.causa||'',uid:P.indexOf(p),ingresado:!!p.fin});
 $('btnTecleo').onclick=()=>{
   if(!P.length){toast('Primero carga los partes');return}
-  const ord=P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0));
+  const ord = P.slice();
   const reg=regTecleo;
   const d0=new Date(), z=n=>String(n).padStart(2,'0');
   const nomJson='partes-para-tecleo_'+d0.getFullYear()+'-'+z(d0.getMonth()+1)+'-'+z(d0.getDate())+'_'+z(d0.getHours())+z(d0.getMinutes())+'_'+ord.length+'partes.json';
@@ -481,7 +481,7 @@ const TXT_EST={pendiente:'Pendiente',tecleando:'Tecleando…',tecleado:'Por acep
 let tNlog=0,tTimer=null;
 async function tecPost(ruta,cuerpo){ const r=await fetch('/api/tecleo/'+ruta,{method:'POST',body:JSON.stringify(cuerpo||{})}); return r.json(); }
 async function tecEnviar(){
-  const ord=P.slice().sort((a,b)=>(+folioReal(a)||0)-(+folioReal(b)||0));
+  const ord = P.slice();
   const j=await tecPost('cargar',{partes:ord.map(regTecleo)});
   const av=$('tAviso'); if(j.error){av.textContent=j.error;av.hidden=false}else av.hidden=true;
 }
@@ -505,7 +505,7 @@ function tecPintar(r){
 }
 async function tecSondear(){ try{ tecPintar(await (await fetch('/api/tecleo/estado?desde='+tNlog)).json()) }catch(e){} }
 async function tecIniciar(uids){
-  const j=await tecPost('iniciar',{uids:uids||null,auto:$('tAuto').checked,actuario:$('tAct}.value});
+  const j=await tecPost('iniciar',{uids:uids||null,auto:$('tAuto').checked,actuario:$('tAct').value});
   if(j.error){alert(j.error);return}
   tecSondear();
 }
