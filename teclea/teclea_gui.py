@@ -862,7 +862,7 @@ class App:
                             on_estado=lambda i, e, d="": self.q.put(("parte", i, e, d)),
                             aceptar_auto=auto)
         except T.Detener as e:
-            self.q.put(("log", f"[detenido] {e}\nNo se hizo clic en nada."))
+            self.q.put(("log", f"[detenido] {e}\nLa ejecucion se detuvo. Revisa el estado de la causa en el sistema antes de reintentar."))
         except Exception:
             self.q.put(("log", "[error inesperado]\n" + traceback.format_exc()))
         finally:

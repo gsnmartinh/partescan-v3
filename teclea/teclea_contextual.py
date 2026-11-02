@@ -800,18 +800,22 @@ class Sistema:
         return all(not self.leer_id(i).strip() for i in (14, 10, 159, 190, 189))
 
     def aceptar(self):
-        """Presiona el Aceptar del formulario (id 40) con un clic enviado al boton. Solo en modo automatico."""
-        h = self.ids.get(40)
-        if not h or not user32.IsWindowEnabled(h) or not user32.IsWindowVisible(h) or rect(h)[0] <= -900:
-            raise Detener("El boton Aceptar no esta disponible (ficha abierta u otra ventana encima). "
-                          "Acepta tu el parte.")
-        l, t, r, b = rect(h)
-        lp = ((b - t) // 2 << 16) | ((r - l) // 2)
+        """Activa Aceptar con Espacio, con el foco comprobado en el boton."""
         self.asegurar_primer_plano()
-        user32.PostMessageW(h, 0x0201, 1, lp)      # WM_LBUTTONDOWN
-        time.sleep(0.08)
-        user32.PostMessageW(h, 0x0202, 0, lp)      # WM_LBUTTONUP
-        print("  [auto] Aceptar presionado.")
+        revisar_teclas()
+        self.chequear_avisos()
+        h = self.ids.get(40)
+        if (not h or not user32.IsWindow(h) or not user32.IsWindowEnabled(h)
+                or not user32.IsWindowVisible(h) or rect(h)[0] <= -900
+                or clase(h) != "ThunderRT6CommandButton"
+                or limpiar(leer(h)).replace("&", "").strip().lower() != "aceptar"):
+            raise Detener("El boton Aceptar no esta disponible o no coincide con el esperado. Revisa la pantalla.")
+        dar_foco(h)
+        pausa(0.15)
+        if foco_actual() != h:
+            raise Detener("No pude enfocar el boton Aceptar. No envie la pulsacion.")
+        self.tecla("{SPACE}")
+        print("  [auto] Activacion de Aceptar enviada; falta confirmar el guardado.")
 
     def esperar_vacio(self, mensaje, vigilar=False):
         avisado = False
@@ -823,7 +827,7 @@ class Sistema:
             if vigilar:
                 self.chequear_avisos()          # ej. folio repetido: se detiene sin tocar nada
                 if time.time() - t_ini > 20 and not self.formulario_vacio():
-                    raise Detener("Presione Aceptar pero el formulario no se vacio.")
+                    raise Detener("Se solicito Aceptar, pero no se confirmo el guardado en 20 segundos. Revisa si el sistema guardo la causa antes de repetirla.")
             if self.formulario_vacio():
                 return
             if not avisado:

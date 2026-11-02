@@ -155,7 +155,7 @@ def _trabajo(T, idx, auto):
         sis = T.Sistema()
         T.procesar_lote(sis, LISTA, idx, on_estado=_on_estado, aceptar_auto=auto)
     except T.Detener as e:
-        _log("[detenido] %s\nNo se hizo clic en nada." % e)
+        _log("[detenido] %s\nLa ejecucion se detuvo. Revisa el estado de la causa en el sistema antes de reintentar." % e)
     except Exception:       # noqa: BLE001
         _log("[error inesperado]\n" + traceback.format_exc())
     finally:
