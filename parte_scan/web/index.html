@@ -509,6 +509,7 @@ async function tecEnviar(){
   const ord = P.slice();
   const j=await tecPost('cargar',{partes:ord.map(regTecleo)});
   const av=$('tAviso'); if(j.error){av.textContent=j.error;av.hidden=false}else av.hidden=true;
+  return j;
 }
 function tecPintar(r){
   const lg=$('tLog'); if(r.log.length){lg.textContent+=r.log.join('\n')+'\n'; lg.scrollTop=lg.scrollHeight}
@@ -552,6 +553,8 @@ async function tecMarcar(uid,estado){
 }
 async function tecIniciar(uids){
   if(tMarcando) return;
+  const carga=await tecEnviar();
+  if(carga.error) return;
   const j=await tecPost('iniciar',{uids:uids||null,auto:$('tAuto').checked,actuario:$('tAct').value});
   if(j.error){alert(j.error);return}
   tecSondear();
@@ -569,7 +572,8 @@ $('dlgTec').addEventListener('close',()=>clearInterval(tTimer));
 $('btnTec').onclick=async()=>{
   if(!P.length){toast('Primero carga los partes');return}
   $('tLog').textContent=''; tNlog=0;
-  await tecEnviar(); await tecSondear();
+  const carga=await tecEnviar(); if(carga.error) return;
+  await tecSondear();
   $('dlgTec').showModal(); clearInterval(tTimer); tTimer=setInterval(tecSondear,700);
 };
 </script></body></html>
