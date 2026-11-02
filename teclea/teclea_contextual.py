@@ -1503,17 +1503,22 @@ def procesar_lote(sis, partes, indices, on_estado=None, aceptar_auto=False):
             avisar(i, "interrumpido", str(e))
             raise
         avisar(i, "tecleado", " | ".join(sis.avisos))
-        print(f"\nParte {i + 1} listo. Revisa la pantalla y presiona Aceptar TU (yo no lo hago).")
         for a in sis.avisos:
             print(f"  [revisa] {a}")
-        if aceptar_auto and not sis.avisos:
-            sis.aceptar()
-            sis.esperar_vacio("Esperando que el sistema termine de ingresar el parte...", vigilar=True)
-        else:
+        try:
             if aceptar_auto:
-                print("  [auto] Hay avisos en este parte: no lo acepto solo. Revisalo y acepta tu.")
-            sis.esperar_vacio("Esperando que aceptes (o canceles) el parte. Cuando el formulario quede vacio "
-                              "sigo con el siguiente. F8 = seguir igual.")
+                print(f"\nParte {i + 1} listo. Aceptando automaticamente...")
+                revisar_teclas()
+                sis.chequear_avisos()
+                sis.aceptar()
+                sis.esperar_vacio("Esperando que el sistema termine de ingresar el parte...", vigilar=True)
+            else:
+                print(f"\nParte {i + 1} listo. Revisa la pantalla y presiona Aceptar TU.")
+                sis.esperar_vacio("Esperando que aceptes (o canceles) el parte. Cuando el formulario quede vacio "
+                                  "sigo con el siguiente. F8 = seguir igual.")
+        except Detener as e:
+            avisar(i, "interrumpido", str(e))
+            raise
         ahora = re.sub(r"\D", "", sis.leer_id(11))
         # Al aceptar, el sistema pasa al Rol siguiente; si el Rol no cambio, el parte se cancelo.
         if sis.rol_usado and ahora and ahora == sis.rol_usado:
@@ -1532,7 +1537,7 @@ def main():
     ap.add_argument("--tipo", default="", help="forzar el tipo de vehiculo (ej. 'STATION WAGON') en todos los partes")
     ap.add_argument("--marca", default="", help="forzar la marca del vehiculo (ej. HONDA) en todos los partes")
     ap.add_argument("--aceptar", action="store_true",
-                    help="presionar Aceptar solo al terminar cada parte (si no hay avisos); por defecto lo haces tu")
+                    help="presionar Aceptar al terminar cada parte y continuar el lote; por defecto lo haces tu")
     ap.add_argument("--ensayo", action="store_true", help="solo mostrar que se tecleara; no toca el sistema")
     args = ap.parse_args()
     try:

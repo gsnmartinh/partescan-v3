@@ -95,7 +95,7 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <small>Abre en el sistema la pantalla de ingreso («Procesos…»), deja el cursor en Rol y pulsa «Teclear pendientes»; después haz clic en la ventana del sistema. ESC detiene. Si un dato está mal, pulsa «Corregir», arréglalo y vuelve aquí: lo ya ingresado no se pierde. Si comprobaste que un parte ya se guardó, pulsa «Confirmar ingreso»; «Volver a pendiente» permite ingresarlo nuevamente. Estas acciones se habilitan al terminar o detener el tecleo.</small>
 <div class="rowa" style="align-items:center;flex-wrap:wrap;margin:10px 0">
 <label style="flex-direction:row;align-items:center;gap:6px">Actuario <select id="tAct" class="val" style="width:auto"><option value="">Automático (según el Rol)</option></select></label>
-<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tAuto" style="width:auto"> Aceptar automáticamente (solo partes sin avisos)</label>
+<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tAuto" style="width:auto"> Aceptar automáticamente y continuar con todas las causas</label>
 <button class="p" id="tIniciar">Teclear pendientes</button><button id="tDetener">Detener</button><span id="tResumen" class="note"></span></div>
 <div style="overflow:auto"><table id="tTabla"></table></div>
 <h3>Registro</h3><pre id="tLog" style="max-height:200px;overflow:auto;background:var(--blb);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap"></pre></div></dialog>
