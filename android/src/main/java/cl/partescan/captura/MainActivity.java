@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.ImageDecoder;
 import android.graphics.Rect;
+import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.pdf.PdfDocument;
 import android.os.Bundle;
@@ -298,27 +299,53 @@ public class MainActivity extends Activity {
             }
         }
         if (lines.isEmpty()) return recognized.getText();
-        lines.sort(Comparator.comparingInt(line -> line.getBoundingBox().centerY()));
+        int[] votes = new int[4];
+        for (Text.Line line : lines) {
+            Point[] corners = line.getCornerPoints();
+            if (corners == null || corners.length < 2) continue;
+            double angle = Math.atan2(corners[1].y - corners[0].y, corners[1].x - corners[0].x);
+            int turn = Math.floorMod((int) Math.round(angle / (Math.PI / 2)), 4);
+            votes[turn] += line.getText().length();
+        }
+        int dominant = 0;
+        for (int i = 1; i < votes.length; i++) {
+            if (votes[i] > votes[dominant]) dominant = i;
+        }
+        final int turn = dominant;
+        lines.sort(Comparator.comparingInt(line -> rowPosition(line.getBoundingBox(), turn)));
 
         StringBuilder text = new StringBuilder();
         ArrayList<Text.Line> row = new ArrayList<>();
         Rect anchor = lines.get(0).getBoundingBox();
         for (Text.Line line : lines) {
             Rect box = line.getBoundingBox();
-            int tolerance = Math.max(1, Math.min(anchor.height(), box.height()) / 2);
-            if (box.centerY() - anchor.centerY() > tolerance) {
-                appendRow(text, row);
+            int tolerance = Math.max(1, Math.min(rowHeight(anchor, turn), rowHeight(box, turn)) / 2);
+            if (rowPosition(box, turn) - rowPosition(anchor, turn) > tolerance) {
+                appendRow(text, row, turn);
                 row.clear();
                 anchor = box;
             }
             row.add(line);
         }
-        appendRow(text, row);
+        appendRow(text, row, turn);
         return text.toString();
     }
 
-    private static void appendRow(StringBuilder text, ArrayList<Text.Line> row) {
-        row.sort(Comparator.comparingInt(line -> line.getBoundingBox().left));
+    private static int rowHeight(Rect box, int turn) {
+        return turn % 2 == 0 ? box.height() : box.width();
+    }
+
+    private static int rowPosition(Rect box, int turn) {
+        switch (turn) {
+            case 1: return -box.centerX();
+            case 2: return -box.centerY();
+            case 3: return box.centerX();
+            default: return box.centerY();
+        }
+    }
+
+    private static void appendRow(StringBuilder text, ArrayList<Text.Line> row, int turn) {
+        row.sort(Comparator.comparingInt(line -> rowPosition(line.getBoundingBox(), (turn + 3) % 4)));
         for (int i = 0; i < row.size(); i++) {
             if (i > 0) text.append(' ');
             text.append(row.get(i).getText());
