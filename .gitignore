@@ -1,4 +1,30 @@
 __pycache__/
-*.pyc
-/build/
-/dist/
+*.py[cod]
+
+# Entornos y cachés locales
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Salidas de PyInstaller, instalador y releases
+build/
+dist/
+/salida/
+/ParteScan-Windows-*.zip
+/PartesTeclea-Windows-*.zip
+/teclea/prueba.txt
+
+# Diagnósticos y grabaciones locales (pueden contener datos personales)
+/herramientas/diagnostico.txt
+/herramientas/grabacion_ingreso.txt
+/herramientas/grabadora_fallo.txt
+/herramientas/recorrido_tab.txt
+
+# Configuración privada local; conservar ejemplos si se agregan
+.env
+.env.*
+!.env.example
