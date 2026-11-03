@@ -134,4 +134,46 @@ def parte(t):
     m = re.search(r"ART\.?\s*(\d+)(?:\s*N\W{0,2}\s*(\d+))?", l, re.I)
     o["articulo"] = (m.group(1) + (" N°" + m.group(2) if m.group(2) else "")) if m else ""
     o["avisos"] = av
+    _, infractor = primera(L, r"^\W*Infractor\b")
+    _, domicilio = primera(L, r"^\W*Domiciliad[oa]\s+en\s+calle\b")
+    rut = re.search(r"\b\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK]\b", infractor, re.I)
+    nombre = infractor[:rut.start()] if rut else infractor
+    nombre = re.sub(r"\s+C\s*\.?\s*[IL1]\s*\.?\s*$", "", nombre, flags=re.I)
+    o["persona"] = {
+        "nombre": limpiar(re.sub(r"^\W*Infractor\b", "", nombre, flags=re.I)),
+        "rut": re.sub(r"\s+", "", rut.group()) if rut else "",
+        "direccion": limpiar(re.sub(r"^\W*Domiciliad[oa]\s+en\s+calle\b", "", domicilio, flags=re.I)),
+    }
     return o
+
+
+def es_dom(texto):
+    return bool(re.search(r"direcci[oó]n\s+de\s+obras\s+municipales", texto, re.I)
+                and re.search(r"^\W*citaci[oó]n\s+N", texto, re.I | re.M))
+
+
+def parte_dom(texto):
+    lineas = [l.strip() for l in texto.splitlines() if l.strip()]
+    _, encabezado = primera(lineas, r"^\W*citaci[oó]n\s+N")
+    _, fecha = primera(lineas, r"^Valdivia\b")
+    _, hecho = primera(lineas, r"Doy cuenta")
+    i, lugar = primera(lineas, r"notificado\s+en\s+calle")
+    j, citacion = primera(lineas, r"citado\s+a\s+comparecer")
+    _, disposicion = primera(lineas, r"disposici[oó]n\s+infringida")
+    datos = lineas[i + 1:j] if 0 <= i < j else []
+    idx, persona = primera(datos, r"\b\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK]\b")
+    rut = re.search(r"\b\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK]\b", persona, re.I)
+    infraccion = " ".join(datos[:idx] if idx >= 0 else datos)
+    infraccion = limpiar(re.sub(r"^.*[|”]\s*", "", infraccion))
+    articulo = re.search(r"\bArt\.?\s*([\d.]+)", disposicion, re.I)
+    folio = re.search(r"\d+", encabezado)
+    return {
+        "departamento": "Dirección de Obras Municipales", "n_parte_final": folio.group() if folio else "",
+        "fecha_parte": fecha_de(fecha), "fecha_infraccion": fecha_de(hecho),
+        "hora_infraccion": hora_de(hecho), "lugar": limpiar(re.sub(r"^.*?notificado\s+en\s+calle\s+", "", lugar, flags=re.I)),
+        "infraccion_texto": infraccion, "fecha_citacion": fecha_de(citacion), "hora_citacion": hora_de(citacion),
+        "articulo": articulo.group(1).rstrip(".") if articulo else "", "avisos": [],
+        "placa": "", "marca": "", "tipo_vehiculo": "",
+        "persona": {"rut": rut.group() if rut else "", "nombre": limpiar(persona[:rut.start()]) if rut else "",
+                    "direccion": limpiar(datos[idx + 1]) if 0 <= idx < len(datos) - 1 else ""},
+    }

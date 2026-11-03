@@ -19,16 +19,16 @@ CODIGOS = {
     "SEGURO": "92", "PERMISO": "37", "REVISION": "33", "CELULAR": "54", "ROJA": "91", "RUIDOS": "350",
     "CHOQUE": "500", "COLISION": "57", "ANIMALES": "62", "FACILITAR": "649", "ESPE": "461", "BNUP": "604",
     "LOCAL": "480", "AMBU": "503", "PARAB": "75", "PUER": "632", "LUCES": "58", "PESO": "630",
-    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65",
+    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65", "DOM": "497",
 }
 # Parecidas pero no idénticas: se proponen con el código, pidiendo confirmar.
 CODIGOS_CONFIRMAR = {"SINL": "66"}
 
-# Cuando el parte nombra varias infracciones de estacionamiento, vale la más específica
-# (ej.: «línea amarilla, sobre acera» = solo ACERA, 48).
+# La infracción más específica se propone primero para la revisión.
+PARADERO = r"\b(?:PARADERO|PARADA\s+DE\s+LOCOMOCION\s+COLECTIVA)\b"
 ESPECIFICAS = [(r"\b(?:ACERA|PLATABANDA)\b", "48"), (r"\bESQUINA", "ESQUINA"), (r"DOBLE FILA", "DOBLE"),
                (r"PASO PEATONAL|PASO DE PEATONES|PASO CEBRA", "PASO"), (r"\bGRIFO", "GRIFO"),
-               (r"AREA VERDE", "AREA"), (r"PARADERO", "PARAD"), (r"SIGNO PARE|SENAL PARE|DISCO PARE", "PARE"),
+               (r"AREA VERDE", "AREA"), (PARADERO, "PARAD"), (r"SIGNO PARE|SENAL PARE|DISCO PARE", "PARE"),
                (r"DISCAPACIT|MINUSVALID", "DISCA")]
 
 
@@ -120,9 +120,16 @@ def crear_item(x):
             "nota": "Palabra sugerida «%s». Confirma que el sistema muestra «%s»." % (w, x["t"])}
 
 
+def actividad_sin_patente(texto):
+    return bool(re.search(r"\bACTIVIDAD\s+COMERCIAL\s+SIN\s*(?:PATENTE|PERMISO)\s*MUNI?C?I?PAL\b", sin_tildes(texto)))
+
+
 def resolver(texto):
     """Devuelve (descripcion_causa, [items]) a partir del texto de la infracción del parte."""
     T = sin_tildes(texto)
+    if actividad_sin_patente(T):
+        concepto = por_abrev("LOCAL")
+        return concepto["t"], [crear_item(concepto)]
 
     def tres():
         return [crear_item(por_abrev(a)) for a in ("SEGURO", "PERMISO", "REVISION")]
@@ -142,7 +149,8 @@ def resolver(texto):
         it = crear_item(por_abrev("BEBER"))
         return por_abrev("BEBER")["t"], [it]
     if "ESTACION" in T and not re.search(r"GARAJE|FRENTE A (LAS )?PUERTAS|ENTRADA Y SALIDA|SENTIDO CONTRARIO|COSTADO IZQ|CEDA EL PASO|"
-                                         r"ACERA|\bPLATABANDA\b|ESQUINA|DOBLE FILA|PASO (PEATONAL|DE PEATONES|CEBRA)|GRIFO|AREA VERDE|PARADERO|"
+                                         r"ACERA|\bPLATABANDA\b|ESQUINA|DOBLE FILA|PASO (PEATONAL|DE PEATONES|CEBRA)|GRIFO|AREA VERDE|"
+                                         + PARADERO + r"|"
                                          r"DISCAPACIT|MINUSVALID|SENAL PARE|SIGNO PARE|DISCO PARE", T) \
             and re.search(r"AMARILL|DEMARC|CICLOV|CICLO VIA|SITIO PROHIBIDO|PROHIBID|SENALIZ|SOLERA|PINTAD|ZONA", T):
         # todo estacionamiento que no tiene su propia opción (línea amarilla, ciclovía, zona demarcada…) va como sitio prohibido y señalizado
@@ -204,6 +212,17 @@ def resolver_o_comodin(texto):
     descripción lo que dice el parte. Devuelve (descripcion, [items], es_comodin)."""
     causa, items = resolver(texto)
     if items:
+        if len(items) == 1:
+            causa = perfil.infracciones().get(str(items[0]["cod"])) or causa
+        t = sin_tildes(texto)
+        if "ESTACION" in t:
+            opciones = [a for patron, a in ESPECIFICAS if re.search(patron, t)]
+            if re.search(r"LINEA\s+AMARILLA|(?:LUGAR|SITIO)\s+PROHIBIDO", t):
+                opciones.append("19")
+            if len(opciones) > 1:
+                codigos = ", ".join(CODIGOS[a] for a in opciones)
+                items[0]["estado"] = "check"
+                items[0]["nota"] = f"Verifica la fotografía antes de confirmar. Posibles infracciones de estacionamiento: {codigos}."
         return causa, items, False
     cod = comodin()
     nombre = perfil.infracciones().get(cod) or perfil.infracciones().get(int(cod) if cod.isdigit() else cod, "")

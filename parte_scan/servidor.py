@@ -4,7 +4,7 @@ import io, json, os, sys, zipfile, time, queue, re, shutil, tempfile, threading,
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
+from . import actualizador, catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
 
 WEB = os.path.join(motor._base(), "parte_scan", "web")
 if not os.path.isdir(WEB):
@@ -16,6 +16,11 @@ COLA = queue.Queue()
 ESTADO = {"pendientes": 0, "error": ""}
 LOCK = threading.Lock()
 TMP = tempfile.mkdtemp(prefix="partescan_")
+
+
+def comprobar_actualizacion_segura():
+    if ESTADO["pendientes"] or tecleador.corriendo():
+        raise ValueError("Termina el escaneo y el tecleo antes de instalar la actualización.")
 
 
 def hora(h):
@@ -30,6 +35,7 @@ def orden_natural(text):
 
 def armar(r, archivo, pagina, pid):
     causa, items, comodin = catalogo.resolver_o_comodin(r["infraccion_texto"])
+    escrito = not r["placa"] and catalogo.actividad_sin_patente(r["infraccion_texto"])
     avisos = list(r["avisos"])
     if comodin:
         avisos.append("No reconocí la infracción: se ingresará con el código %s y la descripción dirá lo que dice el parte. "
@@ -44,9 +50,11 @@ def armar(r, archivo, pagina, pid):
         "fecha_citacion": r["fecha_citacion"], "hora_citacion": r["hora_citacion"],
         "articulo": r["articulo"], "avisos": avisos, "causa": causa, "causa_literal": comodin,
         "items": [{"cod": i["cod"], "estado": i["estado"], "nota": i["nota"]} for i in items],
-        "cert": {"rut": "", "nombre": "", "direccion": "", "comuna": "", "marca": "", "modelo": "",
+        "cert": {"rut": "", "nombre": "", "direccion": "", "comuna": perfil.cargar()["comuna"] if escrito else "", "marca": "", "modelo": "",
+                 **(r.get("persona", {}) if escrito else {}),
                  "tipo_vehiculo": "", "dv_placa": "", "anio": "", "color": ""},
-        "cert_avisos": ["Falta el certificado del Registro Civil de este parte."],
+        "parte_escrito": escrito,
+        "cert_avisos": [] if escrito else ["Falta el certificado del Registro Civil de este parte."],
     }
 
 
@@ -163,6 +171,16 @@ def trabajador():
                             IMAGENES[pid] = img
                             ultimo = armar(r, nombre, n, pid)
                             PARTES.append(ultimo)
+                    elif tipo == "dom":
+                        r = motor.extractor.parte_dom(texto)
+                        r["oficina"] = perfil.oficinas().get("31", "31")
+                        with LOCK:
+                            pid = len(IMAGENES) + 1
+                            IMAGENES[pid] = img
+                            ultimo = armar(r, nombre, n, pid)
+                            ultimo.update(origen="dom", tiene_vehiculo=False, cert_avisos=[])
+                            ultimo["cert"].update(r["persona"], comuna=perfil.cargar()["comuna"])
+                            PARTES.append(ultimo)
                     elif tipo == "mtt":
                         r = extractor_mtt.parte(texto, motor.leer_celdas(g))
                         with LOCK:
@@ -182,7 +200,7 @@ def trabajador():
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
-                            if ultimo is not None and ultimo["img_cert"] == 0:
+                            if ultimo is not None and not ultimo.get("parte_escrito") and ultimo["img_cert"] == 0:
                                 aplicar_certificado(ultimo, c, pid)
                             else:
                                 ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
@@ -226,6 +244,8 @@ class H(BaseHTTPRequestHandler):
                                         "partes": PARTES})
         if u.path == "/api/sesion/ultima":
             return self._send(200, info_sesion_auto())
+        if u.path == "/api/actualizacion":
+            return self._send(200, actualizador.estado())
         if u.path == "/api/infracciones":
             lista = perfil.infracciones()
             ordenadas = sorted(([c, d] for c, d in lista.items()),
@@ -255,6 +275,18 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == "/api/actualizacion":
+            if self.headers.get("X-ParteScan-Actualizar") != "1":
+                return self._send(403, {"error": "Solicitud de actualización no válida."})
+            try:
+                comprobar_actualizacion_segura()
+                actualizador.iniciar(
+                    diferencial=parse_qs(u.query).get("completa") != ["1"],
+                    antes_de_cerrar=comprobar_actualizacion_segura,
+                )
+                return self._send(202, {"ok": True})
+            except ValueError as e:
+                return self._send(400, {"error": str(e)})
         if u.path == "/api/subir":
             nombre = parse_qs(u.query).get("nombre", ["archivo"])[0]
             n = int(self.headers.get("Content-Length", 0))
@@ -500,6 +532,7 @@ def _abrir_ventana(url):
 
 def main():
     _registro_en_archivo()
+    actualizador.revisar_en_segundo_plano()
     threading.Thread(target=trabajador, daemon=True).start()
     for puerto in range(8765, 8785):
         try:

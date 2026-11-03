@@ -1,10 +1,18 @@
-**ParteScan v3**: lee los partes escaneados (OCR local, sin internet) y los **teclea en el sistema del Juzgado**, todo en una sola aplicación de escritorio.
+**ParteScan v4.0.0** lee los partes escaneados con OCR local y los teclea en el sistema del Juzgado desde una sola ventana.
 
 **Instalación (recomendada):** descarga `ParteScan-Instalador-…exe` en *Assets*, ejecútalo y sigue el asistente. No pide permisos de administrador y crea el acceso directo.
 Si Windows muestra «Windows protegió su PC»: *Más información → Ejecutar de todas formas* (el programa no está firmado).
 También hay un `.zip` portátil (se descomprime completo y se abre `ParteScan.exe`).
 
-**Actualizaciones automáticas:** si hay internet, al abrir el programa avisa cuando hay una versión nueva y se actualiza con un botón, conservando tu perfil y tus sesiones. Sin internet funciona igual.
+**Actualizaciones diferenciales.** Instala v4.0.0 en la ubicación predeterminada. Cuando haya una versión compatible, el botón **Actualizar ParteScan** descarga los archivos modificados, verifica sus huellas y reinicia la aplicación. El perfil y las sesiones se conservan.
+
+**Novedades de v4.0.0**
+
+- Reconoce el formulario DOM con oficina 31 y código 497 para ejecución de obra sin permiso.
+- Completa el denunciado desde los partes escritos por actividad comercial sin patente y asigna el código 480.
+- Solicita verificar la fotografía cuando un parte de estacionamiento apunta a varios códigos.
+- Actualiza el domicilio cuando el del parte difiere del autocompletado por el RUT.
+- Imprime el listado final de boletas u oficios con su ROL.
 
 **Novedades v3.0.3**
 - Botón **✓ Confirmar** junto a «Copiar» en cada campo marcado «Revisar», y **✓ Ya revisé todo** en el recuadro de avisos: al confirmar, el campo queda en verde y el parte cambia de color.

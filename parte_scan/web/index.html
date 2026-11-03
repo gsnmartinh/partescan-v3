@@ -75,6 +75,7 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 </style></head><body>
 <section id="listaImpresion"></section>
 <header><h1>ParteScan</h1><span id="juz" class="note" style="margin-left:-4px"></span>
+<button id="btnActualizar" hidden>Actualizar ParteScan</button>
 <button class="p" id="btnAbrir">Abrir partes escaneados…</button>
 <input type="file" id="file" multiple accept=".pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff" hidden>
 <span class="grp"><button id="btnGuardaSes" title="Guarda el lote con tus correcciones y las imágenes, para seguir después sin leer de nuevo los PDF">Guardar sesión</button>
@@ -110,6 +111,10 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <div style="overflow:auto"><table id="tTabla"></table></div>
 <h3>Registro</h3><pre id="tLog" style="max-height:200px;overflow:auto;background:var(--blb);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap"></pre></div></dialog>
 <div id="toast"></div>
+<dialog id="dlgActualizar"><div class="db"><p id="estadoActualizar"></p></div><div class="df">
+<button id="actualizarCompleta" hidden>Usar instalador completo</button>
+<button id="cerrarActualizar" hidden>Cerrar</button>
+</div></dialog>
 <script>
 const $=id=>document.getElementById(id);
 let ACT={}, PERFIL=null, OFICINAS_SIS=[], INFR=[];
@@ -268,7 +273,7 @@ function campos(p){
     gc('Lugar',p.lugar,p.lugar?'ok':'check',''),
     gc('Hora de la infracción',p.hora_infraccion,p.hora_infraccion?'ok':'check','')
   ]});
-  const sinVeh=carab&&p.tiene_vehiculo===false;
+  const sinVeh=p.tiene_vehiculo===false||p.parte_escrito;
   S.push({t:'2 · Denunciados: la placa',sub:sinVeh?'Parte sin vehículo.':'',f:[
     sinVeh?gc('Placa','','blank','Sin vehículo.',{big:1}):gc('Placa',p.placa,/^([A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3})$/.test(p.placa)?'ok':'check','',{big:1})
   ]});
@@ -282,7 +287,7 @@ function campos(p){
   const c=Object.assign({},p.cert||{},(p.infractores&&p.infractores.length>1)?p.infractores[infIdx(p)]:{}), malRut=(p.cert_avisos||[]).some(x=>/RUT/.test(x)&&!/^(Infractor|El infractor)/.test(x))||(p.avisos||[]).some(x=>/RUT leído/.test(x)), sinC=carab&&!p.img_cert&&!c.rut;
   const multi=(p.infractores||[]).length>1;
   const filaInf=multi?[gc('Infractor de esta copia (1, 2)',String(infIdx(p)+1),'check','Infractores múltiples.')]:[];
-  S.push({t:'4 · Certificado del Registro Civil',sub:'',f:[
+  S.push({t:p.origen==='dom'||p.parte_escrito?'4 · Datos del denunciado':'4 · Certificado del Registro Civil',sub:p.parte_escrito?'Parte escrito. Completa los datos que figuren en el parte.':'',f:[
     ...filaInf,
     gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
     gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:(p.placa||'')).trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',''),
@@ -597,6 +602,47 @@ $('tImprimir').onclick=async()=>{
 };
 $('tDetener').onclick=async()=>{await tecPost('detener');tecSondear()};
 $('tCerrar').onclick=()=>$('dlgTec').close();
+const dialogoActualizar=$('dlgActualizar');
+dialogoActualizar.addEventListener('cancel',e=>e.preventDefault());
+$('cerrarActualizar').onclick=()=>dialogoActualizar.close();
+async function revisarActualizacion(){
+  try{
+    const respuesta=await fetch('/api/actualizacion');
+    const estado=await respuesta.json();
+    $('btnActualizar').hidden=!estado.hay;
+    if(estado.hay) $('btnActualizar').textContent='Actualizar a '+estado.ultima;
+    return estado;
+  }catch(e){}
+}
+async function actualizarPrograma(completa){
+  if(pend+subiendo){alert('Espera a que termine el escaneo.');return}
+  const mensaje=$('estadoActualizar');
+  const cerrar=$('cerrarActualizar'), instalador=$('actualizarCompleta');
+  cerrar.hidden=instalador.hidden=true;
+  if(!dialogoActualizar.open) dialogoActualizar.showModal();
+  mensaje.textContent='Preparando la actualización…';
+  try{
+    await autoguardar();
+    const respuesta=await fetch('/api/actualizacion'+(completa?'?completa=1':''),{
+      method:'POST',headers:{'X-ParteScan-Actualizar':'1'}
+    });
+    const resultado=await respuesta.json();
+    if(!respuesta.ok) throw new Error(resultado.error);
+    const timer=setInterval(async()=>{
+      const estado=await revisarActualizacion();
+      if(!estado){clearInterval(timer);mensaje.textContent='ParteScan se está reiniciando.';return}
+      if(estado.estado==='error'){
+        clearInterval(timer);mensaje.textContent=estado.error;cerrar.hidden=false;instalador.hidden=completa;
+      }else{
+        mensaje.textContent=estado.estado==='instalando'?'Instalando…':'Descargando y verificando la actualización…';
+      }
+    },1000);
+  }catch(e){mensaje.textContent=e.message;cerrar.hidden=false}
+}
+$('btnActualizar').onclick=()=>actualizarPrograma(false);
+$('actualizarCompleta').onclick=()=>actualizarPrograma(true);
+revisarActualizacion();
+setInterval(revisarActualizacion,15000);
 $('dlgTec').addEventListener('close',()=>clearInterval(tTimer));
 $('btnTec').onclick=async()=>{
   if(!P.length){toast('Primero carga los partes');return}
