@@ -72,7 +72,7 @@ jobs:
             --add-data "parte_scan\comunas_sistema.txt;parte_scan" `
             --collect-all pypdfium2_raw --collect-all pypdfium2 `
             --collect-all rapidocr_onnxruntime --collect-all onnxruntime `
-            --paths teclea --hidden-import teclea_contextual --hidden-import pywinauto.keyboard `
+            --hidden-import pywinauto.keyboard `
             --collect-all webview --collect-all pythonnet --collect-all clr_loader `
             partescan.py
           Copy-Item parte_scan\LEEME.txt dist\ParteScan\LEEME.txt

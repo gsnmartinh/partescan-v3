@@ -131,6 +131,14 @@ try:
     ok(False, "no debía permitir reenviar datos mientras teclea")
 except ValueError:
     pass
+for nuevo in ("ingresado", "pendiente"):
+    antes = [(p["_estado"], p["_aviso"]) for p in tecleador.LISTA]
+    try:
+        tecleador.accion("marcar", {"uid": 1, "estado": nuevo})
+        ok(False, "no debe marcar mientras el hilo sigue activo")
+    except ValueError:
+        pass
+    ok(antes == [(p["_estado"], p["_aviso"]) for p in tecleador.LISTA], "marcar no debe alterar el lote activo")
 tecleador.detener()
 tecleador.HILO.join(5)
 est = tecleador.estado()
@@ -156,10 +164,43 @@ ok(tecleador.estado()["partes"] == [] and tecleador.estado()["log"] == [], "limp
 # 8) comuna: se escribe como está en la lista del sistema (con tilde); si no existe, queda limpia
 ok(T.comuna_sistema("rio bueno") == "RÍO BUENO" and T.comuna_sistema("Ñuñoa") == "ÑUÑOA" and T.comuna_sistema("VALDIVIA") == "VALDIVIA", "comuna con tilde como en el sistema")
 ok(T.comuna_sistema("Pueblo Inventado") == "PUEBLO INVENTADO", "comuna fuera de la lista")
-ok(open(RAIZ / "teclea" / "comunas_sistema.txt", encoding="utf-8").read() == open(RAIZ / "parte_scan" / "comunas_sistema.txt", encoding="utf-8").read(), "las dos copias de la lista de comunas deben ser iguales")
 tecleador.LISTA.clear()
 tecleador.cargar([reg(0, "1", "1", comuna="río bueno")])
 ok(tecleador.LISTA[0]["comuna"] == "RÍO BUENO", "el motor recibe la comuna con tilde: %r" % tecleador.LISTA[0]["comuna"])
+
+# 9) confirmación manual, reversión, recarga y exclusión del tecleo individual/lote.
+tecleador.limpiar()
+tecleador.cargar([reg(0, "40", "1"), reg(1, "41", "2")])
+tecleador.LISTA[0]["_aviso"] = "No se detectó el guardado"
+tecleador.accion("marcar", {"uid": 0, "estado": "ingresado"})
+ok(tecleador.LISTA[0]["_aviso"] == "", "confirmar limpia el aviso anterior")
+try:
+    tecleador.iniciar([0])
+    ok(False, "no debe reteclear un ingresado por uid")
+except ValueError:
+    pass
+vistos = []
+def registrar(sis, partes, indices, **kw):
+    vistos.extend(indices)
+T.procesar_lote = registrar
+tecleador.iniciar()
+tecleador.HILO.join(5)
+ok(vistos == [1], "el lote debe omitir el confirmado")
+tecleador.marcar(0, "pendiente")
+tecleador.cargar([reg(0, "40", "1"), reg(1, "41", "2")])
+ok(tecleador.LISTA[0]["_estado"] == "pendiente", "reabrir y recargar conserva pendiente")
+tecleador.iniciar([0])
+tecleador.HILO.join(5)
+ok(vistos == [1, 0], "volver a pendiente permite teclear de nuevo")
+for uid, estado in ((99, "ingresado"), (0, "otro")):
+    try:
+        tecleador.marcar(uid, estado)
+        ok(False, "debe rechazar uid o estado inválido")
+    except ValueError:
+        pass
+tecleador.limpiar()
+tecleador.cargar([reg(0, "40", "1", ingresado=True)])
+ok(tecleador.LISTA[0]["_estado"] == "ingresado", "sesión restaurada conserva confirmado")
 
 if fallas:
     print("\n%d falla(s)" % len(fallas))

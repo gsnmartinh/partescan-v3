@@ -26,7 +26,7 @@ CODIGOS_CONFIRMAR = {"SINL": "66"}
 
 # Cuando el parte nombra varias infracciones de estacionamiento, vale la más específica
 # (ej.: «línea amarilla, sobre acera» = solo ACERA, 48).
-ESPECIFICAS = [(r"\bACERA", "48"), (r"\bESQUINA", "ESQUINA"), (r"DOBLE FILA", "DOBLE"),
+ESPECIFICAS = [(r"\b(?:ACERA|PLATABANDA)\b", "48"), (r"\bESQUINA", "ESQUINA"), (r"DOBLE FILA", "DOBLE"),
                (r"PASO PEATONAL|PASO DE PEATONES|PASO CEBRA", "PASO"), (r"\bGRIFO", "GRIFO"),
                (r"AREA VERDE", "AREA"), (r"PARADERO", "PARAD"), (r"SIGNO PARE|SENAL PARE|DISCO PARE", "PARE"),
                (r"DISCAPACIT|MINUSVALID", "DISCA")]
@@ -131,7 +131,7 @@ def resolver(texto):
     # que sí tienen código (estacionar sobre la acera…). Atropello y vehículo abandonado no se ingresan.
     if re.search(r"SENAL\s+PARE\s+(DE\s+)?(LOS\s+)?CARABINEROS|CARABINEROS.{0,40}SENAL\s+PARE|NO DETENERSE ANTE SENAL PARE", T):
         its = [crear_item(por_abrev("CARABI"))]
-        if re.search(r"ESTACION.{0,60}ACERA", T):
+        if re.search(r"ESTACION.{0,60}\b(?:ACERA|PLATABANDA)\b", T):
             its.append(crear_item(por_abrev("48")))
         return its[0]["x"]["t"], its
     # alcohol en la vía pública: el parte dice «ingerir», «ingringir» (mal escrito), «consumo», «beber», «bebidas alcohólicas»
@@ -142,7 +142,7 @@ def resolver(texto):
         it = crear_item(por_abrev("BEBER"))
         return por_abrev("BEBER")["t"], [it]
     if "ESTACION" in T and not re.search(r"GARAJE|FRENTE A (LAS )?PUERTAS|ENTRADA Y SALIDA|SENTIDO CONTRARIO|COSTADO IZQ|CEDA EL PASO|"
-                                         r"ACERA|ESQUINA|DOBLE FILA|PASO (PEATONAL|DE PEATONES|CEBRA)|GRIFO|AREA VERDE|PARADERO|"
+                                         r"ACERA|\bPLATABANDA\b|ESQUINA|DOBLE FILA|PASO (PEATONAL|DE PEATONES|CEBRA)|GRIFO|AREA VERDE|PARADERO|"
                                          r"DISCAPACIT|MINUSVALID|SENAL PARE|SIGNO PARE|DISCO PARE", T) \
             and re.search(r"AMARILL|DEMARC|CICLOV|CICLO VIA|SITIO PROHIBIDO|PROHIBID|SENALIZ|SOLERA|PINTAD|ZONA", T):
         # todo estacionamiento que no tiene su propia opción (línea amarilla, ciclovía, zona demarcada…) va como sitio prohibido y señalizado

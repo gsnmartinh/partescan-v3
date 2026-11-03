@@ -10,7 +10,7 @@ on:
   push:
     branches: [main, master]
     tags: ["v*"]
-    paths: ["teclea/**", "parte_scan/comunas_sistema.txt", "parte_scan/perfil.py", "parte_scan/codigos_sistema.py", ".github/workflows/build-teclea.yml"]
+    paths: ["teclea/**", "parte_scan/motor_tecleo.py", "parte_scan/comunas_sistema.txt", "parte_scan/perfil.py", "parte_scan/codigos_sistema.py", ".github/workflows/build-teclea.yml"]
 
 concurrency:
   group: compilar-teclea-${{ github.ref }}
@@ -38,7 +38,7 @@ jobs:
             --hidden-import parte_scan.perfil --hidden-import parte_scan.codigos_sistema `
             --hidden-import pywinauto.keyboard `
             --collect-data sv_ttk `
-            --add-data "comunas_sistema.txt;." `
+            --add-data "../parte_scan/comunas_sistema.txt;parte_scan" `
             teclea_gui.py
           Copy-Item LEEME.txt dist\PartesTeclea\LEEME.txt
       - name: Comprobar que el programa arranca

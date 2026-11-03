@@ -63,7 +63,17 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 .db table{border-collapse:collapse;width:100%;font-size:13px}.db td,.db th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:middle}
 .rowa{display:flex;gap:8px;margin-bottom:6px}.rowa .val{width:auto}
 @media print{header,.lote,#drop,#tira,main,#toast,#btnCerrarHoja,#btnImprHoja{display:none!important}#hoja{border:0;margin:0;box-shadow:none}}
+#listaImpresion{display:none}
+@media print{
+  body>*:not(#listaImpresion){display:none!important}
+  dialog::backdrop{display:none}
+  body{display:block!important;height:auto!important;overflow:visible!important;background:white;color:black}
+  #listaImpresion{display:block;font:11pt Arial,sans-serif}
+  #listaImpresion table{width:100%;border-collapse:collapse}
+  #listaImpresion th,#listaImpresion td{border-bottom:1px solid #999;padding:6px;text-align:left}
+}
 </style></head><body>
+<section id="listaImpresion"></section>
 <header><h1>ParteScan</h1><span id="juz" class="note" style="margin-left:-4px"></span>
 <button class="p" id="btnAbrir">Abrir partes escaneados…</button>
 <input type="file" id="file" multiple accept=".pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff" hidden>
@@ -92,11 +102,11 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <dialog id="dlgJuz"><div class="dh"><h2>Perfil del juzgado</h2><button id="dClose">Cerrar</button></div><div class="db" id="dBody"></div><div class="df"><button id="dGuardar" class="p">Guardar cambios</button></div></dialog>
 <dialog id="dlgTec" style="width:min(1150px,96vw)"><div class="dh"><h2>Teclear en el sistema del Juzgado</h2><button id="tCerrar">Cerrar</button></div>
 <div class="db"><div id="tAviso" class="avisos" hidden></div><div id="tNoDisp" class="avisos" hidden></div>
-<small>Abre en el sistema la pantalla de ingreso («Procesos…»), deja el cursor en Rol y pulsa «Teclear pendientes»; después haz clic en la ventana del sistema. ESC detiene. Si un dato está mal, pulsa «Corregir», arréglalo y vuelve aquí: lo ya ingresado no se pierde.</small>
+<small>Abre en el sistema la pantalla de ingreso («Procesos…»), deja el cursor en Rol y pulsa «Teclear pendientes»; después haz clic en la ventana del sistema. ESC detiene. Si un dato está mal, pulsa «Corregir», arréglalo y vuelve aquí: lo ya ingresado no se pierde. Si comprobaste que un parte ya se guardó, pulsa «Confirmar ingreso»; «Volver a pendiente» permite ingresarlo nuevamente. Estas acciones se habilitan al terminar o detener el tecleo.</small>
 <div class="rowa" style="align-items:center;flex-wrap:wrap;margin:10px 0">
 <label style="flex-direction:row;align-items:center;gap:6px">Actuario <select id="tAct" class="val" style="width:auto"><option value="">Automático (según el Rol)</option></select></label>
-<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tAuto" style="width:auto"> Aceptar automáticamente (solo partes sin avisos)</label>
-<button class="p" id="tIniciar">Teclear pendientes</button><button id="tDetener">Detener</button><span id="tResumen" class="note"></span></div>
+<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tAuto" style="width:auto"> Aceptar automáticamente y continuar con todas las causas</label>
+<button class="p" id="tIniciar">Teclear pendientes</button><button id="tDetener">Detener</button><button id="tImprimir">Imprimir ingresos</button><span id="tResumen" class="note"></span></div>
 <div style="overflow:auto"><table id="tTabla"></table></div>
 <h3>Registro</h3><pre id="tLog" style="max-height:200px;overflow:auto;background:var(--blb);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap"></pre></div></dialog>
 <div id="toast"></div>
@@ -386,7 +396,7 @@ const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.orig
     oficina:V(p,'Oficina emisora'),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
     rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
     placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
-    infracciones:infrVigentes(p),causa:V(p,'Descripción de la causa'),uid:P.indexOf(p),ingresado:!!p.fin});
+    infracciones:infrVigentes(p),causa:V(p,'Descripción de la causa'),uid:P.indexOf(p),ingresado:!!p.fin,rol_ingresado:p.fin?p.rol_ingresado:undefined});
 $('btnTecleo').onclick=()=>{
   if(!P.length){toast('Primero carga los partes');return}
   const ord = P.slice();
@@ -427,8 +437,19 @@ $('btnContinua').onclick=async()=>{
 };
 (async()=>{ try{ const r=await (await fetch('/api/sesion/ultima')).json();
   if(r.existe&&r.partes&&!P.length){ $('btnContinua').textContent='↺ Continuar anterior ('+r.partes+')'; $('btnContinua').hidden=false; } }catch(e){} })();
-setInterval(async()=>{ if(!P.length||pend+subiendo>0) return; const s=estadoSesion(); if(s===ultimoAuto) return;
-  try{ const r=await fetch('/api/sesion/auto',{method:'POST',body:s}); if(r.ok) ultimoAuto=s; }catch(e){} },5000);
+let colaAuto=Promise.resolve();
+function autoguardar(){
+  colaAuto=colaAuto.catch(()=>{}).then(async()=>{
+    if(!P.length||pend+subiendo>0) return;
+    const s=estadoSesion(); if(s===ultimoAuto) return;
+    const r=await fetch('/api/sesion/auto',{method:'POST',body:s});
+    const j=await r.json();
+    if(!r.ok||j.error) throw new Error(j.error||'No se pudo autoguardar');
+    ultimoAuto=s;
+  });
+  return colaAuto;
+}
+setInterval(()=>{autoguardar().catch(()=>{})},5000);
 function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; pintarTira(); mostrar(); window.scrollTo(0,0) }
 function ingresado(){
   const p=P[sel]; p.fin=true;
@@ -492,21 +513,23 @@ $('dGuardar').onclick=async()=>{
 cargarPerfil();
 
 const TXT_EST={pendiente:'Pendiente',tecleando:'Tecleando…',tecleado:'Por aceptar',ingresado:'Ingresado ✓',interrumpido:'Interrumpido',cancelado:'Cancelado'};
-let tNlog=0,tTimer=null;
+let tNlog=0,tTimer=null,tMarcando=false,tVersion=0;
 async function tecPost(ruta,cuerpo){ const r=await fetch('/api/tecleo/'+ruta,{method:'POST',body:JSON.stringify(cuerpo||{})}); return r.json(); }
 async function tecEnviar(){
   const ord = P.slice();
   const j=await tecPost('cargar',{partes:ord.map(regTecleo)});
   const av=$('tAviso'); if(j.error){av.textContent=j.error;av.hidden=false}else av.hidden=true;
+  return j;
 }
 function tecPintar(r){
   const lg=$('tLog'); if(r.log.length){lg.textContent+=r.log.join('\n')+'\n'; lg.scrollTop=lg.scrollHeight}
   tNlog=r.nlog;
   let cambio=false;
-  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&f.estado==='ingresado'&&!p.fin){p.fin=true;cambio=true}});
-  if(cambio) pintarTira();
+  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&!!p.fin!==(f.estado==='ingresado')){p.fin=f.estado==='ingresado';cambio=true}});
+  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&f.estado==='ingresado'&&f.rol&&p.rol_ingresado!==f.rol){p.rol_ingresado=f.rol;cambio=true}});
+  if(cambio){pintarTira();mostrar();autoguardar();}
   const a=$('tAct'); if(a.options.length<=1&&r.actuarios) r.actuarios.forEach(n=>a.add(new Option(n.charAt(0)+n.slice(1).toLowerCase(),n)));
-  $('tIniciar').disabled=!r.disponible||r.corriendo; $('tDetener').disabled=!r.corriendo;
+  $('tIniciar').disabled=!r.disponible||r.corriendo||tMarcando; $('tDetener').disabled=!r.corriendo;
   const nd=$('tNoDisp'); nd.textContent=r.disponible?'':r.motivo; nd.hidden=r.disponible;
   const pen=r.partes.filter(f=>['pendiente','interrumpido','cancelado'].includes(f.estado)).length;
   const ing=r.partes.filter(f=>['ingresado'].includes(f.estado)).length;
@@ -514,28 +537,72 @@ function tecPintar(r){
   $('tTabla').innerHTML='<tr><th>Estado</th><th>N° parte</th><th>Fecha</th><th>Oficina</th><th>Placa</th><th>Inf.</th><th>Avisos</th><th></th></tr>'+r.partes.map(f=>{
     const msj=[f.aviso].concat(f.errores.map(e=>'ERROR: '+e),f.avisos).filter(Boolean).join(' | ');
     const fondo=f.errores.length?' style="background:var(--rjb)"':((f.avisos.length||f.aviso)?' style="background:var(--ckb)"':'');
-    const dis=(r.corriendo||!r.disponible)?' disabled':'';
-    return '<tr'+fondo+'><td>'+(TXT_EST[f.estado]||f.estado)+'</td><td>'+esc(f.n_parte)+'</td><td>'+esc(f.fecha_parte)+'</td><td>'+esc(f.oficina)+'</td><td>'+esc(f.placa)+'</td><td>'+esc(f.infraccion)+'</td><td style="max-width:320px">'+esc(msj)+'</td><td style="white-space:nowrap"><button data-corr="'+f.uid+'">Corregir</button> <button data-uno="'+f.uid+'"'+dis+'>Teclear</button></td></tr>'}).join('');
+    const bloqueo=(r.corriendo||tMarcando)?' disabled':'';
+    const dis=(r.corriendo||tMarcando||!r.disponible||!['pendiente','interrumpido','cancelado'].includes(f.estado))?' disabled':'';
+    return '<tr'+fondo+'><td>'+(TXT_EST[f.estado]||f.estado)+'</td><td>'+esc(f.n_parte)+'</td><td>'+esc(f.fecha_parte)+'</td><td>'+esc(f.oficina)+'</td><td>'+esc(f.placa)+'</td><td>'+esc(f.infraccion)+'</td><td style="max-width:320px">'+esc(msj)+'</td><td style="white-space:nowrap"><button data-corr="'+f.uid+'"'+bloqueo+'>Corregir</button> <button data-uno="'+f.uid+'"'+dis+'>Teclear</button> <button data-marcar="'+f.uid+'" data-estado="'+(f.estado==='ingresado'?'pendiente':'ingresado')+'"'+bloqueo+'>'+(f.estado==='ingresado'?'Volver a pendiente':'Confirmar ingreso')+'</button></td></tr>'}).join('');
 }
-async function tecSondear(){ try{ tecPintar(await (await fetch('/api/tecleo/estado?desde='+tNlog)).json()) }catch(e){} }
+async function tecSondear(){
+  if(tMarcando) return;
+  const version=++tVersion;
+  try{const r=await (await fetch('/api/tecleo/estado?desde='+tNlog)).json();
+    if(version===tVersion&&!tMarcando) tecPintar(r);
+  }catch(e){}
+}
+async function tecMarcar(uid,estado){
+  if(tMarcando) return;
+  tMarcando=true; ++tVersion;
+  $('tIniciar').disabled=true;
+  $('tTabla').querySelectorAll('button').forEach(b=>b.disabled=true);
+  try{
+    const j=await tecPost('marcar',{uid,estado});
+    if(j.error){alert(j.error);return}
+    const p=P[uid]; if(p){p.fin=estado==='ingresado';if(!p.fin) delete p.rol_ingresado;}
+    pintarTira(); mostrar();
+    await autoguardar();
+  }catch(e){alert('No se pudo completar la confirmación o su autoguardado: '+e.message)}
+  finally{tMarcando=false; await tecSondear()}
+}
 async function tecIniciar(uids){
+  if(tMarcando) return;
+  const carga=await tecEnviar();
+  if(carga.error) return;
   const j=await tecPost('iniciar',{uids:uids||null,auto:$('tAuto').checked,actuario:$('tAct').value});
   if(j.error){alert(j.error);return}
   tecSondear();
 }
 $('tTabla').onclick=async e=>{
-  const b=e.target.closest('button'); if(!b) return;
+  const b=e.target.closest('button'); if(!b||b.disabled||tMarcando) return;
+  if(b.dataset.marcar!==undefined){await tecMarcar(+b.dataset.marcar,b.dataset.estado);return}
   if(b.dataset.corr!==undefined){ $('dlgTec').close(); ir(+b.dataset.corr); return }
   if(b.dataset.uno!==undefined){ await tecIniciar([+b.dataset.uno]); return }
 };
 $('tIniciar').onclick=()=>tecIniciar(null);
+$('tImprimir').onclick=async()=>{
+  try{
+    const respuesta=await fetch('/api/tecleo/estado');
+    if(!respuesta.ok) throw new Error('No se pudo consultar el estado del lote.');
+    const estado=await respuesta.json();
+    if(estado.corriendo||!estado.partes.length||estado.partes.some(f=>f.estado!=='ingresado')){
+      alert('Completa todos los ingresos del lote antes de imprimir.');return;
+    }
+    const filas=estado.partes.map(f=>{
+      const r=regTecleo(P[f.uid]);
+      return '<tr><td>'+esc(r.origen==='insp'?(r.boleta||r.n_parte):(r.n_parte||r.boleta))
+        +'</td><td>'+esc(f.rol||'Sin registro')+'</td></tr>';
+    });
+    $('listaImpresion').innerHTML='<h1>Partes ingresados</h1><table><thead><tr><th>Boleta u oficio</th><th>ROL</th></tr></thead><tbody>'
+      +filas.join('')+'</tbody></table>';
+    window.print();
+  }catch(e){alert('No se pudo preparar el listado: '+e.message)}
+};
 $('tDetener').onclick=async()=>{await tecPost('detener');tecSondear()};
 $('tCerrar').onclick=()=>$('dlgTec').close();
 $('dlgTec').addEventListener('close',()=>clearInterval(tTimer));
 $('btnTec').onclick=async()=>{
   if(!P.length){toast('Primero carga los partes');return}
   $('tLog').textContent=''; tNlog=0;
-  await tecEnviar(); await tecSondear();
+  const carga=await tecEnviar(); if(carga.error) return;
+  await tecSondear();
   $('dlgTec').showModal(); clearInterval(tTimer); tTimer=setInterval(tecSondear,700);
 };
 </script></body></html>
