@@ -19,20 +19,26 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.UUID;
 
 public class MainActivity extends Activity {
     private File folder;
+    private final ArrayList<String> pages = new ArrayList<>();
+    private int completedParts;
     private String part;
     private String certificate;
     private String pending;
-    private static final int PART = 1, CERTIFICATE = 2, SAVE = 3;
+    private static final int PART = 1, CERTIFICATE = 2, SAVE = 3, NEXT = 4;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         folder = new File(getCacheDir(), "capturas");
         folder.mkdirs();
         if (state != null) {
+            ArrayList<String> savedPages = state.getStringArrayList("pages");
+            if (savedPages != null) pages.addAll(savedPages);
+            completedParts = state.getInt("completedParts");
             part = state.getString("part");
             certificate = state.getString("certificate");
             pending = state.getString("pending");
@@ -42,6 +48,8 @@ public class MainActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
+        state.putStringArrayList("pages", new ArrayList<>(pages));
+        state.putInt("completedParts", completedParts);
         state.putString("part", part);
         state.putString("certificate", certificate);
         state.putString("pending", pending);
@@ -58,6 +66,9 @@ public class MainActivity extends Activity {
         setContentView(scroll);
         label(body, "ParteScan Captura", 26);
         label(body, "Fotografía cualquier tipo de parte. Agrega el certificado si corresponde.", 16);
+        int count = completedParts + (part == null ? 0 : 1);
+        label(body, "Partes en la tanda: " + count, 18);
+        if (part != null) label(body, "Parte " + (completedParts + 1), 16);
         button(body, part == null ? "Escanear parte" : "Repetir foto del parte", true, () -> capture(PART));
         preview(body, part, "Foto del parte");
         button(body, certificate == null ? "Agregar certificado (opcional)" : "Repetir foto del certificado",
@@ -70,13 +81,21 @@ public class MainActivity extends Activity {
                 render("");
             });
         }
-        button(body, "Guardar PDF", part != null, this::save);
-        button(body, "Nueva captura", part != null, () -> {
-            delete(part);
-            delete(certificate);
-            part = certificate = null;
-            render("");
-        });
+        button(body, "Siguiente parte", part != null, () -> capture(NEXT));
+        button(body, "Guardar tanda", count > 0, this::save);
+        button(body, "Nueva tanda", count > 0, () ->
+            new android.app.AlertDialog.Builder(this)
+                .setMessage("¿Borrar las capturas de esta tanda?")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Nueva tanda", (dialog, which) -> {
+                    for (String page : pages) delete(page);
+                    pages.clear();
+                    completedParts = 0;
+                    delete(part);
+                    delete(certificate);
+                    part = certificate = null;
+                    render("");
+                }).show());
         label(body, message, 16);
     }
 
@@ -142,7 +161,10 @@ public class MainActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.setType("application/pdf");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.putExtra(Intent.EXTRA_TITLE, "ParteScan.pdf");
+        intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+        String date = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT)
+                .format(new java.util.Date());
+        intent.putExtra(Intent.EXTRA_TITLE, "ParteScan-" + date + ".pdf");
         try {
             startActivityForResult(intent, SAVE);
         } catch (RuntimeException error) {
@@ -152,7 +174,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request == PART || request == CERTIFICATE) {
+        if (request == PART || request == CERTIFICATE || request == NEXT) {
             String captured = pending;
             pending = null;
             if (captured == null) return;
@@ -161,7 +183,13 @@ public class MainActivity extends Activity {
                 render("No se guardó una foto nueva.");
                 return;
             }
-            if (request == PART) {
+            if (request == NEXT) {
+                pages.add(part);
+                if (certificate != null) pages.add(certificate);
+                completedParts++;
+                part = captured;
+                certificate = null;
+            } else if (request == PART) {
                 delete(part);
                 part = captured;
             } else {
@@ -172,13 +200,15 @@ public class MainActivity extends Activity {
         } else if (request == SAVE && result == RESULT_OK && data != null && data.getData() != null) {
             PdfDocument pdf = new PdfDocument();
             try {
-                addPage(pdf, part, 1);
-                if (certificate != null) addPage(pdf, certificate, 2);
+                int pageNumber = 1;
+                for (String page : pages) addPage(pdf, page, pageNumber++);
+                if (part != null) addPage(pdf, part, pageNumber++);
+                if (certificate != null) addPage(pdf, certificate, pageNumber);
                 try (OutputStream output = getContentResolver().openOutputStream(data.getData())) {
                     if (output == null) throw new IOException();
                     pdf.writeTo(output);
                 }
-                render("PDF guardado. Ábrelo en ParteScan en el PC.");
+                render("Tanda guardada. Copia el PDF al PC por USB y ábrelo en ParteScan.");
             } catch (IOException | RuntimeException error) {
                 render("No se pudo guardar el PDF. Puedes intentarlo nuevamente.");
             } finally {
