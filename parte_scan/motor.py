@@ -135,6 +135,8 @@ def tipo_pagina(texto):
     from . import certificado, extractor_carab, extractor_mtt
     if certificado.es_certificado(texto):
         return "certificado"
+    if extractor.es_dom(texto):
+        return "dom"
     if es_formulario_inspeccion(texto):
         return "parte"
     if extractor_mtt.es_mtt(texto):

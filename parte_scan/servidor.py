@@ -163,6 +163,16 @@ def trabajador():
                             IMAGENES[pid] = img
                             ultimo = armar(r, nombre, n, pid)
                             PARTES.append(ultimo)
+                    elif tipo == "dom":
+                        r = motor.extractor.parte_dom(texto)
+                        r["oficina"] = perfil.oficinas().get("31", "31")
+                        with LOCK:
+                            pid = len(IMAGENES) + 1
+                            IMAGENES[pid] = img
+                            ultimo = armar(r, nombre, n, pid)
+                            ultimo.update(origen="dom", tiene_vehiculo=False, cert_avisos=[])
+                            ultimo["cert"].update(r["persona"], comuna=perfil.cargar()["comuna"])
+                            PARTES.append(ultimo)
                     elif tipo == "mtt":
                         r = extractor_mtt.parte(texto, motor.leer_celdas(g))
                         with LOCK:

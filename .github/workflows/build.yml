@@ -8,7 +8,7 @@ on:
         required: false
         default: ""      # botón "Run workflow"
   push:
-    branches: [main, master]
+    branches: [main, master, fix/activar-aceptar-y-refrescar-datos]
     tags: ["v*"]          # al crear una versión (v1.0.0, v1.1.0…) se publica una Release con el zip
 
 concurrency:

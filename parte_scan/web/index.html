@@ -268,7 +268,7 @@ function campos(p){
     gc('Lugar',p.lugar,p.lugar?'ok':'check',''),
     gc('Hora de la infracción',p.hora_infraccion,p.hora_infraccion?'ok':'check','')
   ]});
-  const sinVeh=carab&&p.tiene_vehiculo===false;
+  const sinVeh=p.tiene_vehiculo===false;
   S.push({t:'2 · Denunciados: la placa',sub:sinVeh?'Parte sin vehículo.':'',f:[
     sinVeh?gc('Placa','','blank','Sin vehículo.',{big:1}):gc('Placa',p.placa,/^([A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3})$/.test(p.placa)?'ok':'check','',{big:1})
   ]});
@@ -282,7 +282,7 @@ function campos(p){
   const c=Object.assign({},p.cert||{},(p.infractores&&p.infractores.length>1)?p.infractores[infIdx(p)]:{}), malRut=(p.cert_avisos||[]).some(x=>/RUT/.test(x)&&!/^(Infractor|El infractor)/.test(x))||(p.avisos||[]).some(x=>/RUT leído/.test(x)), sinC=carab&&!p.img_cert&&!c.rut;
   const multi=(p.infractores||[]).length>1;
   const filaInf=multi?[gc('Infractor de esta copia (1, 2)',String(infIdx(p)+1),'check','Infractores múltiples.')]:[];
-  S.push({t:'4 · Certificado del Registro Civil',sub:'',f:[
+  S.push({t:p.origen==='dom'?'4 · Datos del denunciado':'4 · Certificado del Registro Civil',sub:'',f:[
     ...filaInf,
     gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
     gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:(p.placa||'')).trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',''),

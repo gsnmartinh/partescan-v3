@@ -19,7 +19,7 @@ CODIGOS = {
     "SEGURO": "92", "PERMISO": "37", "REVISION": "33", "CELULAR": "54", "ROJA": "91", "RUIDOS": "350",
     "CHOQUE": "500", "COLISION": "57", "ANIMALES": "62", "FACILITAR": "649", "ESPE": "461", "BNUP": "604",
     "LOCAL": "480", "AMBU": "503", "PARAB": "75", "PUER": "632", "LUCES": "58", "PESO": "630",
-    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65",
+    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65", "DOM": "497",
 }
 # Parecidas pero no idénticas: se proponen con el código, pidiendo confirmar.
 CODIGOS_CONFIRMAR = {"SINL": "66"}
