@@ -21,15 +21,26 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import java.nio.charset.StandardCharsets;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import com.google.android.gms.tasks.Tasks;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 public class MainActivity extends Activity {
     private File folder;
     private final ArrayList<String> pages = new ArrayList<>();
+    private final ArrayList<Integer> attachments = new ArrayList<>();
     private int completedParts;
     private String part;
     private String certificate;
     private String pending;
-    private static final int PART = 1, CERTIFICATE = 2, SAVE = 3, NEXT = 4;
+    private static final int PART = 1, CERTIFICATE = 2, SAVE = 3, NEXT = 4, SAVE_OCR = 5;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -38,6 +49,8 @@ public class MainActivity extends Activity {
         if (state != null) {
             ArrayList<String> savedPages = state.getStringArrayList("pages");
             if (savedPages != null) pages.addAll(savedPages);
+            ArrayList<Integer> savedAttachments = state.getIntegerArrayList("attachments");
+            if (savedAttachments != null) attachments.addAll(savedAttachments);
             completedParts = state.getInt("completedParts");
             part = state.getString("part");
             certificate = state.getString("certificate");
@@ -49,6 +62,7 @@ public class MainActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         state.putStringArrayList("pages", new ArrayList<>(pages));
+        state.putIntegerArrayList("attachments", new ArrayList<>(attachments));
         state.putInt("completedParts", completedParts);
         state.putString("part", part);
         state.putString("certificate", certificate);
@@ -82,7 +96,8 @@ public class MainActivity extends Activity {
             });
         }
         button(body, "Siguiente parte", part != null, () -> capture(NEXT));
-        button(body, "Guardar tanda", count > 0, this::save);
+        button(body, "Guardar tanda con OCR", count > 0, () -> save(true));
+        button(body, "Guardar PDF", count > 0, () -> save(false));
         button(body, "Nueva tanda", count > 0, () ->
             new android.app.AlertDialog.Builder(this)
                 .setMessage("¿Borrar las capturas de esta tanda?")
@@ -90,6 +105,7 @@ public class MainActivity extends Activity {
                 .setPositiveButton("Nueva tanda", (dialog, which) -> {
                     for (String page : pages) delete(page);
                     pages.clear();
+                    attachments.clear();
                     completedParts = 0;
                     delete(part);
                     delete(certificate);
@@ -157,16 +173,16 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void save() {
+    private void save(boolean ocr) {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.setType("application/pdf");
+        intent.setType(ocr ? "application/zip" : "application/pdf");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
         String date = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT)
                 .format(new java.util.Date());
-        intent.putExtra(Intent.EXTRA_TITLE, "ParteScan-" + date + ".pdf");
+        intent.putExtra(Intent.EXTRA_TITLE, "ParteScan-" + date + (ocr ? ".psocr" : ".pdf"));
         try {
-            startActivityForResult(intent, SAVE);
+            startActivityForResult(intent, ocr ? SAVE_OCR : SAVE);
         } catch (RuntimeException error) {
             render("No se pudo abrir el selector de archivos.");
         }
@@ -185,7 +201,10 @@ public class MainActivity extends Activity {
             }
             if (request == NEXT) {
                 pages.add(part);
-                if (certificate != null) pages.add(certificate);
+                if (certificate != null) {
+                    attachments.add(pages.size());
+                    pages.add(certificate);
+                }
                 completedParts++;
                 part = captured;
                 certificate = null;
@@ -197,6 +216,8 @@ public class MainActivity extends Activity {
                 certificate = captured;
             }
             render("");
+        } else if (request == SAVE_OCR && result == RESULT_OK && data != null && data.getData() != null) {
+            exportOcr(data.getData());
         } else if (request == SAVE && result == RESULT_OK && data != null && data.getData() != null) {
             PdfDocument pdf = new PdfDocument();
             try {
@@ -215,6 +236,55 @@ public class MainActivity extends Activity {
                 pdf.close();
             }
         }
+    }
+
+    private void exportOcr(android.net.Uri destination) {
+        ArrayList<String> photos = new ArrayList<>(pages);
+        ArrayList<Integer> certificates = new ArrayList<>(attachments);
+        if (part != null) photos.add(part);
+        if (certificate != null) {
+            certificates.add(photos.size());
+            photos.add(certificate);
+        }
+        TextView progress = new TextView(this);
+        progress.setText("Reconociendo texto en el teléfono…");
+        setContentView(progress);
+        new Thread(() -> {
+            String message;
+            TextRecognizer reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            try {
+                JSONArray manifest = new JSONArray();
+                for (int i = 0; i < photos.size(); i++) {
+                    Bitmap bitmap = decode(photos.get(i), 3000);
+                    String text;
+                    try {
+                        text = Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0))).getText();
+                    } finally {
+                        bitmap.recycle();
+                    }
+                    manifest.put(new JSONObject().put("texto", text)
+                        .put("certificado", certificates.contains(i)));
+                }
+                try (OutputStream stream = getContentResolver().openOutputStream(destination);
+                     ZipOutputStream zip = new ZipOutputStream(stream)) {
+                    zip.putNextEntry(new ZipEntry("ocr.json"));
+                    zip.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
+                    zip.closeEntry();
+                    for (int i = 0; i < photos.size(); i++) {
+                        zip.putNextEntry(new ZipEntry(i + ".jpg"));
+                        java.nio.file.Files.copy(new File(folder, photos.get(i)).toPath(), zip);
+                        zip.closeEntry();
+                    }
+                }
+                message = "Tanda con OCR guardada. Copia el archivo .psocr al PC por USB.";
+            } catch (Exception error) {
+                message = "No se pudo guardar la tanda con OCR. Puedes volver a intentarlo.";
+            } finally {
+                reader.close();
+            }
+            String result = message;
+            runOnUiThread(() -> render(result));
+        }).start();
     }
 
     private void addPage(PdfDocument pdf, String name, int number) throws IOException {
