@@ -36,7 +36,7 @@ def armar(r, archivo, pagina, pid):
                       "Revísalo." % catalogo.comodin())
     return {
         "id": pid, "archivo": archivo, "pagina": pagina, "img_cert": 0,
-        "depto": r["departamento"], "folio": r["n_parte_final"],
+        "depto": r["departamento"], "folio": r["n_parte_final"], "oficina": r.get("oficina", ""),
         "fecha_parte": r["fecha_parte"], "fecha_infraccion": r["fecha_infraccion"],
         "hora_infraccion": hora(r["hora_infraccion"]), "lugar": r["lugar"],
         "infraccion_texto": r["infraccion_texto"], "tipo_vehiculo": exportar.tipo_limpio(r["tipo_vehiculo"]),

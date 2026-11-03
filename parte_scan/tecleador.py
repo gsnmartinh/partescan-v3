@@ -1,4 +1,4 @@
-"""Puente entre ParteScan y el motor de tecleo (teclea/teclea_contextual.py): una sola ventana.
+"""Coordina el motor de tecleo desde la ventana de ParteScan.
 
 ParteScan entrega los partes ya revisados (sin pasar por un .json en Descargas), el motor los teclea en el sistema
 del Juzgado en un hilo aparte y el avance se consulta por la API local. Todo ocurre en este computador, sin internet.
@@ -21,10 +21,6 @@ _ERROR_MOTOR = ""
 ESTADOS_PENDIENTES = ("pendiente", "interrumpido", "cancelado")
 
 
-def _carpeta_teclea():
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "teclea")
-
-
 def motor():
     """Carga el motor la primera vez. Devuelve (modulo, '') o (None, motivo)."""
     global _T, _ERROR_MOTOR
@@ -33,10 +29,7 @@ def motor():
     if _ERROR_MOTOR:
         return None, _ERROR_MOTOR
     try:
-        c = _carpeta_teclea()
-        if os.path.isdir(c) and c not in sys.path:
-            sys.path.insert(0, c)
-        import teclea_contextual as T
+        from . import motor_tecleo as T
         _T = T
     except Exception as e:      # noqa: BLE001 - cualquier fallo de importación deja el tecleo como «no disponible»
         _ERROR_MOTOR = "El tecleo no está disponible en este equipo: %s" % e
@@ -105,6 +98,7 @@ def cargar(registros):
             else:
                 p["_estado"] = "pendiente"
             p["_aviso"] = ant["_aviso"] if ant and ant["_estado"] == p["_estado"] else ""
+            p["_rol"] = (ant or {}).get("_rol") or r.get("rol_ingresado", "") if p["_estado"] == "ingresado" else ""
         LISTA[:] = nuevos
     return {"ok": True, "partes": len(LISTA)}
 
@@ -127,7 +121,7 @@ def _fila(T, p):
 
     return {"uid": p["_uid"], "estado": p["_estado"], "aviso": p["_aviso"], "errores": fat, "avisos": avi,
             "n_parte": p["n_parte"], "fecha_parte": p["fecha_parte"], "oficina": p.get("oficina", ""),
-            "placa": T.placa(p["placa"]), "rut": p["rut"], "infraccion": infr}
+            "placa": T.placa(p["placa"]), "rut": p["rut"], "infraccion": infr, "rol": p.get("_rol", "")}
 
 
 def estado(desde=0):
@@ -146,6 +140,7 @@ def _on_estado(i, e, detalle=""):
     with LOCK:
         LISTA[i]["_estado"] = e
         LISTA[i]["_aviso"] = detalle if e in ("tecleado", "interrumpido") else ""
+        LISTA[i]["_rol"] = detalle if e == "ingresado" else ""
 
 
 def _trabajo(T, idx, auto):
@@ -200,9 +195,10 @@ def iniciar(uids=None, auto=False, actuario=""):
 
 def detener():
     T, _ = motor()
-    if T is not None:
-        T.PARAR.set()
-        _log("Deteniendo...")
+    with LOCK:
+        if T is not None and corriendo():
+            T.PARAR.set()
+            _log("Deteniendo...")
     return {"ok": True}
 
 
@@ -216,6 +212,8 @@ def marcar(uid, nuevo):
         for p in LISTA:
             if p["_uid"] == uid:
                 p["_estado"], p["_aviso"] = nuevo, ""
+                if nuevo == "pendiente":
+                    p["_rol"] = ""
                 return {"ok": True}
     raise ValueError("No encuentro ese parte.")
 

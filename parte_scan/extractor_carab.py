@@ -412,6 +412,11 @@ def _oficina(texto):
     cab = cab[:corte.start()] if corte and corte.start() > 25 else cab[:300]
     oficinas = perfil.oficinas_ordenadas()
     palabras_cab = re.findall(r"[A-Z]{4,}", cab)
+    # En los partes impresos la unidad figura como «SUBCOM OSCAR C. GALLO».
+    if re.search(r"\bOSCAR\s+(?:CRISTI\b|C\.?\s+GALLO\b)", cab):
+        for _cod, desc in oficinas:
+            if re.search(r"\bOSCAR\s+CRISTI\b", _norm(desc)):
+                return desc, True
     for _cod, desc in oficinas:
         pal = [w for w in re.findall(r"[A-Z]{4,}", _norm(desc)) if w not in _GENERICAS and w not in ("LOS", "LAS")]
         if not pal:

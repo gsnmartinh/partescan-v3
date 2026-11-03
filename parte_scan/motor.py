@@ -121,11 +121,22 @@ def votar(*lecturas):
     return v, av
 
 
+def es_formulario_inspeccion(texto):
+    """Reconoce el formulario municipal por sus campos, aunque cambie el encabezado."""
+    return all(re.search(campo, texto, re.I) for campo in (
+        r"\binspector\s+denunciante\b",
+        r"\bdisposici[oó]n\s+infringida\b",
+        r"\bel\s+infractor\s+qued[oó]\s+citado\b",
+    ))
+
+
 def tipo_pagina(texto):
     """'parte', 'carab' (parte de Carabineros), 'mtt' (denuncia del MTT), 'certificado' u 'otra'."""
     from . import certificado, extractor_carab, extractor_mtt
     if certificado.es_certificado(texto):
         return "certificado"
+    if es_formulario_inspeccion(texto):
+        return "parte"
     if extractor_mtt.es_mtt(texto):
         return "mtt"
     if extractor_carab.es_carab(texto):
@@ -140,6 +151,9 @@ def leer_parte(img, texto=None, g=None):
     g = g or preparar(img)
     texto = texto if texto is not None else texto_pagina(g)
     r = extractor.parte(texto)
+    if es_formulario_inspeccion(texto):
+        from . import perfil
+        r["oficina"] = perfil.oficinas().get("32", "32")
     r["folio_recorte"] = _folio_recorte(g)
     r["n_parte_final"], av = votar(r["n_parte"], r["folio_recorte"], r["n_citacion_adjunta"])
     r["avisos"] = [a for a in r["avisos"] if "encabezado" not in a] + av

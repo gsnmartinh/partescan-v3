@@ -164,7 +164,6 @@ ok(tecleador.estado()["partes"] == [] and tecleador.estado()["log"] == [], "limp
 # 8) comuna: se escribe como está en la lista del sistema (con tilde); si no existe, queda limpia
 ok(T.comuna_sistema("rio bueno") == "RÍO BUENO" and T.comuna_sistema("Ñuñoa") == "ÑUÑOA" and T.comuna_sistema("VALDIVIA") == "VALDIVIA", "comuna con tilde como en el sistema")
 ok(T.comuna_sistema("Pueblo Inventado") == "PUEBLO INVENTADO", "comuna fuera de la lista")
-ok(open(RAIZ / "teclea" / "comunas_sistema.txt", encoding="utf-8").read() == open(RAIZ / "parte_scan" / "comunas_sistema.txt", encoding="utf-8").read(), "las dos copias de la lista de comunas deben ser iguales")
 tecleador.LISTA.clear()
 tecleador.cargar([reg(0, "1", "1", comuna="río bueno")])
 ok(tecleador.LISTA[0]["comuna"] == "RÍO BUENO", "el motor recibe la comuna con tilde: %r" % tecleador.LISTA[0]["comuna"])

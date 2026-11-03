@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
 (async()=>{
-for(const path of ['parte_scan/index.html','parte_scan/web/index.html']){
+for(const path of ['parte_scan/web/index.html']){
  const script=fs.readFileSync(path,'utf8').match(/<script>([\s\S]*)<\/script>/)[1];
  const calls=[],p={nombre:'Nombre OCR NACIONALIDAD',ed:{'Nombre (certificado)':'NOMBRE CORREGIDO'}};
  const elements={tAviso:{},tAuto:{checked:true},tAct:{value:''}};

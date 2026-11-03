@@ -63,7 +63,17 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 .db table{border-collapse:collapse;width:100%;font-size:13px}.db td,.db th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:middle}
 .rowa{display:flex;gap:8px;margin-bottom:6px}.rowa .val{width:auto}
 @media print{header,.lote,#drop,#tira,main,#toast,#btnCerrarHoja,#btnImprHoja{display:none!important}#hoja{border:0;margin:0;box-shadow:none}}
+#listaImpresion{display:none}
+@media print{
+  body>*:not(#listaImpresion){display:none!important}
+  dialog::backdrop{display:none}
+  body{display:block!important;height:auto!important;overflow:visible!important;background:white;color:black}
+  #listaImpresion{display:block;font:11pt Arial,sans-serif}
+  #listaImpresion table{width:100%;border-collapse:collapse}
+  #listaImpresion th,#listaImpresion td{border-bottom:1px solid #999;padding:6px;text-align:left}
+}
 </style></head><body>
+<section id="listaImpresion"></section>
 <header><h1>ParteScan</h1><span id="juz" class="note" style="margin-left:-4px"></span>
 <button class="p" id="btnAbrir">Abrir partes escaneados…</button>
 <input type="file" id="file" multiple accept=".pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff" hidden>
@@ -96,7 +106,7 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <div class="rowa" style="align-items:center;flex-wrap:wrap;margin:10px 0">
 <label style="flex-direction:row;align-items:center;gap:6px">Actuario <select id="tAct" class="val" style="width:auto"><option value="">Automático (según el Rol)</option></select></label>
 <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tAuto" style="width:auto"> Aceptar automáticamente y continuar con todas las causas</label>
-<button class="p" id="tIniciar">Teclear pendientes</button><button id="tDetener">Detener</button><span id="tResumen" class="note"></span></div>
+<button class="p" id="tIniciar">Teclear pendientes</button><button id="tDetener">Detener</button><button id="tImprimir">Imprimir ingresos</button><span id="tResumen" class="note"></span></div>
 <div style="overflow:auto"><table id="tTabla"></table></div>
 <h3>Registro</h3><pre id="tLog" style="max-height:200px;overflow:auto;background:var(--blb);border-radius:8px;padding:8px;font-size:12px;white-space:pre-wrap"></pre></div></dialog>
 <div id="toast"></div>
@@ -386,7 +396,7 @@ const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.orig
     oficina:V(p,'Oficina emisora'),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
     rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
     placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
-    infracciones:infrVigentes(p),causa:V(p,'Descripción de la causa'),uid:P.indexOf(p),ingresado:!!p.fin});
+    infracciones:infrVigentes(p),causa:V(p,'Descripción de la causa'),uid:P.indexOf(p),ingresado:!!p.fin,rol_ingresado:p.fin?p.rol_ingresado:undefined});
 $('btnTecleo').onclick=()=>{
   if(!P.length){toast('Primero carga los partes');return}
   const ord = P.slice();
@@ -516,7 +526,8 @@ function tecPintar(r){
   tNlog=r.nlog;
   let cambio=false;
   r.partes.forEach(f=>{const p=P[f.uid]; if(p&&!!p.fin!==(f.estado==='ingresado')){p.fin=f.estado==='ingresado';cambio=true}});
-  if(cambio){pintarTira();mostrar();}
+  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&f.estado==='ingresado'&&f.rol&&p.rol_ingresado!==f.rol){p.rol_ingresado=f.rol;cambio=true}});
+  if(cambio){pintarTira();mostrar();autoguardar();}
   const a=$('tAct'); if(a.options.length<=1&&r.actuarios) r.actuarios.forEach(n=>a.add(new Option(n.charAt(0)+n.slice(1).toLowerCase(),n)));
   $('tIniciar').disabled=!r.disponible||r.corriendo||tMarcando; $('tDetener').disabled=!r.corriendo;
   const nd=$('tNoDisp'); nd.textContent=r.disponible?'':r.motivo; nd.hidden=r.disponible;
@@ -545,7 +556,7 @@ async function tecMarcar(uid,estado){
   try{
     const j=await tecPost('marcar',{uid,estado});
     if(j.error){alert(j.error);return}
-    const p=P[uid]; if(p) p.fin=estado==='ingresado';
+    const p=P[uid]; if(p){p.fin=estado==='ingresado';if(!p.fin) delete p.rol_ingresado;}
     pintarTira(); mostrar();
     await autoguardar();
   }catch(e){alert('No se pudo completar la confirmación o su autoguardado: '+e.message)}
@@ -566,6 +577,24 @@ $('tTabla').onclick=async e=>{
   if(b.dataset.uno!==undefined){ await tecIniciar([+b.dataset.uno]); return }
 };
 $('tIniciar').onclick=()=>tecIniciar(null);
+$('tImprimir').onclick=async()=>{
+  try{
+    const respuesta=await fetch('/api/tecleo/estado');
+    if(!respuesta.ok) throw new Error('No se pudo consultar el estado del lote.');
+    const estado=await respuesta.json();
+    if(estado.corriendo||!estado.partes.length||estado.partes.some(f=>f.estado!=='ingresado')){
+      alert('Completa todos los ingresos del lote antes de imprimir.');return;
+    }
+    const filas=estado.partes.map(f=>{
+      const r=regTecleo(P[f.uid]);
+      return '<tr><td>'+esc(r.origen==='insp'?(r.boleta||r.n_parte):(r.n_parte||r.boleta))
+        +'</td><td>'+esc(f.rol||'Sin registro')+'</td></tr>';
+    });
+    $('listaImpresion').innerHTML='<h1>Partes ingresados</h1><table><thead><tr><th>Boleta u oficio</th><th>ROL</th></tr></thead><tbody>'
+      +filas.join('')+'</tbody></table>';
+    window.print();
+  }catch(e){alert('No se pudo preparar el listado: '+e.message)}
+};
 $('tDetener').onclick=async()=>{await tecPost('detener');tecSondear()};
 $('tCerrar').onclick=()=>$('dlgTec').close();
 $('dlgTec').addEventListener('close',()=>clearInterval(tTimer));

@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
 (async()=>{
-for(const path of ['parte_scan/index.html','parte_scan/web/index.html']){
+for(const path of ['parte_scan/web/index.html']){
  const html=fs.readFileSync(path,'utf8'),script=html.match(/<script>([\s\S]*)<\/script>/)[1];
  new Function(script);
  const elements={};const $=id=>elements[id]??=( {textContent:'',options:[{},{}],querySelectorAll:()=>[],value:'',checked:false});
