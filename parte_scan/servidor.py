@@ -30,6 +30,7 @@ def orden_natural(text):
 
 def armar(r, archivo, pagina, pid):
     causa, items, comodin = catalogo.resolver_o_comodin(r["infraccion_texto"])
+    escrito = not r["placa"] and catalogo.actividad_sin_patente(r["infraccion_texto"])
     avisos = list(r["avisos"])
     if comodin:
         avisos.append("No reconocí la infracción: se ingresará con el código %s y la descripción dirá lo que dice el parte. "
@@ -46,7 +47,8 @@ def armar(r, archivo, pagina, pid):
         "items": [{"cod": i["cod"], "estado": i["estado"], "nota": i["nota"]} for i in items],
         "cert": {"rut": "", "nombre": "", "direccion": "", "comuna": "", "marca": "", "modelo": "",
                  "tipo_vehiculo": "", "dv_placa": "", "anio": "", "color": ""},
-        "cert_avisos": ["Falta el certificado del Registro Civil de este parte."],
+        "parte_escrito": escrito,
+        "cert_avisos": [] if escrito else ["Falta el certificado del Registro Civil de este parte."],
     }
 
 
@@ -192,7 +194,7 @@ def trabajador():
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
-                            if ultimo is not None and ultimo["img_cert"] == 0:
+                            if ultimo is not None and not ultimo.get("parte_escrito") and ultimo["img_cert"] == 0:
                                 aplicar_certificado(ultimo, c, pid)
                             else:
                                 ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
