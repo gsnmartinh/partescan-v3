@@ -1,10 +1,12 @@
-**ParteScan v4.0.1** mejora la lectura de nombre, RUT, domicilio y comuna en certificados del Registro Civil. Cuando un campo falta o falla la validación, vuelve a leer el certificado con otro modo de OCR.
+**ParteScan v4.0.2** muestra, copia y envía al tecleo el RUT sin puntos y con guion antes del dígito verificador, en todos los tipos de parte. La barra antigua de actualización se retiró y el botón de actualización queda junto al título.
 
 **Instalación (recomendada):** descarga `ParteScan-Instalador-…exe` en *Assets*, ejecútalo y sigue el asistente. No pide permisos de administrador y crea el acceso directo.
 Si Windows muestra «Windows protegió su PC»: *Más información → Ejecutar de todas formas* (el programa no está firmado).
 También hay un `.zip` portátil (se descomprime completo y se abre `ParteScan.exe`).
 
-**Actualizaciones diferenciales.** Si ya tienes v4.0.0 instalada en la ubicación predeterminada, abre ParteScan y pulsa **Actualizar a v4.0.1**. La aplicación descarga los archivos modificados, verifica sus huellas y reinicia. El perfil y las sesiones se conservan.
+**Actualizaciones diferenciales.** Si tienes v4.0.0 o v4.0.1 instalada en la ubicación predeterminada, abre ParteScan y pulsa **Actualizar a v4.0.2**. La aplicación descarga los archivos modificados, verifica sus huellas y reinicia. El perfil y las sesiones se conservan.
+
+**Novedades de v4.0.1.** Mejora la lectura de nombre, RUT, domicilio y comuna en certificados del Registro Civil. Cuando un campo falta o falla la validación, vuelve a leer el certificado con otro modo de OCR.
 
 **Novedades de v4.0.0**
 

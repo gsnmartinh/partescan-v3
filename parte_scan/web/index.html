@@ -85,8 +85,6 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 <span id="estado" class="note"></span><span style="flex:1"></span>
 <button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">⚙ Juzgado</button><button id="btnNueva" title="Borra el lote de la pantalla y deja el programa en blanco para una tanda nueva (no cierra el programa)">🧹 Nueva tanda</button><button id="btnSalir">Cerrar programa</button></header>
 <datalist id="dlInf"></datalist>
-<div id="barAct" hidden style="background:#e8f1ff;border-bottom:1px solid #b6d0ff;padding:8px 16px;display:flex;gap:12px;align-items:center">
- <span id="actTxt" style="flex:1"></span><button class="p" id="actSi">Actualizar ahora</button><button id="actNo">Más tarde</button></div>
 
 <div class="lote">
  <label>Rol Disponible (rol del primer parte)<input id="rol" inputmode="numeric" placeholder="ej. 19952"></label>
@@ -334,6 +332,7 @@ function mostrar(){
       r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+((p.ok&&p.ok[key])?'ok':f.st)+'">'+((p.ok&&p.ok[key])?'Confirmado':LAB[f.st])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((f.st==='check'&&!(p.ok&&p.ok[key]))?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
       el.oninput=el.onchange=e=>{
+        if(key==='RUT (certificado)'&&e.type==='change') el.value=formatoRut(el.value);
         p.ed[key]=e.target.value;
         p.ok=p.ok||{};
         p.ok[key]=true;
@@ -367,9 +366,15 @@ function mostrar(){
   if($('avOk')) $('avOk').onclick=()=>{ p.ok=p.ok||{}; p.avOk=true; campos(p).forEach(s=>s.f.forEach(f=>{ if(f.st==='check') p.ok[f.k]=true })); pintarTira(); mostrar(); toast('Marcado como revisado') };
   if(!F.dataset.k)F.dataset.k=1;
 }
-function valorActual(p,key){ 
-  if (p.ed && key in p.ed) return p.ed[key];
-  for(const s of campos(p)) for(const f of s.f) if(f.k===key) return f.v; 
+function formatoRut(valor){
+  const limpio=String(valor||'').trim().replace(/[.\s]/g,'').replace(/[–—]/g,'-').toUpperCase();
+  const m=limpio.match(/^(\d{6,9})-?([\dK])$/);
+  return m?m[1]+'-'+m[2]:limpio;
+}
+function valorActual(p,key){
+  const formato=key==='RUT (certificado)'?formatoRut:v=>v;
+  if (p.ed && key in p.ed) return formato(p.ed[key]);
+  for(const s of campos(p)) for(const f of s.f) if(f.k===key) return formato(f.v);
   return '';
 }
 function copiarCampo(p,key){
