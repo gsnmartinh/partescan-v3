@@ -121,7 +121,7 @@ def crear_item(x):
 
 
 def actividad_sin_patente(texto):
-    return bool(re.search(r"\bACTIVIDAD\s+COMERCIAL\s+SIN\s+PATENTE\s+MUNICIPAL\b", sin_tildes(texto)))
+    return bool(re.search(r"\bACTIVIDAD\s+COMERCIAL\s+SIN\s*(?:PATENTE|PERMISO)\s*MUNI?C?I?PAL\b", sin_tildes(texto)))
 
 
 def resolver(texto):

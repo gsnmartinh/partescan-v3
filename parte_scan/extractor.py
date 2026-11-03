@@ -134,6 +134,16 @@ def parte(t):
     m = re.search(r"ART\.?\s*(\d+)(?:\s*N\W{0,2}\s*(\d+))?", l, re.I)
     o["articulo"] = (m.group(1) + (" N°" + m.group(2) if m.group(2) else "")) if m else ""
     o["avisos"] = av
+    _, infractor = primera(L, r"^\W*Infractor\b")
+    _, domicilio = primera(L, r"^\W*Domiciliad[oa]\s+en\s+calle\b")
+    rut = re.search(r"\b\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK]\b", infractor, re.I)
+    nombre = infractor[:rut.start()] if rut else infractor
+    nombre = re.sub(r"\s+C\s*\.?\s*[IL1]\s*\.?\s*$", "", nombre, flags=re.I)
+    o["persona"] = {
+        "nombre": limpiar(re.sub(r"^\W*Infractor\b", "", nombre, flags=re.I)),
+        "rut": re.sub(r"\s+", "", rut.group()) if rut else "",
+        "direccion": limpiar(re.sub(r"^\W*Domiciliad[oa]\s+en\s+calle\b", "", domicilio, flags=re.I)),
+    }
     return o
 
 
