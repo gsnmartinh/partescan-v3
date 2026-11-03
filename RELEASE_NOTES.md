@@ -1,4 +1,6 @@
-**ParteScan v4.0.3** incorpora correcciones a partir de la revisión de ocho lotes escaneados.
+**ParteScan v4.0.4** unifica la revisión y el guardado de los campos compartidos entre formularios. Las próximas versiones se distribuyen como una sola aplicación con el tecleo integrado.
+
+**Novedades de v4.0.3**
 
 - Reintenta la lectura cuando falta la comuna y reconoce más variantes de la patente en los certificados del Registro Civil.
 - Mejora la detección de los formularios municipales que corresponden a la oficina 32.
@@ -9,7 +11,7 @@
 Si Windows muestra «Windows protegió su PC»: *Más información → Ejecutar de todas formas* (el programa no está firmado).
 También hay un `.zip` portátil (se descomprime completo y se abre `ParteScan.exe`).
 
-**Actualizaciones diferenciales.** Si tienes v4.0.0 o posterior instalada en la ubicación predeterminada, abre ParteScan y pulsa **Actualizar a v4.0.3**. La aplicación descarga los archivos modificados, verifica sus huellas y reinicia. El perfil y las sesiones se conservan.
+**Actualizaciones diferenciales.** Si tienes v4.0.0 o posterior instalada en la ubicación predeterminada, abre ParteScan y pulsa **Actualizar a v4.0.4**. La aplicación descarga los archivos modificados, verifica sus huellas y reinicia. El perfil y las sesiones se conservan.
 
 **Novedades de v4.0.2.** Formato de RUT sin puntos y con guion antes del dígito verificador. El botón de actualización queda junto al título.
 

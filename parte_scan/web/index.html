@@ -286,7 +286,7 @@ function campos(p){
   const c=Object.assign({},p.cert||{},(p.infractores&&p.infractores.length>1)?p.infractores[infIdx(p)]:{}), malRut=(p.cert_avisos||[]).some(x=>/RUT/.test(x)&&!/^(Infractor|El infractor)/.test(x))||(p.avisos||[]).some(x=>/RUT leído/.test(x)), sinC=carab&&!p.img_cert&&!c.rut;
   const multi=(p.infractores||[]).length>1;
   const filaInf=multi?[gc('Infractor de esta copia (1, 2)',String(infIdx(p)+1),'check','Infractores múltiples.')]:[];
-  S.push({t:p.origen==='dom'||p.parte_escrito?'4 · Datos del denunciado':'4 · Certificado del Registro Civil',sub:p.parte_escrito?'Parte escrito. Completa los datos que figuren en el parte.':'',f:[
+  S.push({t:'4 · Datos del denunciado',sub:p.img_cert?'Fuente: certificado del Registro Civil.':p.parte_escrito||carab||p.origen==='dom'?'Fuente: parte escaneado.':'',f:[
     ...filaInf,
     gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
     gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:(p.placa||'')).trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',''),
@@ -326,33 +326,33 @@ function mostrar(){
     const d=document.createElement('div');d.className='sec';d.innerHTML='<h3>'+s.t+'</h3>'+(s.sub?'<small>'+s.sub+'</small>':'');
     s.f.forEach(f=>{
       const key=f.k, val=valorActual(p,key);
+      const estado=estadoCampo(p,f,val);
       const r=document.createElement('div');r.className='row'+(f.big?' big':'')+(key===activeKey?' act':'')+(p.done[key]?' done':'');
       const esOfi=(key==='Oficina emisora'&&carab0(p));
       const esInf=/^Infracción \d+ · código$/.test(key);
       const ctl=esOfi?'<select class="val">'+(OFICINAS_SIS.some(o=>o[1]===val)?'':'<option value="'+String(val).replace(/"/g,'&quot;')+'">'+val+'</option>')+OFICINAS_SIS.map(o=>'<option value="'+o[1]+'"'+(o[1]===val?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>').join('')+'</select>':'<input class="val"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+String(val).replace(/"/g,'&quot;')+'" placeholder="(en blanco)">';
-      r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+((p.ok&&p.ok[key])?'ok':f.st)+'">'+((p.ok&&p.ok[key])?'Confirmado':LAB[f.st])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((f.st==='check'&&!(p.ok&&p.ok[key]))?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
+      r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+estado+'">'+(estado==='ok'&&p.ok?.[key]?'Confirmado':LAB[estado])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((estado==='check'&&String(val).trim())?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
       el.oninput=el.onchange=e=>{
-        if(key==='RUT (certificado)'&&e.type==='change') el.value=formatoRut(el.value);
+        if(e.type==='change'){
+          if(key==='RUT (certificado)') el.value=formatoRut(el.value);
+          if(esInf){
+            const hit=buscarInfr(el.value);
+            if(hit) el.value=String(hit[0]);
+          }
+        }
         p.ed[key]=e.target.value;
         p.ok=p.ok||{};
-        p.ok[key]=true;
+        p.ok[key]=Boolean(el.value.trim());
+        const actual=estadoCampo(p,f,el.value), tag=r.querySelector('.tag');
+        tag.className='tag t-'+actual;
+        tag.textContent=actual==='ok'&&p.ok[key]?'Confirmado':LAB[actual];
+        const confirmar=r.querySelector('.cf');
+        if(confirmar) confirmar.hidden=actual!=='check'||!el.value.trim();
         pintarTira();
         if(key==='Infractor de esta copia (1, 2)') mostrar();
+        if(e.type==='change') autoguardar().catch(()=>{});
       };
-      if(esInf){
-        // Same searchable catalog used when adding an infringement.
-        // Store the selected code, not the display label, for tecleo.
-        el.addEventListener('change',()=>{
-          const hit=buscarInfr(el.value);
-          if(hit){
-            p.ed[key]=String(hit[0]);
-            p.ok=p.ok||{};p.ok[key]=true;
-            el.value=String(hit[0]);
-            pintarTira();
-          }
-        });
-      }
       el.onfocus=()=>{activeKey=key};
       if(key==='Placa')el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
@@ -400,7 +400,12 @@ function V(p,k){
   if(k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}
-const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>f.st==='check'&&!(f.k in p.ed)&&!(p.ok&&p.ok[f.k])).length,0);
+function estadoCampo(p,f,valor){
+  if(!String(valor??'').trim()) return f.st==='blank'?'blank':'check';
+  if(p.ok?.[f.k]||f.k in (p.ed||{})) return 'ok';
+  return f.st;
+}
+const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>estadoCampo(p,f,p.ed?.[f.k]??f.v)==='check').length,0);
 function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
 const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
     boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
@@ -469,7 +474,7 @@ function ingresado(){
   ir(n);
 }
 function semaforo(p){
-  const n=campos(p).reduce((k,s)=>k+s.f.filter(f=>f.st==='check'&&!(f.k in p.ed)&&!(p.ok&&p.ok[f.k])).length,0);
+  const n=pendientes(p);
   return {n,c:n===0?'v':(n<3?'a':'r')};
 }
 function pintarTira(){

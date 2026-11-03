@@ -5,19 +5,18 @@ Herramientas gratuitas para Windows para ingresar partes en el sistema de un Juz
 
 | Programa | Para qué sirve |
 |---|---|
-| **ParteScan** (`parte_scan/`) | Lee partes escaneados (Carabineros, MTT, Inspección) y sus certificados, los deja listos para revisar y genera el archivo para PartesTeclea. |
-| **PartesTeclea** (`teclea/`) | Teclea en el sistema los partes ya revisados, campo por campo, mirando la pantalla. |
+| **ParteScan** (`parte_scan/`) | Lee y permite revisar partes de Carabineros, MTT, Inspección y DOM. Desde la misma ventana teclea los datos revisados en el sistema del Juzgado. |
 | **Herramientas** (`herramientas/`) | Scripts de solo lectura para estudiar el sistema si cambia: grabar un ingreso, ver ventanas y exportar listas «Busca…». |
 
 ## Descargar
-**Releases** → última versión → `ParteScan-Windows` y `PartesTeclea-Windows` (zip). Se descomprime y se abre el `.exe`; no necesita instalación.
+En **Releases**, descarga `ParteScan-Instalador` e instala en la ubicación predeterminada para recibir actualizaciones desde la app. Si usas la edición portátil `ParteScan-Windows`, descomprime toda la carpeta y abre `ParteScan.exe`.
 
 ## Otros juzgados
 Los códigos de infracciones y oficinas, las actuarias y otros datos propios de cada juzgado se configuran en un perfil
-(botón **⚙ Juzgado** en ParteScan, **Ajustes** en PartesTeclea). Sin configurar, usa los del 2° Juzgado de Valdivia.
+(botón **⚙ Juzgado** en ParteScan). Sin configurar, usa los del 2° Juzgado de Valdivia.
 
 ## Para quien mantiene el proyecto
-- Nueva versión: **Actions** → «Compilar ParteScan…» y «Compilar PartesTeclea…» → *Run workflow* con el mismo número (ej. `v1.2.0`).
+- Para publicar una versión, sube una etiqueta `vX.Y.Z` al commit correspondiente. GitHub Actions compila ParteScan y publica el instalador, el ZIP portátil y los archivos de actualización.
 - Pruebas (desde la raíz): `python tests/prueba_perfil.py`,
   `python tests/prueba_tecleador.py` y `python tests/prueba_actualizador.py`.
   Ejecutar las tres; la del actualizador usa un servidor local sin internet.
