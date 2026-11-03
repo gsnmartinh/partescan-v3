@@ -5,6 +5,7 @@ import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.ImageDecoder;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.pdf.PdfDocument;
 import android.os.Bundle;
@@ -20,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -28,6 +30,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
@@ -258,7 +261,7 @@ public class MainActivity extends Activity {
                     Bitmap bitmap = decode(photos.get(i), 3000);
                     String text;
                     try {
-                        text = Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0))).getText();
+                        text = orderedText(Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0))));
                     } finally {
                         bitmap.recycle();
                     }
@@ -285,6 +288,42 @@ public class MainActivity extends Activity {
             String result = message;
             runOnUiThread(() -> render(result));
         }).start();
+    }
+
+    private static String orderedText(Text recognized) {
+        ArrayList<Text.Line> lines = new ArrayList<>();
+        for (Text.TextBlock block : recognized.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                if (line.getBoundingBox() != null) lines.add(line);
+            }
+        }
+        if (lines.isEmpty()) return recognized.getText();
+        lines.sort(Comparator.comparingInt(line -> line.getBoundingBox().centerY()));
+
+        StringBuilder text = new StringBuilder();
+        ArrayList<Text.Line> row = new ArrayList<>();
+        Rect anchor = lines.get(0).getBoundingBox();
+        for (Text.Line line : lines) {
+            Rect box = line.getBoundingBox();
+            int tolerance = Math.max(1, Math.min(anchor.height(), box.height()) / 2);
+            if (box.centerY() - anchor.centerY() > tolerance) {
+                appendRow(text, row);
+                row.clear();
+                anchor = box;
+            }
+            row.add(line);
+        }
+        appendRow(text, row);
+        return text.toString();
+    }
+
+    private static void appendRow(StringBuilder text, ArrayList<Text.Line> row) {
+        row.sort(Comparator.comparingInt(line -> line.getBoundingBox().left));
+        for (int i = 0; i < row.size(); i++) {
+            if (i > 0) text.append(' ');
+            text.append(row.get(i).getText());
+        }
+        text.append('\n');
     }
 
     private void addPage(PdfDocument pdf, String name, int number) throws IOException {
