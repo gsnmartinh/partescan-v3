@@ -1,0 +1,17 @@
+plugins {
+    id 'com.android.application' version '8.7.3'
+}
+android {
+    namespace 'cl.partescan.captura'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'cl.partescan.captura'
+        minSdk 28
+        targetSdk 35
+        versionCode 1
+        versionName '0.1'
+    }
+}
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+}
