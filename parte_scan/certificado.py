@@ -56,6 +56,11 @@ def _propietario(t):
     return out
 
 
+def _dato_propietario(zona, etiqueta):
+    m = re.search(r"^[^\w\r\n]*(?:" + etiqueta + r")\b[ \t:;?*|!]*([^\r\n]+)", zona, re.I | re.M)
+    return _sin_ruido(_limpiar(m.group(1))) if m else ""
+
+
 def leer(t):
     o, av = {}, []
     # Inscripción: PLACA.NN-D  (el dígito final es el verificador de la placa)
@@ -76,17 +81,19 @@ def leer(t):
     o["modelo"] = _valor(t, r"Modelo").upper()
     o["color"] = _valor(t, r"Color").upper()
     prop = _propietario(t)
-    o["nombre"] = _valor(t, r"Nombre").upper()
+    encabezado = re.search(r"PROPIETARIO[^\r\n]*", t, re.I)
+    zona = t[encabezado.end():] if encabezado else t
+    zona = re.split(r"^\W*(?:Fec\.?\s*adq|Repertorio|FECHA)", zona, maxsplit=1, flags=re.I | re.M)[0]
+    o["nombre"] = _dato_propietario(zona, r"Nombre").upper()
     if not o["nombre"] and prop:
         o["nombre"] = prop[0].upper()
     # RUN: tolera coma por punto, espacios y letras confundidas
-    m = re.search(r"R\.?\s*U\.?\s*N\.?\s*[:;]\s*([\d.,\s]{6,12})\s*[-–]\s*([\dKk])", t)
+    m = re.search(r"R\.?[ \t]*U\.?[ \t]*[NT]\.?[ \t:;?*|!]*([\d., \t]{6,15})[ \t]*[-–][ \t]*([\dK])\b", zona, re.I)
     rut = ""
     if m:
         rut = re.sub(r"\D", "", m.group(1)) + "-" + m.group(2).upper()
     if not rut:
-        zona = t[re.search(r"PROPIETARIO", t, re.I).start():] if re.search(r"PROPIETARIO", t, re.I) else t
-        m = re.search(r"(?<!\d)(\d{1,2})\s*[.,]\s*(\d{3})\s*[.,]\s*(\d{3})\s*[-–]\s*([\dKk])", zona)
+        m = re.search(r"(?<!\d)(\d{1,2})[ \t]*[.,][ \t]*(\d{3})[ \t]*[.,][ \t]*(\d{3})[ \t]*[-–][ \t]*([\dKk])", zona)
         if m:
             rut = m.group(1) + m.group(2) + m.group(3) + "-" + m.group(4).upper()
     o["rut"] = rut
@@ -94,7 +101,7 @@ def leer(t):
         av.append("No pude leer el RUT del certificado.")
     elif not rut_ok(rut):
         av.append("El RUT del certificado (%s) no cumple el dígito verificador: revísalo." % rut)
-    dom = _valor(t, r"Domicilio")
+    dom = _dato_propietario(zona, r"Domicilio|Direcci[oó]n")
     if not dom and len(prop) > 2:
         dom = prop[2]
     o["direccion"] = _sin_ruido(_limpiar(re.sub(r"\s\.\s", " ", dom))).upper().strip(" ,")
@@ -103,7 +110,7 @@ def leer(t):
         return catalogo.comuna_oficial(re.sub(r"[^A-ZÁÉÍÓÚÑ ]", "", v.upper()).strip())
     def _en_lista(c):
         return bool(c) and catalogo.comuna_en_sistema(c)
-    com = _com(_valor(t, r"Comuna"))
+    com = _com(_dato_propietario(zona, r"Comuna"))
     if not _en_lista(com):          # rótulo ilegible o valor raro: se prueba la línea que sigue al domicilio
         for cand in prop[3:4] + prop[2:3]:
             if _en_lista(_com(cand)):

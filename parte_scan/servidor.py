@@ -196,7 +196,7 @@ def trabajador():
                             ultimo = armar_carab(r, nombre, n, pid)
                             PARTES.append(ultimo)
                     elif tipo == "certificado":
-                        c = certificado.leer(texto)
+                        c = motor.leer_certificado(g, texto)
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img

@@ -130,6 +130,33 @@ def es_formulario_inspeccion(texto):
     ))
 
 
+def leer_certificado(g, texto):
+    from . import catalogo, certificado
+
+    datos = certificado.leer(texto)
+    campos = ("nombre", "rut", "direccion", "comuna")
+
+    def valido(campo, valor):
+        if campo == "rut":
+            return certificado.rut_ok(valor)
+        if campo == "comuna":
+            return catalogo.comuna_en_sistema(valor)
+        return bool(valor)
+
+    faltan = [k for k in campos if not valido(k, datos[k])]
+    if faltan:
+        # La segmentación por columnas recupera líneas que el modo de bloque mezcla u omite.
+        alternativo = pytesseract.image_to_string(g, lang="spa", config="--psm 4")
+        if re.search(r"\bPROPIETARIO\b", alternativo, re.I):
+            otros = certificado.leer(alternativo)
+            etiquetas = {"nombre": "nombre", "rut": "rut", "direccion": "dirección", "comuna": "comuna"}
+            for k in faltan:
+                if valido(k, otros[k]):
+                    datos[k] = otros[k]
+                    datos["avisos"] = [a for a in datos["avisos"] if etiquetas[k] not in a.lower()]
+    return datos
+
+
 def tipo_pagina(texto):
     """'parte', 'carab' (parte de Carabineros), 'mtt' (denuncia del MTT), 'certificado' u 'otra'."""
     from . import certificado, extractor_carab, extractor_mtt
