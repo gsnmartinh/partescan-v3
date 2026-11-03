@@ -4,7 +4,7 @@ import io, json, os, sys, zipfile, time, queue, re, shutil, tempfile, threading,
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
+from . import actualizador, catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
 
 WEB = os.path.join(motor._base(), "parte_scan", "web")
 if not os.path.isdir(WEB):
@@ -16,6 +16,11 @@ COLA = queue.Queue()
 ESTADO = {"pendientes": 0, "error": ""}
 LOCK = threading.Lock()
 TMP = tempfile.mkdtemp(prefix="partescan_")
+
+
+def comprobar_actualizacion_segura():
+    if ESTADO["pendientes"] or tecleador.corriendo():
+        raise ValueError("Termina el escaneo y el tecleo antes de instalar la actualización.")
 
 
 def hora(h):
@@ -239,6 +244,8 @@ class H(BaseHTTPRequestHandler):
                                         "partes": PARTES})
         if u.path == "/api/sesion/ultima":
             return self._send(200, info_sesion_auto())
+        if u.path == "/api/actualizacion":
+            return self._send(200, actualizador.estado())
         if u.path == "/api/infracciones":
             lista = perfil.infracciones()
             ordenadas = sorted(([c, d] for c, d in lista.items()),
@@ -268,6 +275,18 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == "/api/actualizacion":
+            if self.headers.get("X-ParteScan-Actualizar") != "1":
+                return self._send(403, {"error": "Solicitud de actualización no válida."})
+            try:
+                comprobar_actualizacion_segura()
+                actualizador.iniciar(
+                    diferencial=parse_qs(u.query).get("completa") != ["1"],
+                    antes_de_cerrar=comprobar_actualizacion_segura,
+                )
+                return self._send(202, {"ok": True})
+            except ValueError as e:
+                return self._send(400, {"error": str(e)})
         if u.path == "/api/subir":
             nombre = parse_qs(u.query).get("nombre", ["archivo"])[0]
             n = int(self.headers.get("Content-Length", 0))
@@ -513,6 +532,7 @@ def _abrir_ventana(url):
 
 def main():
     _registro_en_archivo()
+    actualizador.revisar_en_segundo_plano()
     threading.Thread(target=trabajador, daemon=True).start()
     for puerto in range(8765, 8785):
         try:

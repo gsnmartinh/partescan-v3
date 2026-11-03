@@ -38,7 +38,10 @@ jobs:
         run: python tests/prueba_tecleador.py
 
       - name: Probar la actualización automática
-        run: python tests/prueba_actualizador.py
+        run: |
+          python tests/prueba_actualizador.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/prueba_actualizacion_diferencial.py
 
       - name: Instalar Tesseract (motor de OCR, gratuito)
         run: choco install tesseract -y --no-progress
@@ -122,6 +125,8 @@ jobs:
         run: |
           $tag = "${{ github.event.inputs.version || github.ref_name }}"
           Compress-Archive -Path "dist\ParteScan" -DestinationPath "ParteScan-Windows-$tag.zip"
+          python herramientas/empaquetar_actualizacion.py dist/ParteScan build/actualizacion $tag
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh release create $tag --title "ParteScan $tag" --target ${{ github.sha }} --notes-file RELEASE_NOTES.md 2>$null
-          gh release upload $tag "ParteScan-Windows-$tag.zip" --clobber
-          gh release upload $tag (Get-ChildItem salida\*).FullName --clobber
+          $assets = @("ParteScan-Windows-$tag.zip") + (Get-ChildItem salida\*).FullName + (Get-ChildItem build/actualizacion/*).FullName
+          gh release upload $tag @assets --clobber

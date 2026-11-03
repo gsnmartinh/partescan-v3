@@ -14,8 +14,9 @@ import tempfile
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
-from . import version
+from . import actualizacion_diferencial, version
 
 REPO = "gsnmartinh/partescan-v3"
 API = "https://api.github.com/repos/%s/releases/latest" % REPO
@@ -55,7 +56,7 @@ def revisar(obtener=_json):
     try:
         rel = obtener(API)
         tag = rel.get("tag_name", "")
-        exe = sha = ""
+        exe = sha = manifiesto = paquete = ""
         for a in rel.get("assets", []):
             u = a.get("browser_download_url", "")
             if not u.startswith(PREFIJO_DESCARGA):
@@ -64,9 +65,14 @@ def revisar(obtener=_json):
                 exe = u
             elif re.search(r"Instalador.*\.exe\.sha256$", a.get("name", ""), re.I):
                 sha = u
+            elif a.get("name") == "ParteScan-archivos.json":
+                manifiesto = u
+            elif a.get("name") == "ParteScan-archivos.bin":
+                paquete = u
         with LOCK:
             ESTADO.update(ultima=tag, notas=(rel.get("body") or "")[:600],
-                          hay=bool(exe and sha and es_mas_nueva(tag, version.VERSION)), _url=exe, _sha_url=sha, error="")
+                          hay=bool(exe and sha and es_mas_nueva(tag, version.VERSION)), _url=exe, _sha_url=sha,
+                          _manifiesto=manifiesto, _paquete=paquete, error="")
     except Exception as e:      # noqa: BLE001 - sin internet, límite de GitHub, etc.: se ignora en silencio
         with LOCK:
             ESTADO["error"] = str(e)[:200]
@@ -81,7 +87,37 @@ def estado():
         return {k: v for k, v in ESTADO.items() if not k.startswith("_")}
 
 
-def instalar(lanzar=True):
+def iniciar(diferencial=True, antes_de_cerrar=lambda: None):
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        raise ValueError("Abre la versión compilada de ParteScan para actualizar.")
+    with LOCK:
+        if not ESTADO["hay"] or ESTADO["estado"] in ("descargando", "instalando"):
+            raise ValueError("No hay una actualización lista para instalar.")
+        manifiesto = ESTADO.get("_manifiesto")
+        paquete = ESTADO.get("_paquete")
+        tag = ESTADO["ultima"]
+        ESTADO.update(estado="descargando", error="")
+
+    def ejecutar():
+        try:
+            if diferencial and manifiesto and paquete:
+                raiz = Path(sys.executable).resolve().parent
+                instalada = Path(os.environ["LOCALAPPDATA"]) / "Programs" / "ParteScan"
+                if raiz != instalada.resolve():
+                    raise ValueError("La actualización diferencial requiere la instalación estándar de ParteScan.")
+                trabajo = actualizacion_diferencial.preparar(raiz, _json(manifiesto), paquete, tag)
+                antes_de_cerrar()
+                actualizacion_diferencial.lanzar(raiz, trabajo)
+                os._exit(0)
+            instalar(antes_de_cerrar=antes_de_cerrar)
+        except Exception as e:
+            with LOCK:
+                ESTADO.update(estado="error", error=str(e)[:200])
+
+    threading.Thread(target=ejecutar, daemon=True).start()
+
+
+def instalar(lanzar=True, antes_de_cerrar=lambda: None):
     """Descarga el instalador, verifica su huella y lo ejecuta en silencio; el programa se cierra y el instalador
     lo vuelve a abrir. Devuelve la ruta del instalador (útil para las pruebas)."""
     with LOCK:
@@ -110,6 +146,7 @@ def instalar(lanzar=True):
         if lanzar:
             if sys.platform != "win32":
                 raise ValueError("La actualización automática es solo para Windows.")
+            antes_de_cerrar()
             subprocess.Popen([ruta, "/SILENT", "/NOCANCEL", "/CLOSEAPPLICATIONS"],
                              creationflags=0x00000008 | 0x00000200, close_fds=True)   # DETACHED_PROCESS | NEW_PROCESS_GROUP
             threading.Timer(1.5, lambda: os._exit(0)).start()      # el instalador necesita el programa cerrado
