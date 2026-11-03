@@ -64,7 +64,8 @@ def _dato_propietario(zona, etiqueta):
 def leer(t):
     o, av = {}, []
     # Inscripción: PLACA.NN-D  (el dígito final es el verificador de la placa)
-    m = re.search(r"Inscripci\S{1,3}n\s*[:;1l|]?\s*([A-Z]{2,5})[\s.\-]*(\d{1,4})\s*[-–]\s*([0-9K])", t, re.I)
+    m = re.search(r"\bInscripci[oó]n[ \t]*(?:[:;15l|$\-á][ \t]*)?"
+                  r"([A-Z]{2,5})[ \t.\-]*(\d{1,4})[ \t]*[-–][ \t]*([0-9K])\b", t, re.I)
     o["placa"] = (m.group(1) + m.group(2)).upper() if m else ""
     o["dv_placa"] = m.group(3).upper() if m else ""
     tipo = _valor(t, r"Tipo\s+Veh\S{1,3}culo")

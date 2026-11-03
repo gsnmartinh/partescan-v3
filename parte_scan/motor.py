@@ -123,11 +123,12 @@ def votar(*lecturas):
 
 def es_formulario_inspeccion(texto):
     """Reconoce el formulario municipal por sus campos, aunque cambie el encabezado."""
-    return all(re.search(campo, texto, re.I) for campo in (
-        r"\binspector\s+denunciante\b",
+    return (all(re.search(campo, texto, re.I) for campo in (
         r"\bdisposici[oó]n\s+infringida\b",
-        r"\bel\s+infractor\s+qued[oó]\s+citado\b",
-    ))
+        r"\b(?:e[lr]\s*)?infractor\s+qued[oó]\s+citado\b",
+    )) and bool(re.search(r"\binspector\s+denunciante\b", texto, re.I)
+                or re.search(r"\b(?:inspecci[oó]n\s+general|seguridad\s+ciudadana)\b",
+                             texto[:400], re.I)))
 
 
 def leer_certificado(g, texto):
@@ -140,7 +141,7 @@ def leer_certificado(g, texto):
         if campo == "rut":
             return certificado.rut_ok(valor)
         if campo == "comuna":
-            return catalogo.comuna_en_sistema(valor)
+            return bool(valor) and catalogo.comuna_en_sistema(valor)
         return bool(valor)
 
     faltan = [k for k in campos if not valido(k, datos[k])]

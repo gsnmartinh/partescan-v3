@@ -260,7 +260,8 @@ function campos(p){
          :(mtt?gc('Oficina emisora','Ministerio De Transportes','ok','El cargador ya la pone.')
          :gc('Oficina emisora',p.oficina||'',p.oficina?'ok':'check','Parte municipal.')),
     gc('Fecha de ingreso',hoy(),'ok','Día en que ingresas el parte.'),
-    ...((carab||mtt)?[gc(carab?'N° de parte (Carabineros)':'N° de denuncia (MTT)',p.n_parte_carab||'',p.n_parte_carab?'ok':'check','')]:[]),
+    ...((carab||mtt)?[gc(carab?'N° de parte (Carabineros)':'N° de denuncia (MTT)',p.n_parte_carab||'',p.n_parte_carab?'ok':'check',
+      carab&&!p.n_parte_carab?'Verifica el número de parte en el original e ingrésalo antes de teclear.':'')]:[]),
     ...((!carab&&!mtt)?[gc('N° de parte',p.folio,p.folio?'ok':'check','')]:[]),
     gc('N° de boleta (folio)',folioBase(p),folioBase(p)&&!folioAv&&!folioDup?'ok':'check','Número que va en el archivo.',{big:1}),
     gc('Fecha del parte',p.fecha_parte,p.fecha_parte?'ok':'check',''),

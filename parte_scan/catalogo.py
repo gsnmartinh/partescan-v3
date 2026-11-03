@@ -19,7 +19,7 @@ CODIGOS = {
     "SEGURO": "92", "PERMISO": "37", "REVISION": "33", "CELULAR": "54", "ROJA": "91", "RUIDOS": "350",
     "CHOQUE": "500", "COLISION": "57", "ANIMALES": "62", "FACILITAR": "649", "ESPE": "461", "BNUP": "604",
     "LOCAL": "480", "AMBU": "503", "PARAB": "75", "PUER": "632", "LUCES": "58", "PESO": "630",
-    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65", "DOM": "497",
+    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65", "DOM": "497", "493": "493",
 }
 # Parecidas pero no idénticas: se proponen con el código, pidiendo confirmar.
 CODIGOS_CONFIRMAR = {"SINL": "66"}
@@ -127,6 +127,10 @@ def actividad_sin_patente(texto):
 def resolver(texto):
     """Devuelve (descripcion_causa, [items]) a partir del texto de la infracción del parte."""
     T = sin_tildes(texto)
+    if (re.search(r"\b(?:BOTAR|ARROJAR|TIRAR)\b.{0,60}\bBASURA\b", T)
+            and re.search(r"\b(?:VIA\s+PUBLICA|B\.?\s*N\.?\s*U\.?\s*P\b|BIEN(?:ES)?\s+NACIONAL(?:ES)?\s+DE\s+USO\s+PUBLICO)", T)):
+        concepto = por_abrev("493")
+        return concepto["t"], [crear_item(concepto)]
     if actividad_sin_patente(T):
         concepto = por_abrev("LOCAL")
         return concepto["t"], [crear_item(concepto)]
