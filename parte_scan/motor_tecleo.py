@@ -805,9 +805,12 @@ class Sistema:
             raise Detener("El boton Aceptar no esta disponible o no coincide con el esperado. Revisa la pantalla.")
         dar_foco(h)
         pausa(0.15)
+        revisar_teclas()
+        self.asegurar_primer_plano()
         if foco_actual() != h:
             raise Detener("No pude enfocar el boton Aceptar. No envie la pulsacion.")
-        self.tecla("{SPACE}")
+        # El tecleo normal rechaza botones. Solo esta acción puede pulsar el Aceptar verificado.
+        send_keys("{SPACE}", pause=PAUSA_TECLA)
         print("  [auto] Activacion de Aceptar enviada; falta confirmar el guardado.")
 
     def esperar_vacio(self, mensaje, vigilar=False):
