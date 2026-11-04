@@ -8,8 +8,8 @@ android {
         applicationId 'cl.partescan.captura'
         minSdk 28
         targetSdk 35
-        versionCode 9
-        versionName '0.9'
+        versionCode 10
+        versionName '0.10.0'
     }
     signingConfigs {
         release {
@@ -27,6 +27,9 @@ android {
             signingConfig signingConfigs.release
         }
     }
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
 }
 if (gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') } && !System.getenv('ANDROID_KEYSTORE_PATH')) {
     throw new GradleException('Falta la clave de firma para compilar el APK de release.')
@@ -35,4 +38,6 @@ dependencies {
     implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')
     implementation 'com.google.mlkit:text-recognition:16.0.1'
     implementation 'androidx.core:core:1.13.1'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
 }

@@ -53,6 +53,8 @@ public class MainActivity extends Activity {
     private String undoDelete;
     private static final int OPEN_BATCH = 6;
     private boolean busy;
+    private static final int TANDA = 0, CAPTURA = 1, GUARDAR = 2;
+    private int screen = TANDA;
 
     private static final int PART = 1, CERTIFICATE = 2, SAVE = 3, NEXT = 4, SAVE_OCR = 5;
 
@@ -74,7 +76,7 @@ public class MainActivity extends Activity {
             certificate = state.getString("certificate");
             pending = state.getString("pending");
         }
-        if (state != null) editingIndex = state.getInt("editingIndex", -1);
+        if (state != null) { editingIndex = state.getInt("editingIndex", -1); screen = state.getInt("screen", TANDA); }
         else {
             File saved = new File(folder, "tanda.json");
             if (saved.isFile()) try { restore(new JSONObject(new String(Files.readAllBytes(saved.toPath()), StandardCharsets.UTF_8))); }
@@ -92,6 +94,7 @@ public class MainActivity extends Activity {
         state.putString("certificate", certificate);
         state.putString("pending", pending);
         state.putInt("editingIndex", editingIndex);
+        state.putInt("screen", screen);
     }
 
     @Override protected void onPause() {
@@ -152,18 +155,13 @@ public class MainActivity extends Activity {
         setGroups(all); part = certificate = null; editingIndex = -1;
     }
 
-    private void reviewBatch() {
+    private void editPart(int index) {
         commitCurrent();
         ArrayList<ArrayList<String>> all = groups();
-        String[] choices = new String[all.size()];
-        for (int i=0; i<choices.length; i++) choices[i] = "Parte " + (i+1) + (all.get(i).size()>1 ? " · con certificado" : " · sin certificado");
-        render("");
-        new android.app.AlertDialog.Builder(this).setTitle("Revisar capturados")
-            .setItems(choices, (dialog, index) -> {
-                ArrayList<String> selected = all.remove(index);
-                setGroups(all); part = selected.get(0); certificate = selected.size()>1 ? selected.get(1) : null;
-                editingIndex = index; render("Puedes repetir las fotos, girarlas o eliminar este parte.");
-            }).setNegativeButton("Cerrar", null).show();
+        if (index < 0 || index >= all.size()) return;
+        ArrayList<String> selected = all.remove(index);
+        setGroups(all); part = selected.get(0); certificate = selected.size() > 1 ? selected.get(1) : null;
+        editingIndex = index; screen = CAPTURA; render("");
     }
 
     private void removeCurrent() {
@@ -171,7 +169,8 @@ public class MainActivity extends Activity {
             .setNegativeButton("Cancelar", null).setPositiveButton("Eliminar", (dialog, which) -> {
                 try { undoDelete = snapshot().toString(); } catch (Exception error) { return; }
                 part = certificate = null; editingIndex = -1;
-                render("Parte eliminado. Puedes deshacer el cambio.");
+                screen = TANDA;
+                render("Parte eliminado de la tanda.");
             }).show();
     }
 
@@ -236,90 +235,328 @@ public class MainActivity extends Activity {
                     part = certificate = null; editingIndex = -1; undoDelete = null;
                     completedParts = pages.size()-attachments.size();
                 } else { for (String name : imported) delete(name); }
-                render(message == null ? "Tanda abierta. Pulsa Revisar capturados para modificarla." : message);
+                if (message == null) screen = TANDA;
+                render(message == null ? "Tanda abierta. Toca un parte para revisarlo." : message);
             });
         }).start();
     }
 
+    private int partCount() { return completedParts + (part == null ? 0 : 1); }
+
+    private void navigate(int destination) {
+        if (busy) return;
+        if (destination != CAPTURA) commitCurrent();
+        screen = destination;
+        render("");
+    }
+
     private void render(String message) {
         busy = false;
+        if (screen != CAPTURA) commitCurrent();
         persist();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(fluent.background);
+        root.setFitsSystemWindows(true);
+        setContentView(root);
+        renderHeader(root);
         ScrollView scroll = new ScrollView(this);
-        scroll.setFitsSystemWindows(true);
+        scroll.setFillViewport(true);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        int padding = Math.round(20 * getResources().getDisplayMetrics().density);
-        body.setPadding(padding, padding, padding, padding);
+        body.setPadding(fluent.dp(20), fluent.dp(20), fluent.dp(20), fluent.dp(20));
         scroll.addView(body);
-        setContentView(scroll);
-        scroll.setBackgroundColor(fluent.background);
-        label(body, "ParteScan", 28);
-        label(body, "CAPTURA DE DOCUMENTOS", 12);
-        label(body, "Escanea la tanda, reconoce el texto y llévala al computador por USB.", 16);
-        int count = completedParts + (part == null ? 0 : 1);
+        if (!message.isEmpty() || undoDelete != null) renderNotice(body, message);
+        if (screen == TANDA) renderBatch(body);
+        else if (screen == CAPTURA) renderCapture(body);
+        else renderSave(body);
+        renderPrimaryAction(root);
+        renderNavigation(root);
+    }
+
+    private void renderHeader(LinearLayout root) {
+        LinearLayout header = row();
+        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        header.setPadding(fluent.dp(20), fluent.dp(8), fluent.dp(8), fluent.dp(8));
+        header.setBackgroundColor(fluent.surface);
+        ImageView mark = new ImageView(this);
+        mark.setImageDrawable(fluent.icon(R.drawable.ic_scan, fluent.brand));
+        header.addView(mark, new LinearLayout.LayoutParams(fluent.dp(24), fluent.dp(24)));
+        TextView title = new TextView(this);
+        title.setText("ParteScan"); fluent.text(title, 20);
+        LinearLayout.LayoutParams name = new LinearLayout.LayoutParams(0, -2, 1);
+        name.leftMargin = fluent.dp(10); header.addView(title, name);
+        iconAction(header, R.drawable.ic_more, "Opciones de la tanda", view -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(this, view);
+            menu.getMenu().add("Abrir tanda guardada").setOnMenuItemClickListener(item -> { requestOpen(); return true; });
+            if (partCount() > 0) menu.getMenu().add("Nueva tanda").setOnMenuItemClickListener(item -> { requestNewBatch(); return true; });
+            menu.show();
+        });
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        divider(root);
+    }
+
+    private void renderBatch(LinearLayout body) {
+        heading(body, "Mi tanda", "Revisa tus capturas antes de llevarlas al computador.");
+        int count = partCount();
+        if (count == 0) {
+            LinearLayout empty = fluent.card(body);
+            empty.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            empty.setPadding(fluent.dp(24), fluent.dp(36), fluent.dp(24), fluent.dp(28));
+            ImageView image = new ImageView(this);
+            image.setImageDrawable(fluent.icon(R.drawable.ic_tanda, fluent.brand));
+            empty.addView(image, new LinearLayout.LayoutParams(fluent.dp(48), fluent.dp(48)));
+            space(empty, 20);
+            label(empty, "Tu tanda empieza aquí", 20);
+            TextView help = text(empty, "Escanea un parte y agrega su certificado si corresponde.", 16);
+            help.setGravity(android.view.Gravity.CENTER);
+            space(empty, 20);
+            button(empty, "Abrir una tanda guardada", true, () -> requestOpen());
+            text(body, "Las capturas se conservan en este teléfono mientras trabajas.", 14);
+            return;
+        }
+        ArrayList<ArrayList<String>> all = groups();
         LinearLayout summary = fluent.card(body);
-        label(summary, "Tanda actual", 20);
-        label(summary, count + (count == 1 ? " parte capturado" : " partes capturados"), 16);
-        label(summary, "La orientación se ajusta al tomar cada foto.", 14);
-        button(summary, "Revisar capturados", count > 0, () -> reviewBatch());
-        button(summary, "Abrir tanda guardada (.psocr)", true, () -> {
-            if (count == 0) openBatch();
-            else new android.app.AlertDialog.Builder(this).setMessage("Se reemplazará la tanda actual. Guarda un archivo si quieres conservarla.")
-                .setNegativeButton("Cancelar", null).setPositiveButton("Abrir", (d,w) -> openBatch()).show();
-        });
-        if (undoDelete != null) button(summary, "Deshacer eliminación", true, () -> {
-            try { restore(new JSONObject(undoDelete)); undoDelete = null; render("Eliminación deshecha."); }
-            catch (Exception error) { render("No se pudo recuperar el parte."); }
-        });
-        LinearLayout captureCard = fluent.card(body);
-        label(captureCard, "Parte " + (editingIndex < 0 ? completedParts + 1 : editingIndex + 1), 20);
-        label(captureCard, "Fotografía cualquier tipo de parte.", 14);
-        preview(captureCard, part, "Foto del parte");
-        button(captureCard, part == null ? "Escanear parte" : "Repetir foto del parte", true, () -> capture(PART), true);
-        if (part != null) button(captureCard, "Girar parte ↻", true, () -> orientPhoto(part, false));
-        LinearLayout certificateCard = fluent.card(body);
-        label(certificateCard, "Certificado", 20);
-        label(certificateCard, "Opcional · Agrégalo si corresponde a este parte.", 14);
-        preview(certificateCard, certificate, "Foto del certificado");
-        button(certificateCard, certificate == null ? "Agregar certificado" : "Repetir foto del certificado",
-                part != null, () -> capture(CERTIFICATE));
-        if (certificate != null) {
-            button(certificateCard, "Girar certificado ↻", true, () -> orientPhoto(certificate, false));
-            button(certificateCard, "Quitar certificado", true, () -> {
-                undoDelete = null;
-                delete(certificate);
-                certificate = null;
-                render("");
+        label(summary, count + (count == 1 ? " parte en la tanda" : " partes en la tanda"), 20);
+        text(summary, attachments.size() + (attachments.size() == 1 ? " certificado adjunto" : " certificados adjuntos")
+                + " · " + pages.size() + " páginas", 14);
+        space(body, 20);
+        label(body, "Partes capturados", 16);
+        for (int index = 0; index < all.size(); index++) {
+            final int selected = index;
+            ArrayList<String> group = all.get(index);
+            LinearLayout card = fluent.card(body);
+            card.setPadding(fluent.dp(12), fluent.dp(12), fluent.dp(4), fluent.dp(12));
+            card.setOrientation(LinearLayout.HORIZONTAL);
+            card.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            LinearLayout target = row();
+            target.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            fluent.interactive(target, false);
+            target.setContentDescription("Revisar parte " + (index + 1) + (group.size() > 1 ? ", con certificado" : ", sin certificado"));
+            target.setOnClickListener(view -> editPart(selected));
+            target.addView(thumbnail(group.get(0), 56, 72));
+            LinearLayout detail = column();
+            detail.setPadding(fluent.dp(12), fluent.dp(4), fluent.dp(4), fluent.dp(4));
+            label(detail, "Parte " + (index + 1), 18);
+            text(detail, group.size() > 1 ? "Certificado adjunto" : "Sin certificado", 14);
+            target.addView(detail, new LinearLayout.LayoutParams(0, -2, 1));
+            card.addView(target, new LinearLayout.LayoutParams(0, -2, 1));
+            iconAction(card, R.drawable.ic_more, "Opciones del parte " + (index + 1), view -> {
+                android.widget.PopupMenu menu = new android.widget.PopupMenu(this, view);
+                menu.getMenu().add("Revisar parte").setOnMenuItemClickListener(item -> { editPart(selected); return true; });
+                menu.getMenu().add("Eliminar parte").setOnMenuItemClickListener(item -> { removeListedPart(selected); return true; });
+                menu.show();
             });
         }
-        button(body, "Eliminar este parte", part != null, () -> removeCurrent());
-        button(body, "Siguiente parte", part != null, () -> capture(NEXT));
-        LinearLayout exportCard = fluent.card(body);
-        label(exportCard, "Guardar tanda", 20);
-        label(exportCard, "Todo se procesa en este teléfono.", 14);
-        button(exportCard, "Guardar tanda con OCR", count > 0, () -> save(true), true);
-        button(exportCard, "Guardar PDF", count > 0, () -> save(false));
-        button(body, "Nueva tanda", count > 0, () ->
-            new android.app.AlertDialog.Builder(this)
-                .setMessage("¿Borrar las capturas de esta tanda?")
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("Nueva tanda", (dialog, which) -> {
-                    for (String page : pages) delete(page);
-                    pages.clear();
-                    attachments.clear();
-                    completedParts = 0;
-                    delete(part);
-                    delete(certificate);
-                    part = certificate = null; editingIndex = -1; undoDelete = null;
-                    File[] oldPhotos = folder.listFiles((dir, name) -> name.endsWith(".jpg"));
-                    if (oldPhotos != null) for (File photo : oldPhotos) photo.delete();
-                    render("");
-                }).show());
-        if (!message.isEmpty()) {
-            LinearLayout notice = fluent.card(body);
-            label(notice, message, 14);
-            notice.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
+    }
+
+    private void renderCapture(LinearLayout body) {
+        boolean editing = editingIndex >= 0;
+        int number = editing ? editingIndex + 1 : completedParts + 1;
+        heading(body, "Parte " + number, editing ? "Revisa el parte y su certificado." : "Primero el parte. Después, su certificado si corresponde.");
+        LinearLayout document = fluent.card(body);
+        LinearLayout title = row();
+        title.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView step = new TextView(this); step.setText("1  ·  Parte"); fluent.text(step, 18);
+        title.addView(step, new LinearLayout.LayoutParams(0, -2, 1));
+        if (part != null) iconAction(title, R.drawable.ic_more, "Opciones de la foto del parte", view -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(this, view);
+            menu.getMenu().add("Girar foto").setOnMenuItemClickListener(item -> { orientPhoto(part, false); return true; });
+            menu.getMenu().add("Eliminar parte").setOnMenuItemClickListener(item -> { removeCurrent(); return true; });
+            menu.show();
+        });
+        document.addView(title);
+        if (part == null) {
+            LinearLayout placeholder = column();
+            placeholder.setGravity(android.view.Gravity.CENTER);
+            placeholder.setPadding(fluent.dp(20), fluent.dp(40), fluent.dp(20), fluent.dp(40));
+            placeholder.setBackground(fluent.surface());
+            ImageView scan = new ImageView(this); scan.setImageDrawable(fluent.icon(R.drawable.ic_scan, fluent.brand));
+            placeholder.addView(scan, new LinearLayout.LayoutParams(fluent.dp(48), fluent.dp(48)));
+            space(placeholder, 20);
+            TextView hint = text(placeholder, "Encuadra el documento completo", 16);
+            hint.setGravity(android.view.Gravity.CENTER);
+            document.addView(placeholder);
+            space(document, 12);
+            text(document, "Usa buena luz y apoya el documento en una superficie plana.", 14);
+            return;
         }
+        preview(document, part, "Foto del parte");
+        text(document, "Toca la imagen para ampliarla.", 12);
+        button(document, "Repetir foto", true, () -> capture(PART));
+        LinearLayout attachment = fluent.card(body);
+        LinearLayout certificateTitle = row();
+        certificateTitle.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout words = column();
+        label(words, "2  ·  Certificado", 18);
+        text(words, "Opcional · Pertenece a este parte", 12);
+        certificateTitle.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        if (certificate != null) iconAction(certificateTitle, R.drawable.ic_more, "Opciones del certificado", view -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(this, view);
+            menu.getMenu().add("Girar foto").setOnMenuItemClickListener(item -> { orientPhoto(certificate, false); return true; });
+            menu.getMenu().add("Quitar certificado").setOnMenuItemClickListener(item -> {
+                new android.app.AlertDialog.Builder(this).setTitle("¿Quitar el certificado?")
+                    .setMessage("Se conserva la foto del parte.").setNegativeButton("Cancelar", null)
+                    .setPositiveButton("Quitar", (dialog, which) -> { undoDelete = null; delete(certificate); certificate = null; render(""); }).show();
+                return true;
+            });
+            menu.show();
+        });
+        attachment.addView(certificateTitle);
+        if (certificate == null) button(attachment, "Agregar certificado", true, () -> capture(CERTIFICATE));
+        else {
+            LinearLayout certificateRow = row(); certificateRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            ImageView photo = thumbnail(certificate, 64, 80);
+            photo.setContentDescription("Ampliar certificado");
+            photo.setOnClickListener(view -> showPhoto(certificate, "Certificado"));
+            certificateRow.addView(photo);
+            LinearLayout actions = column(); actions.setPadding(fluent.dp(12), 0, 0, 0);
+            text(actions, "Certificado adjunto", 16);
+            button(actions, "Repetir foto", true, () -> capture(CERTIFICATE));
+            certificateRow.addView(actions, new LinearLayout.LayoutParams(0, -2, 1));
+            attachment.addView(certificateRow);
+        }
+    }
+
+    private void renderSave(LinearLayout body) {
+        heading(body, "Guardar tanda", "Elige cómo quieres llevar tus documentos al computador.");
+        int count = partCount();
+        LinearLayout summary = fluent.card(body);
+        label(summary, count + (count == 1 ? " parte listo para guardar" : " partes listos para guardar"), 20);
+        text(summary, attachments.size() + " certificados · " + pages.size() + " páginas", 14);
+        LinearLayout recommended = fluent.card(body);
+        text(recommended, "RECOMENDADO", 12).setTextColor(fluent.brand);
+        label(recommended, "Archivo para ParteScan", 20);
+        text(recommended, "Conserva las imágenes y el texto reconocido. Puedes revisarlo o continuar trabajando en ParteScan.", 16);
+        text(recommended, "Formato .psocr · Se prepara en este teléfono", 14);
+        LinearLayout other = fluent.card(body);
+        label(other, "Copia en PDF", 18);
+        text(other, "Para consultar o imprimir las imágenes de los documentos.", 14);
+        button(other, "Guardar como PDF", count > 0, () -> save(false));
+        space(body, 12);
+        text(body, count == 0 ? "Agrega un parte en Escanear para preparar tu archivo." : "Después de guardar, copia el archivo al computador por USB y ábrelo en ParteScan.", 14);
+    }
+
+    private void renderPrimaryAction(LinearLayout root) {
+        LinearLayout actions = column();
+        actions.setBackgroundColor(fluent.surface);
+        actions.setPadding(fluent.dp(20), fluent.dp(8), fluent.dp(20), fluent.dp(8));
+        if (screen == TANDA) {
+            button(actions, partCount() == 0 ? "Escanear primer parte" : "Agregar parte", true, () -> {
+                screen = CAPTURA; render(""); capture(PART);
+            }, true);
+        } else if (screen == CAPTURA && part == null) {
+            button(actions, "Escanear parte", true, () -> capture(PART), true);
+        } else if (screen == CAPTURA) {
+            button(actions, editingIndex >= 0 ? "Guardar cambios" : "Añadir a la tanda", true, () -> {
+                boolean editing = editingIndex >= 0; commitCurrent(); screen = TANDA;
+                render(editing ? "Cambios guardados." : "Parte añadido a la tanda.");
+            }, true);
+            button(actions, "Guardar y escanear otro", true, () -> capture(NEXT));
+        } else button(actions, "Guardar para ParteScan", partCount() > 0, () -> save(true), true);
+        divider(root);
+        root.addView(actions, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private void renderNavigation(LinearLayout root) {
+        LinearLayout navigation = row();
+        navigation.setPadding(fluent.dp(8), fluent.dp(4), fluent.dp(8), fluent.dp(6));
+        navigation.setBackgroundColor(fluent.surface);
+        String[] names = {"Tanda", "Escanear", "Guardar"};
+        int[] icons = {R.drawable.ic_tanda, R.drawable.ic_scan, R.drawable.ic_save};
+        for (int tab = 0; tab < names.length; tab++) {
+            final int destination = tab;
+            LinearLayout item = column(); item.setGravity(android.view.Gravity.CENTER);
+            item.setPadding(fluent.dp(8), fluent.dp(8), fluent.dp(8), fluent.dp(6));
+            fluent.interactive(item, tab == screen);
+            item.setSelected(tab == screen); item.setContentDescription(names[tab]);
+            item.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+            ImageView icon = new ImageView(this);
+            icon.setImageDrawable(fluent.icon(icons[tab], tab == screen ? fluent.brand : fluent.secondary));
+            item.addView(icon, new LinearLayout.LayoutParams(fluent.dp(24), fluent.dp(24)));
+            TextView caption = text(item, names[tab], 12);
+            caption.setTextColor(tab == screen ? fluent.brand : fluent.secondary);
+            caption.setGravity(android.view.Gravity.CENTER);
+            item.setOnClickListener(view -> navigate(destination));
+            navigation.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
+        }
+        root.addView(navigation, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private void requestOpen() {
+        if (partCount() == 0) { openBatch(); return; }
+        new android.app.AlertDialog.Builder(this).setTitle("¿Abrir otra tanda?")
+            .setMessage("Se reemplazará la tanda actual. Guarda un archivo si quieres conservarla.")
+            .setNegativeButton("Cancelar", null).setPositiveButton("Abrir archivo", (dialog, which) -> openBatch()).show();
+    }
+
+    private void requestNewBatch() {
+        new android.app.AlertDialog.Builder(this).setTitle("¿Empezar una tanda nueva?")
+            .setMessage("Se borrarán las capturas de esta tanda del teléfono. Guarda un archivo si quieres conservarlas.")
+            .setNegativeButton("Cancelar", null).setPositiveButton("Nueva tanda", (dialog, which) -> {
+                pages.clear(); attachments.clear(); completedParts = 0;
+                part = certificate = null; editingIndex = -1; undoDelete = null;
+                File[] oldPhotos = folder.listFiles((dir, name) -> name.endsWith(".jpg"));
+                if (oldPhotos != null) for (File photo : oldPhotos) photo.delete();
+                screen = TANDA; render("");
+            }).show();
+    }
+
+    private void removeListedPart(int index) {
+        new android.app.AlertDialog.Builder(this).setTitle("¿Eliminar el parte " + (index + 1) + "?")
+            .setMessage("Se quitará de la tanda junto con su certificado. Puedes deshacer el cambio.")
+            .setNegativeButton("Cancelar", null).setPositiveButton("Eliminar", (dialog, which) -> {
+                try { undoDelete = snapshot().toString(); } catch (Exception error) { return; }
+                ArrayList<ArrayList<String>> all = groups(); all.remove(index); setGroups(all);
+                render("Parte eliminado de la tanda.");
+            }).show();
+    }
+
+    private void renderNotice(LinearLayout body, String message) {
+        LinearLayout notice = column();
+        notice.setPadding(fluent.dp(12), fluent.dp(12), fluent.dp(12), fluent.dp(8));
+        notice.setBackground(fluent.selected());
+        notice.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        text(notice, message.isEmpty() ? "Puedes recuperar el parte eliminado." : message, 14).setTextColor(fluent.foreground);
+        if (undoDelete != null) button(notice, "Deshacer eliminación", true, () -> {
+            try { restore(new JSONObject(undoDelete)); undoDelete = null; commitCurrent(); screen = TANDA; render("Parte recuperado."); }
+            catch (Exception error) { render("No se pudo recuperar el parte."); }
+        });
+        body.addView(notice); space(body, 16);
+    }
+
+    private LinearLayout column() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
+    private LinearLayout row() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.HORIZONTAL); return view; }
+    private void heading(LinearLayout body, String title, String subtitle) { label(body, title, 28); text(body, subtitle, 14); }
+    private TextView text(LinearLayout body, String value, int size) {
+        TextView view = new TextView(this); view.setText(value); fluent.text(view, size);
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.bottomMargin = fluent.dp(8);
+        body.addView(view, layout); return view;
+    }
+    private void space(LinearLayout body, int height) { body.addView(new android.view.View(this), new LinearLayout.LayoutParams(1, fluent.dp(height))); }
+    private void divider(LinearLayout root) { android.view.View line = new android.view.View(this); line.setBackgroundColor(fluent.dark ? 0xFF424242 : 0xFFE0E0E0); root.addView(line, new LinearLayout.LayoutParams(-1, fluent.dp(1))); }
+    private void iconAction(LinearLayout body, int resource, String description, android.view.View.OnClickListener action) {
+        android.widget.ImageButton button = new android.widget.ImageButton(this);
+        button.setImageDrawable(fluent.icon(resource, fluent.secondary)); button.setContentDescription(description);
+        button.setPadding(fluent.dp(12), fluent.dp(12), fluent.dp(12), fluent.dp(12));
+        fluent.interactive(button, false); button.setOnClickListener(action);
+        body.addView(button, new LinearLayout.LayoutParams(fluent.dp(48), fluent.dp(48)));
+    }
+    private ImageView thumbnail(String name, int width, int height) {
+        ImageView photo = new ImageView(this); photo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        photo.setBackground(fluent.surface()); photo.setClipToOutline(true);
+        photo.setLayoutParams(new LinearLayout.LayoutParams(fluent.dp(width), fluent.dp(height)));
+        try { photo.setImageBitmap(decode(name, fluent.dp(height * 2))); }
+        catch (IOException error) { photo.setImageDrawable(fluent.icon(R.drawable.ic_document, fluent.secondary)); }
+        return photo;
+    }
+    private void showPhoto(String name, String description) {
+        try {
+            ImageView full = new ImageView(this); full.setImageBitmap(decode(name, 2400)); full.setAdjustViewBounds(true);
+            ScrollView document = new ScrollView(this); document.addView(full);
+            new android.app.AlertDialog.Builder(this).setTitle(description).setView(document).setPositiveButton("Cerrar", null).show();
+        } catch (IOException error) { render("No se pudo abrir la imagen."); }
     }
 
     private void label(LinearLayout body, String text, int size) {
@@ -404,6 +641,7 @@ public class MainActivity extends Activity {
     }
 
     private void capture(int type) {
+        screen = CAPTURA;
         pending = UUID.randomUUID() + ".jpg";
         File file = new File(folder, pending);
         try {
@@ -475,7 +713,8 @@ public class MainActivity extends Activity {
                     if (output == null) throw new IOException();
                     pdf.writeTo(output);
                 }
-                render("Tanda guardada. Copia el PDF al PC por USB y ábrelo en ParteScan.");
+                screen = GUARDAR;
+                render("PDF guardado. Ya puedes copiarlo al computador.");
             } catch (IOException | RuntimeException error) {
                 render("No se pudo guardar el PDF. Puedes intentarlo nuevamente.");
             } finally {
@@ -547,6 +786,7 @@ public class MainActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (busy) return;
+        if (screen != TANDA) { navigate(TANDA); return; }
         super.onBackPressed();
     }
 
@@ -612,7 +852,7 @@ public class MainActivity extends Activity {
                         zip.closeEntry();
                     }
                 }
-                message = "Tanda con OCR guardada. Copia el archivo .psocr al PC por USB.";
+                message = "Tanda guardada. Lleva el archivo .psocr al computador y ábrelo en ParteScan.";
             } catch (Exception error) {
                 message = "No se pudo guardar la tanda con OCR. Puedes volver a intentarlo.";
             } finally {

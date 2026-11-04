@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:label="ParteScan Captura" android:allowBackup="false"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.ParteScan">
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="cl.partescan.captura.fotos" android:exported="false"
             android:grantUriPermissions="true">
