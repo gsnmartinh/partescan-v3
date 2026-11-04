@@ -130,7 +130,8 @@ jobs:
           Write-Host $t.Content
           if ($t.Content -notmatch '"disponible":\s*true') { throw "El tecleo no quedo disponible dentro del programa" }
           $logo = Invoke-WebRequest -Uri http://127.0.0.1:8765/brand/partescan.svg -UseBasicParsing
-          if ($logo.Content -notmatch '<svg') { throw "No se incluyó el logo de ParteScan" }
+          $svg = if ($logo.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($logo.Content) } else { [string]$logo.Content }
+          if ($svg -notmatch '<svg') { throw "No se incluyó el logo de ParteScan" }
           $icono = Invoke-WebRequest -Uri http://127.0.0.1:8765/favicon.ico -UseBasicParsing
           if ($icono.RawContentLength -lt 100) { throw "No se incluyó el icono de ParteScan" }
           Stop-Process -Id $p.Id -Force
