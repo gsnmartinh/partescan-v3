@@ -146,6 +146,24 @@ public class NavigationTest {
         assertEquals(3,list("pages").size());
     }
 
+    @Test public void systemBackReturnsToBatchWithoutLosingTheReviewedPart() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        android.window.OnBackInvokedCallback back = ReflectionHelpers.callInstanceMethod(
+                activity.getOnBackInvokedDispatcher(), "getTopCallback");
+        assertNotNull(back);
+        ReflectionHelpers.setField(activity,"busy",true);
+        back.onBackInvoked();
+        assertTrue(byDescription(root(),"Escanear").isSelected());
+        ReflectionHelpers.setField(activity,"busy",false);
+        back.onBackInvoked();
+        assertTrue(byDescription(root(),"Tanda").isSelected());
+        assertEquals("first.jpg",list("pages").get(0));
+        assertEquals("cert.jpg",list("pages").get(1));
+        assertFalse(activity.isFinishing());
+        clickDescription("Guardar"); back.onBackInvoked();
+        assertTrue(byDescription(root(),"Tanda").isSelected());
+    }
+
     @Test @Config(qualifiers="w320dp-h640dp-mdpi") public void smallScreenKeepsNavigationAndMainActionVisible() throws Exception {
         seed(); clickDescription("Revisar parte 1, con certificado");
         screenshot("06-pantalla-pequena");
