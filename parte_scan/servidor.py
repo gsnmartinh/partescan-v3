@@ -450,7 +450,9 @@ class H(BaseHTTPRequestHandler):
                                 donante["cert"] = dict(donante.get("cert", {}), rut="", nombre="", direccion="", comuna="")
                                 donante["cert_avisos"] = ["Certificado reasignado: revisa los datos del denunciado."]
                             donante["img_cert"] = 0
-                            donante["ed"] = {}; donante["ok"] = {}; donante["done"] = {}
+                            for key in ("RUT (certificado)", "Nombre (certificado)", "Dirección (certificado)", "Comuna (certificado)", "Marca (certificado)", "Modelo (certificado)", "Tipo de vehículo (certificado)", "Placa"):
+                                for bucket in ("ed", "ok", "done"):
+                                    donante.get(bucket, {}).pop(key, None)
                             donante.pop("avOk", None)
                         else:
                             nuevos.remove(donante)

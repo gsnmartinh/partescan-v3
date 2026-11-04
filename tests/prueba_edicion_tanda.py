@@ -92,6 +92,7 @@ class Edicion(unittest.TestCase):
         self.assertEqual(status, 200, result)
         self.assertEqual(result['partes'][0]['img_cert'], 0)
         self.assertEqual(result['partes'][0]['cert'], {})
+        self.assertEqual(result['partes'][0]['ed']['Lugar'], 'CORREGIDO')
         self.assertEqual(result['partes'][1]['img_cert'], 2)
 
     def test_bad_edits_and_busy_are_rejected(self):
