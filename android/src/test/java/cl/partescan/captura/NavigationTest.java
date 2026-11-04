@@ -81,10 +81,13 @@ public class NavigationTest {
         list("attachments").add(1); ReflectionHelpers.setField(activity,"completedParts",2); navigate(0);
     }
     private void screenshot(String name) throws Exception {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         float density=activity.getResources().getDisplayMetrics().density;
         int width=Math.round(activity.getResources().getConfiguration().screenWidthDp*density);
         int height=Math.round(activity.getResources().getConfiguration().screenHeightDp*density);
         View root=root(); root.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY)); root.layout(0,0,width,height);
+        root.jumpDrawablesToCurrentState();
+        root.getViewTreeObserver().dispatchOnPreDraw();
         Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888); root.draw(new Canvas(bitmap));
         File directory=new File("build/test-screenshots"); directory.mkdirs();
         try(FileOutputStream output=new FileOutputStream(new File(directory,name+".png"))) { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,output)); }
@@ -124,6 +127,7 @@ public class NavigationTest {
         seed(); clickDescription("Revisar parte 1, con certificado");
         ReflectionHelpers.callInstanceMethod(activity,"removeCurrent");
         ((AlertDialog)ShadowDialog.getLatestDialog()).getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(1,((Integer)ReflectionHelpers.getField(activity,"completedParts")).intValue());
         click("Deshacer eliminación");
         assertEquals(2,((Integer)ReflectionHelpers.getField(activity,"completedParts")).intValue());
@@ -151,7 +155,7 @@ public class NavigationTest {
         assertTrue(position[1]+primary.getHeight()<=root().getHeight());
     }
 
-    @Test @Config(qualifiers="w393dp-h852dp-xxhdpi-night") public void darkThemeUsesSameNavigation() throws Exception {
+    @Test @Config(qualifiers="w393dp-h852dp-night-xxhdpi") public void darkThemeUsesSameNavigation() throws Exception {
         seed(); screenshot("07-tanda-oscura");
         clickDescription("Guardar"); screenshot("08-guardar-oscuro");
         FluentStyle style=ReflectionHelpers.getField(activity,"fluent"); assertTrue(style.dark);

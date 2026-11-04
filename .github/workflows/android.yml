@@ -52,4 +52,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" ParteScan-Captura-0.10.0.apk* --title "ParteScan Captura 0.10.0" --notes-file android/RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" ParteScan-Captura-0.10.0.apk* --title "ParteScan Captura 0.10.0" --notes-file android/RELEASE_NOTES.md --latest=false
