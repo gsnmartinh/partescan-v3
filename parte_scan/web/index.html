@@ -559,7 +559,7 @@ const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.orig
     oficina:V(p,'Oficina emisora'),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
     rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
     placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
-    infracciones:infrVigentes(p),causa:V(p,'Descripción de la causa'),uid:P.indexOf(p),ingresado:!!p.fin,rol_ingresado:p.fin?p.rol_ingresado:undefined});
+    infracciones:infrVigentes(p),causa:V(p,'Descripción de la causa'),uid:p.id,ingresado:!!p.fin,rol_ingresado:p.fin?p.rol_ingresado:undefined});
 $('btnTecleo').onclick=()=>{
   if(!P.length){toast('Primero carga los partes');return}
   const ord = P.slice();
@@ -738,8 +738,8 @@ function tecPintar(r){
   const lg=$('tLog'); if(r.log.length){lg.textContent+=r.log.join('\n')+'\n'; lg.scrollTop=lg.scrollHeight}
   tNlog=r.nlog;
   let cambio=false;
-  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&!!p.fin!==(f.estado==='ingresado')){p.fin=f.estado==='ingresado';cambio=true}});
-  r.partes.forEach(f=>{const p=P[f.uid]; if(p&&f.estado==='ingresado'&&f.rol&&p.rol_ingresado!==f.rol){p.rol_ingresado=f.rol;cambio=true}});
+  r.partes.forEach(f=>{const p=P.find(q=>q.id===f.uid); if(p&&!!p.fin!==(f.estado==='ingresado')){p.fin=f.estado==='ingresado';cambio=true}});
+  r.partes.forEach(f=>{const p=P.find(q=>q.id===f.uid); if(p&&f.estado==='ingresado'&&f.rol&&p.rol_ingresado!==f.rol){p.rol_ingresado=f.rol;cambio=true}});
   if(cambio){pintarTira();mostrar();autoguardar();}
   const a=$('tAct'); if(a.options.length<=1&&r.actuarios) r.actuarios.forEach(n=>a.add(new Option(n.charAt(0)+n.slice(1).toLowerCase(),n)));
   $('tIniciar').disabled=!r.disponible||r.corriendo||tMarcando; $('tDetener').disabled=!r.corriendo;
@@ -769,7 +769,7 @@ async function tecMarcar(uid,estado){
   try{
     const j=await tecPost('marcar',{uid,estado});
     if(j.error){alert(j.error);return}
-    const p=P[uid]; if(p){p.fin=estado==='ingresado';if(!p.fin) delete p.rol_ingresado;}
+    const p=P.find(q=>q.id===uid); if(p){p.fin=estado==='ingresado';if(!p.fin) delete p.rol_ingresado;}
     pintarTira(); mostrar();
     await autoguardar();
   }catch(e){alert('No se pudo completar la confirmación o su autoguardado: '+e.message)}
@@ -786,7 +786,7 @@ async function tecIniciar(uids){
 $('tTabla').onclick=async e=>{
   const b=e.target.closest('button'); if(!b||b.disabled||tMarcando) return;
   if(b.dataset.marcar!==undefined){await tecMarcar(+b.dataset.marcar,b.dataset.estado);return}
-  if(b.dataset.corr!==undefined){ $('dlgTec').close(); ir(+b.dataset.corr); return }
+  if(b.dataset.corr!==undefined){ $('dlgTec').close(); ir(P.findIndex(q=>q.id===+b.dataset.corr)); return }
   if(b.dataset.uno!==undefined){ await tecIniciar([+b.dataset.uno]); return }
 };
 $('tIniciar').onclick=()=>tecIniciar(null);
@@ -799,7 +799,7 @@ $('tImprimir').onclick=async()=>{
       alert('Completa todos los ingresos del lote antes de imprimir.');return;
     }
     const filas=estado.partes.map(f=>{
-      const r=regTecleo(P[f.uid]);
+      const r=regTecleo(P.find(q=>q.id===f.uid));
       return '<tr><td>'+esc(r.origen==='insp'?(r.boleta||r.n_parte):(r.n_parte||r.boleta))
         +'</td><td>'+esc(f.rol||'Sin registro')+'</td></tr>';
     });
