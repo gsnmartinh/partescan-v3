@@ -8,8 +8,8 @@ android {
         applicationId 'cl.partescan.captura'
         minSdk 28
         targetSdk 35
-        versionCode 6
-        versionName '0.6'
+        versionCode 7
+        versionName '0.7'
     }
 }
 dependencies {
@@ -17,3 +17,4 @@ dependencies {
     implementation 'com.google.mlkit:text-recognition:16.0.1'
     implementation 'androidx.core:core:1.13.1'
 }
+
