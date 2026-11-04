@@ -53,6 +53,7 @@ public class MainActivity extends Activity {
     private String undoDelete;
     private static final int OPEN_BATCH = 6;
     private boolean busy;
+    private android.window.OnBackInvokedCallback systemBackCallback;
     private static final int TANDA = 0, CAPTURA = 1, GUARDAR = 2;
     private int screen = TANDA;
 
@@ -61,8 +62,9 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         if (android.os.Build.VERSION.SDK_INT >= 33) {
+            systemBackCallback = this::onBackPressed;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::onBackPressed);
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, systemBackCallback);
         }
         fluent = new FluentStyle(this);
         getWindow().setStatusBarColor(fluent.background);
@@ -104,6 +106,13 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         super.onPause();
         if (!busy) persist();
+    }
+
+    @Override protected void onDestroy() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && systemBackCallback != null) {
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBackCallback);
+        }
+        super.onDestroy();
     }
 
     private JSONObject snapshot() throws org.json.JSONException {

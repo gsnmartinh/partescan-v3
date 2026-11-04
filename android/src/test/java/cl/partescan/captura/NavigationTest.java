@@ -148,18 +148,7 @@ public class NavigationTest {
 
     @Test public void systemBackReturnsToBatchWithoutLosingTheReviewedPart() throws Exception {
         seed(); clickDescription("Revisar parte 1, con certificado");
-        // Robolectric exposes PhoneWindow's proxy; real Android forwards it to ViewRootImpl.
-        Object dispatcher = activity.getOnBackInvokedDispatcher();
-        java.util.List<android.util.Pair<android.window.OnBackInvokedCallback,Integer>> callbacks =
-                ReflectionHelpers.getField(dispatcher, "mCallbacks");
-        android.window.OnBackInvokedCallback back = null;
-        for (android.util.Pair<android.window.OnBackInvokedCallback,Integer> entry : callbacks) {
-            if (entry.second == android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) back = entry.first;
-        }
-        if (back == null) {
-            Object actual = ReflectionHelpers.getField(dispatcher, "mActualDispatcher");
-            if (actual != null) back = ReflectionHelpers.callInstanceMethod(actual, "getTopCallback");
-        }
+        android.window.OnBackInvokedCallback back = ReflectionHelpers.getField(activity,"systemBackCallback");
         assertNotNull(back);
         ReflectionHelpers.setField(activity,"busy",true);
         back.onBackInvoked();
