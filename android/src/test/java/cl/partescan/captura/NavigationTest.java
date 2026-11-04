@@ -33,6 +33,9 @@ public class NavigationTest {
     private MainActivity activity;
 
     @Before public void create() {
+        // Each Robolectric test has a different app data directory; FileProvider caches paths.
+        java.util.Map<?,?> photoRoots = ReflectionHelpers.getStaticField(androidx.core.content.FileProvider.class,"sCache");
+        photoRoots.clear();
         controller = Robolectric.buildActivity(MainActivity.class).setup();
         activity = controller.get();
         list("pages").clear(); list("attachments").clear();
@@ -67,7 +70,11 @@ public class NavigationTest {
     private org.robolectric.shadows.ShadowActivity.IntentForResult startCamera(int request) {
         ReflectionHelpers.callInstanceMethod(activity,"capture",ReflectionHelpers.ClassParameter.from(int.class,request));
         org.robolectric.shadows.ShadowActivity.IntentForResult started = org.robolectric.Shadows.shadowOf(activity).getNextStartedActivityForResult();
-        assertNotNull("Debe abrir la cámara en vez de fallar al preparar la foto",started);
+        StringBuilder errors = new StringBuilder();
+        for (org.robolectric.shadows.ShadowLog.LogItem item : org.robolectric.shadows.ShadowLog.getLogsForTag("ParteScan")) {
+            errors.append(item.msg).append(' ').append(item.throwable).append('\n');
+        }
+        assertNotNull("Debe abrir la cámara en vez de fallar al preparar la foto: " + errors,started);
         assertEquals(request,started.requestCode);
         assertEquals(android.provider.MediaStore.ACTION_IMAGE_CAPTURE,started.intent.getAction());
         return started;
