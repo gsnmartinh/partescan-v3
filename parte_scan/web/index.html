@@ -72,33 +72,127 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
   #listaImpresion table{width:100%;border-collapse:collapse}
   #listaImpresion th,#listaImpresion td{border-bottom:1px solid #999;padding:6px;text-align:left}
 }
-</style></head><body>
+/* Las acciones de revisión permanecen accesibles al bajar por el formulario. */
+:root{--cabecera:64px;--revision:64px}
+header{gap:10px;padding:12px 20px;background:var(--card);backdrop-filter:none}
+header h1{flex-shrink:0}
+header #juz{max-width:210px;font-size:12px;line-height:1.3}
+header #estado{margin-right:auto;font-size:12px}
+header button{white-space:nowrap}
+.menu{position:relative}
+.menu summary{cursor:pointer;padding:7px 12px;border:1px solid var(--line);border-radius:var(--r);list-style:none;white-space:nowrap}
+.menu summary::-webkit-details-marker{display:none}
+.menu-panel{position:absolute;right:0;top:calc(100% + 8px);min-width:180px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh)}
+.menu-panel button{width:100%;text-align:left}
+.lote small{flex-basis:100%;max-width:none!important}
+#revision{position:sticky;top:var(--cabecera);z-index:4;display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 0 16px;box-shadow:0 3px 8px rgba(0,0,0,.04)}
+#revision[hidden]{display:none}
+#revision .tabs{margin:0;flex-shrink:0}
+#tira{padding:3px;flex:1;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+#tira .chip{flex-shrink:0;white-space:nowrap;padding:6px 12px}
+#imgbox{top:calc(var(--cabecera) + var(--revision) + 12px);max-height:calc(100vh - var(--cabecera) - var(--revision) - 24px)}
+@media(max-width:900px){
+  #revision{gap:8px;padding:8px 12px}
+  header{padding:10px 12px}
+  header .grp{border:0;padding:0}
+  #imgbox{position:relative;top:auto;max-height:55vh}
+}
+@media print{#revision{display:none!important}}
+/* Espacio de revisión con paneles independientes. */
+:root{--workspace-top:184px}
+body{background:var(--bg);font-family:"Segoe UI",system-ui,sans-serif}
+header{height:68px;flex-wrap:nowrap;z-index:10}
+header h1{font-size:19px}
+header #juz{font-size:12px;max-width:230px}
+.menu-panel{z-index:12;display:flex;flex-direction:column;gap:4px}
+.menu-panel button{border:0;background:transparent}
+.menu:not([open]) .menu-panel{display:none}
+.lote{margin:0;padding:12px 20px;border-radius:0;border-width:0 0 1px;box-shadow:none;gap:16px;align-items:end}
+.lote input{width:158px;font-size:14px}
+.lote #btnTec{margin-left:auto}
+.ayuda{position:relative;align-self:center;color:var(--mut);font-size:13px}
+.ayuda summary{cursor:pointer;list-style:none}
+.ayuda p{position:absolute;right:0;width:280px;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:var(--sh);z-index:11}
+#drop{margin:80px auto;max-width:680px;padding:65px 40px;line-height:2;background:var(--card)}
+#drop strong{font-size:22px;font-weight:600;color:var(--ink)}
+#drop[hidden],#main[hidden],#img[hidden],#leyenda[hidden]{display:none}
+.leyenda{font-size:11px;padding:8px 20px;background:var(--card)}
+main{display:grid;grid-template-columns:190px minmax(280px,.95fr) minmax(430px,1.2fr);gap:16px;padding:16px;height:calc(100vh - var(--workspace-top));min-height:360px;align-items:stretch}
+#revision{display:flex;flex-direction:column;position:static;padding:12px 8px;margin:0;box-shadow:none;border:1px solid var(--line);border-radius:8px;min-height:0;gap:8px}
+#revision h2{font-size:14px;font-weight:600;margin:0;padding:4px 8px}
+#tira{flex:1;display:flex;flex-direction:column;gap:6px;overflow:auto;padding:4px;min-height:0}
+#tira .chip{border-radius:6px;white-space:normal;padding:10px;font-size:12px;text-align:left;display:block}
+#documento{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:8px;min-height:0;min-width:0;overflow:hidden}
+#visorBar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs{margin:0}
+.visorAcciones{display:flex;gap:4px}
+.visorAcciones button{padding:5px 8px;font-size:12px}
+#imgbox{position:static;flex:1;border:0;border-radius:0;box-shadow:none;max-height:none;min-height:0;padding:16px;overflow:auto;background:var(--bg2)}
+#imgbox img{transform-origin:center center;border-radius:2px;box-shadow:var(--sh)}
+#form{min-width:0;overflow:auto;padding:0 8px 20px 0}
+.sec{border-radius:8px;box-shadow:none;padding:14px}
+.row{grid-template-columns:125px minmax(0,1fr) auto;gap:8px}
+.row button{font-size:12px;padding:5px 8px}
+.lab{font-size:12px}
+.val{font-size:14px}
+#toast{z-index:30}
+@media(max-width:1200px){
+ header #juz{display:none}
+ main{grid-template-columns:150px minmax(240px,.85fr) minmax(370px,1.2fr);gap:10px;padding:10px}
+ .row{grid-template-columns:105px minmax(0,1fr) auto}
+}
+@media(max-width:950px){
+ header{height:auto;flex-wrap:wrap}
+ main{height:auto;grid-template-columns:140px minmax(0,1fr)}
+ #documento{height:60vh}
+ #form{grid-column:2;overflow:visible}
+ #revision{grid-row:1 / span 2;max-height:80vh;position:sticky;top:var(--cabecera)}
+ .lote{flex-wrap:wrap}
+}
+
+#tira{align-items:stretch;width:100%}#tira .chip{box-sizing:border-box;width:100%}
+</style><link rel="stylesheet" href="/fluent.css"></head><body>
 <section id="listaImpresion"></section>
 <header><h1>ParteScan</h1><span id="juz" class="note" style="margin-left:-4px"></span>
 <button id="btnActualizar" hidden>Actualizar ParteScan</button>
-<button class="p" id="btnAbrir">Abrir partes escaneados…</button>
-<input type="file" id="file" multiple accept=".pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff" hidden>
-<span class="grp"><button id="btnGuardaSes" title="Guarda el lote con tus correcciones y las imágenes, para seguir después sin leer de nuevo los PDF">Guardar sesión</button>
+<button class="p" id="btnAbrir">Abrir tanda…</button>
+
+<input type="file" id="file" multiple accept=".psocr,.zip,.pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff" hidden>
+<details class="menu"><summary>Sesión</summary><div class="menu-panel"><button id="btnGuardaSes" title="Guarda el lote con tus correcciones y las imágenes, para seguir después sin leer de nuevo los PDF">Guardar sesión</button>
 <button id="btnAbreSes" title="Abre un lote guardado antes (.partescan) con todas tus correcciones">Abrir sesión…</button>
-<button id="btnContinua" hidden></button></span>
+<button id="btnContinua" hidden></button></div></details>
 <input type="file" id="fileSes" accept=".partescan" hidden>
-<span id="estado" class="note"></span><span style="flex:1"></span>
-<button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">⚙ Juzgado</button><button id="btnNueva" title="Borra el lote de la pantalla y deja el programa en blanco para una tanda nueva (no cierra el programa)">🧹 Nueva tanda</button><button id="btnSalir">Cerrar programa</button></header>
+<span id="estado" class="note"></span>
+<button id="btnJuz" title="Listas de infracciones y oficinas, actuarias y datos de tu juzgado">Ajustes</button><button id="btnNueva" title="Borra el lote de la pantalla y deja el programa en blanco para una tanda nueva (no cierra el programa)">Nueva tanda</button><details class="menu"><summary>Más opciones</summary><div class="menu-panel"><button id="btnTecleo">Exportar para tecleo (.json)</button><button id="btnSalir">Cerrar programa</button></div></details></header>
 <datalist id="dlInf"></datalist>
 
 <div class="lote">
- <label>Rol Disponible (rol del primer parte)<input id="rol" inputmode="numeric" placeholder="ej. 19952"></label>
- <label>Fecha de citación del lote<input id="cit" placeholder="dd/mm/aaaa"></label>
- <label>Fecha de ingreso (hoy)<input id="hoy" readonly></label>
+ <label>Rol inicial<input id="rol" inputmode="numeric" placeholder="ej. 19952"></label>
+ <label>Citación de la tanda<input id="cit" placeholder="dd/mm/aaaa"></label>
+ <label>Ingreso<input id="hoy" readonly></label>
 <button class="p" id="btnTec" title="Teclea los partes en el sistema del Juzgado desde esta misma ventana: si un dato está mal, lo corriges y sigues">Teclear en el sistema…</button>
-<button id="btnTecleo" title="Guarda el archivo que abre PartesTeclea para ingresar los partes en el sistema">Guardar datos para tecleo (.json)</button>
- <small style="max-width:520px">El rol es opcional: sirve para mostrar el actuario previsto. La fecha de citación se propone con la que más se repite en el lote. Al terminar, tecléalos desde aquí mismo con «Teclear en el sistema…» (el .json queda como alternativa para PartesTeclea).</small>
+
+ <details class="ayuda"><summary aria-label="Ayuda sobre la tanda">ⓘ Ayuda</summary><p>El rol inicial permite prever la asignación. Revisa los datos antes de pulsar «Teclear en el sistema».</p></details>
 </div>
-<div id="drop">Arrastra aquí los PDF o fotos de los partes (solo la primera hoja de cada parte), o usa «Abrir partes escaneados…»</div>
-<div class="leyenda">Atajo: <b>F2</b> copia el siguiente campo. · Colores de cada parte: <b style="color:var(--ok)">verde</b> = todos los datos completos · <b style="color:var(--ck)">amarillo</b> = 1 o 2 campos por revisar · <b style="color:var(--rj)">rojo</b> = 3 o más, revisar con cuidado. Al corregir un campo, se actualiza.</div>
-<div id="tira"></div>
-<main id="main" hidden><div id="imgbox"><div class="tabs"><button id="tabP" class="on">Parte</button><button id="tabC">Certificado</button></div><img id="img" alt="parte"></div><div id="form"></div></main>
-<dialog id="dlgJuz"><div class="dh"><h2>Perfil del juzgado</h2><button id="dClose">Cerrar</button></div><div class="db" id="dBody"></div><div class="df"><button id="dGuardar" class="p">Guardar cambios</button></div></dialog>
+<div id="drop"><strong>Abre o arrastra una tanda</strong><br>Arrastra aquí una tanda .psocr, un PDF o fotos, o usa «Abrir tanda…»</div>
+<div class="leyenda" id="leyenda" hidden>Atajo: <b>F2</b> copia el siguiente campo. · Colores de cada parte: <b style="color:var(--ok)">verde</b> = todos los datos completos · <b style="color:var(--ck)">amarillo</b> = 1 o 2 campos por revisar · <b style="color:var(--rj)">rojo</b> = 3 o más, revisar con cuidado. Al corregir un campo, se actualiza.</div>
+<main id="main" hidden>
+  <aside id="revision" hidden><h2>Tanda de partes</h2><button id="deshacerTanda" disabled>Deshacer cambio</button><div id="tira" aria-label="Partes de la tanda"></div></aside>
+  <section id="documento">
+    <div id="visorBar">
+      <div class="tabs" aria-label="Documento visible"><button id="tabP" class="on">Parte</button><button id="tabC">Certificado</button></div>
+      <div class="visorAcciones">
+        <button id="girar" title="Girar 90 grados">Girar ↻</button>
+        <button id="zoomMenos" aria-label="Reducir zoom">−</button>
+        <button id="zoomMas" aria-label="Aumentar zoom">+</button>
+        <button id="ajustar">Ajustar</button>
+      </div>
+    </div>
+    <div id="imgbox"><img id="img" alt="Documento escaneado" hidden></div>
+  </section>
+  <section id="form" aria-label="Datos del parte"></section>
+</main>
+<dialog id="dlgJuz"><div class="dh"><h2>Ajustes de ParteScan</h2><button id="dClose">Cerrar</button></div><div class="db" id="dBody"></div><div class="df"><button id="dGuardar" class="p">Guardar cambios</button></div></dialog>
 <dialog id="dlgTec" style="width:min(1150px,96vw)"><div class="dh"><h2>Teclear en el sistema del Juzgado</h2><button id="tCerrar">Cerrar</button></div>
 <div class="db"><div id="tAviso" class="avisos" hidden></div><div id="tNoDisp" class="avisos" hidden></div>
 <small>Abre en el sistema la pantalla de ingreso («Procesos…»), deja el cursor en Rol y pulsa «Teclear pendientes»; después haz clic en la ventana del sistema. ESC detiene. Si un dato está mal, pulsa «Corregir», arréglalo y vuelve aquí: lo ya ingresado no se pierde. Si comprobaste que un parte ya se guardó, pulsa «Confirmar ingreso»; «Volver a pendiente» permite ingresarlo nuevamente. Estas acciones se habilitan al terminar o detener el tecleo.</small>
@@ -115,6 +209,18 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 </div></dialog>
 <script>
 const $=id=>document.getElementById(id);
+const medirBarras=()=>{
+  const root=document.documentElement;
+  root.style.setProperty('--cabecera',document.querySelector('header').getBoundingClientRect().height+'px');
+  const top=document.querySelector('header').getBoundingClientRect().height+document.querySelector('.lote').getBoundingClientRect().height+($('leyenda').hidden?0:$('leyenda').getBoundingClientRect().height);
+  root.style.setProperty('--workspace-top',(top+1)+'px');
+  root.style.setProperty('--revision',$('revision').hidden?'0px':$('revision').getBoundingClientRect().height+'px');
+};
+const observadorBarras=new ResizeObserver(medirBarras);
+observadorBarras.observe(document.querySelector('header'));
+observadorBarras.observe(document.querySelector('.lote'));
+observadorBarras.observe($('leyenda'));
+observadorBarras.observe($('revision'));
 let ACT={}, PERFIL=null, OFICINAS_SIS=[], INFR=[];
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 async function cargarPerfil(){
@@ -125,6 +231,10 @@ async function cargarPerfil(){
   $('juz').textContent=PERFIL.juzgado;
   if(P.length&&!$('main').hidden){pintarTira();mostrar()}
 }
+const TIPOS_VEHICULO=[["1", "AMBULANCIA"], ["2", "AUTOMOVIL"], ["3", "CAMIONETA"], ["4", "CARRO ARRASTRE"], ["5", "PULLMAN"], ["6", "CASA RODANTE"], ["7", "FURGON"], ["8", "JEEP"], ["9", "ST. WAGON ESCOLAR"], ["10", "MOTO"], ["11", "MOTOCICLETA"], ["12", "MOTOR HOME"], ["13", "STATION WAGON"], ["14", "TAXI TURISMO"], ["15", "MICROBUS"], ["16", "BUS"], ["17", "BUS PARTICULAR"], ["18", "MINIBUS"], ["19", "MINI BUS ESCOLAR"], ["20", "CUADRIMOTO"], ["21", "TAXI BASICO"], ["22", "TAXIBUS"], ["23", "BUS RURAL"], ["24", "TAXIBUS PATICULAR"], ["25", "CAMION FRIGORIFICO"], ["26", "BICIMOTO"], ["27", "FURGON ESCOLAR"], ["28", "CAMION"], ["29", "CARGADOR FRONTAL"], ["30", "REMOLQUE AGRICOLA"], ["31", "MAQUINA"], ["32", "FURGONETA"], ["33", "MOTONETA"], ["34", "MOTONIVELADORA"], ["35", "TAXI COLECTIVO"], ["36", "REMOLQUE"], ["37", "GRUA-HORQUILLA"], ["38", "VEHICULO DE PRUEBA"], ["39", "RETROEXCAVADORA"], ["40", "SEMIRREMOLQUE"], ["41", "TRACTOCAMION"], ["42", "TRACTOR"], ["43", "CICLOMOTOR"], ["44", "RODILLO"], ["45", "MINIBUS PARTICULAR"], ["46", "CARRO BOMBA"], ["47", "TAXI INTERNAC."], ["48", "MINI BUS TURISMO"], ["49", "TAXI EJECUTIVO"], ["50", "STATION WAGON TURISMO"], ["51", "ACOPLADO"], ["52", "GRUA"], ["53", "BULLDOZER"], ["54", "COUPÉ"], ["56", "TODO TERRENO"], ["57", "MAQ.-AGRICOLA"], ["58", "CAMION GRUA"], ["59", "BUS ESCOLAR"], ["60", "CUATRIMOTO"], ["61", "SEDÁN"], ["62", "HATCHBACK"], ["63", "SUV"], ["64", "VAN"], ["65", "COMERCIAL"], ["66", "CABRIOLET"], ["67", "MOTOS"], ["68", "TRICICLO RAPIDOS"], ["69", "TRICICLOS LENTOS"], ["70", "FURGÓN"]];
+document.querySelectorAll('.menu-panel button').forEach(button=>{
+  button.addEventListener('click',()=>button.closest('details').removeAttribute('open'));
+});
 const LAB={ok:"Listo",check:"Revisar",blank:"Vacío"};
 let P=[],sel=0,activeKey=null,citTocada=false,subiendo=0,vista='p';
 const hoy=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
@@ -157,7 +267,7 @@ $('btnNueva').onclick=async()=>{
   if(!confirm(msg)) return;
   const r=await fetch('/api/limpiar',{method:'POST',body:'x'}); const j=await r.json().catch(()=>({}));
   if(!r.ok){alert(j.error||'No pude limpiar.');return}
-  P=[];sel=0;activeKey=null;citTocada=false;vista='p';ultimoAuto='';
+  historialTanda=[];P=[];sel=0;activeKey=null;citTocada=false;vista='p';ultimoAuto='';
   $('cit').value='';$('rol').value='';try{localStorage.removeItem('rol')}catch(e){}
   tNlog=0; if($('tLog')) $('tLog').textContent='';
   pintarTira();mostrar();actualizarEstado();window.scrollTo(0,0);toast('Listo: pantalla en blanco');
@@ -166,10 +276,14 @@ $('btnNueva').onclick=async()=>{
 };
 $('btnSalir').onclick=async()=>{ if(confirm('¿Cerrar el programa? Se perderá la lectura de este lote.')){ try{await fetch('/api/salir',{method:'POST'})}catch(e){} document.body.innerHTML='<p style="padding:30px">Programa cerrado. Ya puedes cerrar esta pestaña.</p>'; } };
 
-let pend=0,err='';
+let pend=0,err='',editandoTanda=false,revisionTanda=0;
+let historialTanda=[];
 async function sondear(){
+  if(editandoTanda) return;
+  const revision=revisionTanda;
   try{
     const r=await (await fetch('/api/estado')).json();
+    if(editandoTanda||revision!==revisionTanda) return;
     pend=r.pendientes; err=r.error;
     let cambio=false;
     P.forEach((q,i)=>{const n=r.partes[i]; if(n&&n.img_cert!==q.img_cert){
@@ -286,7 +400,7 @@ function campos(p){
   const c=Object.assign({},p.cert||{},(p.infractores&&p.infractores.length>1)?p.infractores[infIdx(p)]:{}), malRut=(p.cert_avisos||[]).some(x=>/RUT/.test(x)&&!/^(Infractor|El infractor)/.test(x))||(p.avisos||[]).some(x=>/RUT leído/.test(x)), sinC=carab&&!p.img_cert&&!c.rut;
   const multi=(p.infractores||[]).length>1;
   const filaInf=multi?[gc('Infractor de esta copia (1, 2)',String(infIdx(p)+1),'check','Infractores múltiples.')]:[];
-  S.push({t:'4 · Datos del denunciado',sub:p.img_cert?'Fuente: certificado del Registro Civil.':p.parte_escrito||carab||p.origen==='dom'?'Fuente: parte escaneado.':'',f:[
+  S.push({t:'4 · Datos del denunciado',sub:p.notificado_personalmente?'Fuente de identidad: infractor del parte. El certificado aporta datos del vehículo.':p.img_cert?'Fuente: certificado del Registro Civil.':p.parte_escrito||carab||p.origen==='dom'?'Fuente: parte escaneado.':'',f:[
     ...filaInf,
     gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
     gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:(p.placa||'')).trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',''),
@@ -295,7 +409,7 @@ function campos(p){
     gc('Marca (certificado)',c.marca||p.marca||'',(c.marca||p.marca)?'ok':'blank',''),
     gc('Modelo (certificado)',c.modelo||'',c.modelo?'ok':'blank',''),
     ...(mtt?[gc('Año (certificado)',c.anio||'',c.anio?'ok':'check','')]:[]),
-    gc('Tipo de vehículo (certificado)',c.tipo_vehiculo||p.tipo_vehiculo||'',(c.tipo_vehiculo||p.tipo_vehiculo)?'ok':(sinVeh?'blank':'check'),''),
+    gc('Tipo de vehículo (certificado)',c.tipo_vehiculo||p.tipo_vehiculo||'',TIPOS_VEHICULO.some(v=>v[1]===(c.tipo_vehiculo||p.tipo_vehiculo))?'ok':(sinVeh?'blank':'check'),''),
     gc('Dígito de la placa',c.dv_placa||'',c.dv_placa?'ok':'blank','')
   ]});
   return S;
@@ -308,9 +422,13 @@ function avisoVigente(p,x){
   return true;
 }
 function mostrar(){
-  if(!P.length){$('main').hidden=true;return}
+  $('drop').hidden=Boolean(P.length);
+  $('leyenda').hidden=!P.length;
+  $('deshacerTanda').disabled=!historialTanda.length||editandoTanda;
+  if(!P.length){$('main').hidden=true;$('img').hidden=true;$('revision').hidden=false;$('main').hidden=!historialTanda.length;return}
   const p=P[sel]; $('main').hidden=false;
   const img=$('img'); if(vista==='c'&&!p.img_cert) vista='p';
+  document.getElementById("img").hidden=false;
   const src='/api/img/'+(vista==='c'?p.img_cert:p.id); if(img.getAttribute('src')!==src) img.src=src;
   $('tabP').classList.toggle('on',vista==='p'); $('tabC').classList.toggle('on',vista==='c'); $('tabC').disabled=!p.img_cert;
   const S=campos(p), F=$('form'); F.innerHTML='';
@@ -322,15 +440,23 @@ function mostrar(){
   const nav=document.createElement('div');nav.className='nav';
   nav.innerHTML='<button id="ant">← Anterior</button><button id="sig">Saltar →</button><button class="p" id="ing">Ingresado → siguiente parte</button>';
   F.appendChild(nav);
+  F.appendChild(accionesTanda(p));
   S.forEach(s=>{
     const d=document.createElement('div');d.className='sec';d.innerHTML='<h3>'+s.t+'</h3>'+(s.sub?'<small>'+s.sub+'</small>':'');
     s.f.forEach(f=>{
       const key=f.k, val=valorActual(p,key);
       const estado=estadoCampo(p,f,val);
       const r=document.createElement('div');r.className='row'+(f.big?' big':'')+(key===activeKey?' act':'')+(p.done[key]?' done':'');
-      const esOfi=(key==='Oficina emisora'&&carab0(p));
+      const esOfi=key==='Oficina emisora';
+      const opciones=esOfi?OFICINAS_SIS.map(o=>[o[1],o[0]+' · '+o[1]]):
+        key==='Comuna (certificado)'?(PERFIL?.comunas||[]).map(v=>[v,v]):
+        key==='Tipo de vehículo (certificado)'?TIPOS_VEHICULO.map(v=>[v[1],v[0]+' · '+v[1]]):null;
       const esInf=/^Infracción \d+ · código$/.test(key);
-      const ctl=esOfi?'<select class="val">'+(OFICINAS_SIS.some(o=>o[1]===val)?'':'<option value="'+String(val).replace(/"/g,'&quot;')+'">'+val+'</option>')+OFICINAS_SIS.map(o=>'<option value="'+o[1]+'"'+(o[1]===val?' selected':'')+'>'+o[0]+' · '+o[1]+'</option>').join('')+'</select>':'<input class="val"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+String(val).replace(/"/g,'&quot;')+'" placeholder="(en blanco)">';
+      const ctl=opciones?'<select class="val" aria-label="'+esc(key)+'">'+
+        '<option value="">Seleccionar…</option>'+
+        (val&&!opciones.some(o=>o[0]===val)?'<option selected value="'+esc(val)+'">'+esc(val)+' · valor leído</option>':'')+
+        opciones.map(o=>'<option value="'+esc(o[0])+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select>':
+        '<input class="val" aria-label="'+esc(key)+'"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+esc(val)+'" placeholder="(en blanco)">';
       r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+estado+'">'+(estado==='ok'&&p.ok?.[key]?'Confirmado':LAB[estado])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((estado==='check'&&String(val).trim())?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
       el.oninput=el.onchange=e=>{
@@ -358,6 +484,26 @@ function mostrar(){
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
       r.querySelector('button').onclick=()=>{activeKey=key;copiarCampo(p,key)};
       const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; p.ok[key]=true; pintarTira(); mostrar() };
+      if(key==='Nombre (certificado)' && p.notificado_personalmente){
+        const ordenar=document.createElement('button');
+        ordenar.textContent='Apellidos al inicio…';
+        ordenar.onclick=()=>{
+          const palabras=el.value.trim().split(/\s+/);
+          if(palabras.length<3){toast('Revisa el nombre completo antes de reordenarlo.');return}
+          const apellidos=prompt('Escribe los apellidos que aparecen al inicio, tal como están en la foto.',palabras.slice(0,2).join(' '));
+          if(!apellidos || !apellidos.trim())return;
+          const prefijo=apellidos.trim().replace(/\s+/g,' ');
+          const nombre=el.value.trim().replace(/\s+/g,' ');
+          if(!nombre.toUpperCase().startsWith(prefijo.toUpperCase()+' ')){
+            toast('Los apellidos deben coincidir con el inicio del nombre.');return;
+          }
+          const resultado=nombre.slice(prefijo.length).trim()+' '+prefijo;
+          if(!confirm('Guardar el nombre en este orden?\n'+resultado))return;
+          el.value=resultado;
+          el.dispatchEvent(new Event('change'));
+        };
+        r.appendChild(ordenar);
+      }
       d.appendChild(r);
     });
     if(s.t.startsWith('3 · Infracciones')) d.appendChild(barraInfracciones(p));
@@ -423,8 +569,42 @@ $('btnTecleo').onclick=()=>{
     .then(r=>r.json()).then(j=>alert('Datos guardados en tu carpeta Descargas:\n'+j.ruta));
 };
 
+function accionesTanda(p){
+  const bar=document.createElement('div');bar.className='sec';
+  const boton=(texto,accion,deshabilitado=false)=>{const b=document.createElement('button');b.textContent=texto;b.disabled=deshabilitado||editandoTanda;b.onclick=accion;bar.appendChild(b)};
+  boton('↑ Subir',()=>moverParte(-1),sel===0);
+  boton('↓ Bajar',()=>moverParte(1),sel===P.length-1);
+  boton('Eliminar parte',()=>{if(confirm('¿Eliminar este parte y su certificado de la tanda? Puedes deshacer el cambio.')) modificarTanda(P.filter(q=>q.id!==p.id))});
+  const lista=document.createElement('select');lista.setAttribute('aria-label','Parte que recibirá el certificado');
+  const vacio=document.createElement('option');vacio.value='';vacio.textContent='Elegir parte de destino…';lista.appendChild(vacio);
+  P.filter(q=>q.id!==p.id&&!q.img_cert).forEach(q=>{const o=document.createElement('option');o.value=q.id;o.textContent=(q.folio||q.n_parte_carab||('Parte '+q.id))+' · '+(q.placa||'sin patente');lista.appendChild(o)});
+  bar.appendChild(document.createElement('br'));bar.appendChild(lista);
+  boton(p.img_cert?'Reasignar certificado':'Esta hoja es un certificado',()=>{
+    if(!lista.value){toast('Elige el parte de destino');return}
+    if(confirm('Se asociará la imagen del certificado al parte elegido. Revisa después la patente y los datos.')) modificarTanda(P,[p.id,Number(lista.value)]);
+  });
+  return bar;
+}
+async function modificarTanda(nuevos,certificado=null,deshacer=false){
+  if(editandoTanda||pend+subiendo){toast('Espera a que termine la lectura');return}
+  editandoTanda=true;
+  revisionTanda++;
+  const previo=JSON.parse(JSON.stringify(P)), seleccionado=P[sel]?.id;
+  try{
+    const r=await fetch('/api/tanda/editar',{method:'POST',body:JSON.stringify({partes:nuevos,certificado})});
+    const j=await r.json();if(!r.ok) throw new Error(j.error||'No se pudo modificar la tanda');
+    if(deshacer) historialTanda.pop();else historialTanda.push(previo);
+    P=j.partes;sel=Math.max(0,P.findIndex(p=>p.id===seleccionado));sel=Math.min(sel,Math.max(0,P.length-1));
+    activeKey=null;vista='p';pintarTira();mostrar();actualizarEstado();
+    ultimoAuto='';
+  }catch(e){alert(e.message)}finally{editandoTanda=false;$('deshacerTanda').disabled=!historialTanda.length;}
+  autoguardar().catch(()=>toast('No se pudo guardar la sesión automáticamente'));
+}
+function moverParte(delta){const q=P.slice();[q[sel],q[sel+delta]]=[q[sel+delta],q[sel]];modificarTanda(q)}
+$('deshacerTanda').onclick=()=>{if(historialTanda.length) modificarTanda(historialTanda[historialTanda.length-1],null,true)};
 function estadoSesion(){return JSON.stringify({version:1,partes:P,rol:$('rol').value,cit:$('cit').value,citTocada:citTocada})}
 function aplicarSesion(e){
+  historialTanda=[];
   P=(e.partes||[]).map(p=>Object.assign({ed:{},done:{},ok:{},fin:false},p));
   if(e.rol) $('rol').value=e.rol;
   if(e.cit){ $('cit').value=e.cit; citTocada=true; }
@@ -456,7 +636,7 @@ $('btnContinua').onclick=async()=>{
 let colaAuto=Promise.resolve();
 function autoguardar(){
   colaAuto=colaAuto.catch(()=>{}).then(async()=>{
-    if(!P.length||pend+subiendo>0) return;
+    if(editandoTanda||(!P.length&&!historialTanda.length)||pend+subiendo>0) return;
     const s=estadoSesion(); if(s===ultimoAuto) return;
     const r=await fetch('/api/sesion/auto',{method:'POST',body:s});
     const j=await r.json();
@@ -466,7 +646,7 @@ function autoguardar(){
   return colaAuto;
 }
 setInterval(()=>{autoguardar().catch(()=>{})},5000);
-function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; pintarTira(); mostrar(); window.scrollTo(0,0) }
+function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; pintarTira(); mostrar(); document.getElementById('form').scrollTop=0 }
 function ingresado(){
   const p=P[sel]; p.fin=true;
   let n=P.findIndex((q,i)=>i>sel&&!q.fin); if(n<0) n=P.findIndex(q=>!q.fin);
@@ -478,11 +658,27 @@ function semaforo(p){
   return {n,c:n===0?'v':(n<3?'a':'r')};
 }
 function pintarTira(){
+  document.getElementById("revision").hidden=!P.length;
   const t=$('tira'); t.innerHTML='';
   P.forEach((p,i)=>{const c=document.createElement('span');const sm=semaforo(p); c.className='chip'+(p.fin?' fin':' '+sm.c)+(i===sel?' sel':''); c.title=p.fin?'Ingresado':(sm.n?sm.n+' campo(s) por revisar':'Todos los datos completos');
-    const rv=rolPrevisto(p); c.textContent=(p.fin?'✓ ':'')+(p.origen==='carab'?('Carab. '+(p.n_parte_carab||p.folio)):(p.origen==='mtt'?('MTT '+p.folio):(p.folio||('Parte '+(i+1)))))+(rv?' · rol '+rv:'');c.onclick=()=>ir(i);t.appendChild(c)});
+    const rv=rolPrevisto(p); c.textContent=(p.fin?'✓ ':'')+(p.origen==='carab'?('Carab. '+(p.n_parte_carab||p.folio)):(p.origen==='mtt'?('MTT '+p.folio):(p.folio||('Parte '+(i+1)))))+(rv?' · rol '+rv:'');c.onclick=()=>ir(i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-pressed',String(i===sel));c.setAttribute('aria-label',c.textContent+'. '+c.title);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();ir(i)}};t.appendChild(c)});
+  const seleccionado=t.querySelector('.sel');
+  if(seleccionado){
+    const caja=t.getBoundingClientRect(), chip=seleccionado.getBoundingClientRect();
+    if(chip.bottom>caja.bottom)t.scrollTop+=chip.bottom-caja.bottom+4;
+    if(chip.top<caja.top)t.scrollTop-=caja.top-chip.top+4;
+  }
 }
-$('img').onclick=e=>e.target.classList.toggle('z');
+let zoomVisor=1, giroVisor=0;
+function actualizarVisor(){
+  $('img').style.width=(zoomVisor*100)+'%';
+  $('img').style.transform='rotate('+giroVisor+'deg)';
+}
+$('zoomMas').onclick=()=>{zoomVisor=Math.min(3,zoomVisor+.25);actualizarVisor()};
+$('zoomMenos').onclick=()=>{zoomVisor=Math.max(.5,zoomVisor-.25);actualizarVisor()};
+$('girar').onclick=()=>{giroVisor=(giroVisor+90)%360;actualizarVisor()};
+$('ajustar').onclick=()=>{zoomVisor=1;giroVisor=0;actualizarVisor()};
+$('img').onclick=()=>{zoomVisor=zoomVisor===1?1.5:1;actualizarVisor()};
 $('tabP').onclick=()=>{vista='p';mostrar()}; $('tabC').onclick=()=>{vista='c';mostrar()};
 
 const selOfic=(id,val)=>'<select class="val" id="'+id+'">'+PERFIL.oficinas.map(o=>'<option value="'+esc(o[1])+'"'+(o[1]===val?' selected':'')+'>'+esc(o[0]+' · '+o[1])+'</option>').join('')+'</select>';

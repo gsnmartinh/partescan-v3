@@ -1,5 +1,6 @@
 """Servidor local: sirve la pantalla en el navegador y lee los partes con Tesseract.
 Todo ocurre en este computador; no se envía nada a internet."""
+import base64, secrets, socket
 import io, json, os, sys, zipfile, time, queue, re, shutil, tempfile, threading, traceback, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -11,6 +12,7 @@ if not os.path.isdir(WEB):
     WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 PARTES = []          # resultados, en orden
+TEXTOS = {}          # id de imagen -> OCR original
 IMAGENES = {}        # id -> imagen PIL
 COLA = queue.Queue()
 ESTADO = {"pendientes": 0, "error": ""}
@@ -36,7 +38,10 @@ def orden_natural(text):
 def armar(r, archivo, pagina, pid):
     causa, items, comodin = catalogo.resolver_o_comodin(r["infraccion_texto"])
     escrito = not r["placa"] and catalogo.actividad_sin_patente(r["infraccion_texto"])
+    personal = r.get("notificado_personalmente", False)
     avisos = list(r["avisos"])
+    if personal:
+        avisos.append("Notificado personalmente: revisa los datos del infractor y el orden de nombres y apellidos.")
     if comodin:
         avisos.append("No reconocí la infracción: se ingresará con el código %s y la descripción dirá lo que dice el parte. "
                       "Revísalo." % catalogo.comodin())
@@ -51,10 +56,10 @@ def armar(r, archivo, pagina, pid):
         "articulo": r["articulo"], "avisos": avisos, "causa": causa, "causa_literal": comodin,
         "items": [{"cod": i["cod"], "estado": i["estado"], "nota": i["nota"]} for i in items],
         "cert": {"rut": "", "nombre": "", "direccion": "", "comuna": perfil.cargar()["comuna"] if escrito else "", "marca": "", "modelo": "",
-                 **(r.get("persona", {}) if escrito else {}),
+                 **(r.get("persona", {}) if escrito or personal else {}),
                  "tipo_vehiculo": "", "dv_placa": "", "anio": "", "color": ""},
-        "parte_escrito": escrito,
-        "cert_avisos": [] if escrito else ["Falta el certificado del Registro Civil de este parte."],
+        "parte_escrito": escrito, "notificado_personalmente": personal,
+        "cert_avisos": [] if escrito or personal else ["Falta el certificado del Registro Civil de este parte."],
     }
 
 
@@ -105,7 +110,10 @@ def armar_mtt(r, archivo, pagina, pid):
         if not causa and c:
             causa, literal = c, es_comodin
         items += [i for i in its if i["cod"] not in [x["cod"] for x in items]]
+    personal = r.get("notificado_personalmente", False)
     avisos = list(r["avisos"])
+    if personal:
+        avisos.append("Notificado personalmente: revisa los datos del infractor y el orden de nombres y apellidos.")
     if literal:
         avisos.append("No reconocí la infracción: se ingresará con el código %s y la descripción dirá lo que dice el parte. "
                       "Revísalo." % catalogo.comodin())
@@ -136,15 +144,49 @@ def aplicar_certificado(p, c, pid_img):
     """Une los datos del certificado c (dict de certificado.leer) al parte p."""
     placa, aviso = certificado.conciliar_placa(exportar.placa6(p["placa"]), exportar.placa6(c["placa"]))
     p["placa"] = exportar.placa6(placa)
+    if not p.get("img_cert"):
+        import copy
+        p["sin_cert"] = {k: copy.deepcopy(p[k]) for k in ("cert", "cert_avisos", "placa", "marca", "tipo_vehiculo")}
+    c = dict(c, tipo_vehiculo=exportar.tipo_limpio(c["tipo_vehiculo"]))
     p["img_cert"] = pid_img
+    persona = {k: p["cert"].get(k, "") for k in ("rut", "nombre", "direccion", "comuna")}
     p["cert"] = {k: c[k] for k in ("rut", "nombre", "direccion", "comuna", "marca", "modelo",
                                    "tipo_vehiculo", "dv_placa", "anio", "color")}
+    if p.get("notificado_personalmente"):
+        p["cert"].update(persona)
     p["cert_avisos"] = list(c["avisos"]) + ([aviso] if aviso else [])
     # el tipo de vehículo y la marca del certificado son más fiables que los del parte
     if c["tipo_vehiculo"]:
         p["tipo_vehiculo"] = c["tipo_vehiculo"]
     if c["marca"]:
         p["marca"] = c["marca"]
+
+
+def paginas_ocr_movil(ruta):
+    from PIL import Image, ImageOps
+
+    with zipfile.ZipFile(ruta) as paquete:
+        if paquete.getinfo("ocr.json").file_size > 2_000_000:
+            raise ValueError("El manifiesto OCR es demasiado grande.")
+        hojas = json.loads(paquete.read("ocr.json"))
+        if not isinstance(hojas, list) or not 1 <= len(hojas) <= 500:
+            raise ValueError("La tanda no tiene una cantidad válida de hojas.")
+        anterior_cert = True
+        for i, hoja in enumerate(hojas):
+            if not isinstance(hoja, dict) or not isinstance(hoja.get("texto"), str):
+                raise ValueError("Texto OCR inválido.")
+            es_cert = hoja.get("certificado")
+            if type(es_cert) is not bool or (es_cert and anterior_cert):
+                raise ValueError("El certificado no tiene un parte anterior.")
+            anterior_cert = es_cert
+            archivo = paquete.getinfo(f"{i}.jpg")
+            if archivo.file_size > 25_000_000:
+                raise ValueError("Una foto supera el límite de 25 MB.")
+        for i, hoja in enumerate(hojas):
+            with paquete.open(f"{i}.jpg") as archivo, Image.open(archivo, formats=["JPEG"]) as foto:
+                if foto.width * foto.height > 40_000_000:
+                    raise ValueError("La resolución de una foto supera el límite admitido.")
+                yield ImageOps.exif_transpose(foto).convert("RGB"), hoja["texto"], hoja["certificado"]
 
 
 def trabajador():
@@ -160,15 +202,29 @@ def trabajador():
         for ruta, nombre in lote_actual:
             try:
                 ultimo = None          # último parte leído del archivo, para pegarle su certificado
-                for n, img in enumerate(motor.paginas(ruta), 1):
-                    g = motor.preparar(img)
-                    texto = motor.texto_pagina(g)
-                    tipo = motor.tipo_pagina(texto)
+                movil = ruta.lower().endswith(".psocr")
+                hojas = paginas_ocr_movil(ruta) if movil else (
+                    (img, None, False) for img in motor.paginas(ruta)
+                )
+                for n, (img, texto, es_cert) in enumerate(hojas, 1):
+                    if movil:
+                        g = None
+                        tipo = "certificado" if es_cert else motor.tipo_pagina(texto)
+                        # El OCR puede reconocer un certificado aunque su marca móvil sea errónea.
+                        if tipo == "otra" and not es_cert:
+                            tipo = "parte"
+                        if tipo != "certificado":
+                            ultimo = None
+                    else:
+                        g = motor.preparar(img)
+                        texto = motor.texto_pagina(g)
+                        tipo = motor.tipo_pagina(texto)
                     if tipo == "parte":
-                        r = motor.leer_parte(img, texto, g)
+                        r = motor.leer_parte(img, texto, g, solo_texto=movil)
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
+                            TEXTOS[pid] = texto
                             ultimo = armar(r, nombre, n, pid)
                             PARTES.append(ultimo)
                     elif tipo == "dom":
@@ -177,15 +233,17 @@ def trabajador():
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
+                            TEXTOS[pid] = texto
                             ultimo = armar(r, nombre, n, pid)
                             ultimo.update(origen="dom", tiene_vehiculo=False, cert_avisos=[])
                             ultimo["cert"].update(r["persona"], comuna=perfil.cargar()["comuna"])
                             PARTES.append(ultimo)
                     elif tipo == "mtt":
-                        r = extractor_mtt.parte(texto, motor.leer_celdas(g))
+                        r = extractor_mtt.parte(texto, None if movil else motor.leer_celdas(g))
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
+                            TEXTOS[pid] = texto
                             ultimo = armar_mtt(r, nombre, n, pid)
                             PARTES.append(ultimo)
                     elif tipo == "carab":
@@ -193,13 +251,15 @@ def trabajador():
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
+                            TEXTOS[pid] = texto
                             ultimo = armar_carab(r, nombre, n, pid)
                             PARTES.append(ultimo)
                     elif tipo == "certificado":
-                        c = motor.leer_certificado(g, texto)
+                        c = certificado.leer(texto) if movil else motor.leer_certificado(g, texto)
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
+                            TEXTOS[pid] = texto
                             if ultimo is not None and not ultimo.get("parte_escrito") and ultimo["img_cert"] == 0:
                                 aplicar_certificado(ultimo, c, pid)
                             else:
@@ -216,6 +276,16 @@ def trabajador():
                     os.remove(ruta)
                 except OSError:
                     pass
+
+
+def encolar(datos, nombre, ext):
+    fd, ruta = tempfile.mkstemp(dir=TMP, suffix=ext)
+    with os.fdopen(fd, "wb") as f:
+        f.write(datos)
+    with LOCK:
+        ESTADO["pendientes"] += 1
+        ESTADO["error"] = ""
+    COLA.put((ruta, nombre))
 
 
 class H(BaseHTTPRequestHandler):
@@ -238,6 +308,8 @@ class H(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         if u.path in ("/", "/index.html"):
             return self._send(200, open(os.path.join(WEB, "index.html"), "rb").read(), "text/html; charset=utf-8")
+        if u.path == "/fluent.css":
+            return self._send(200, open(os.path.join(WEB, "fluent.css"), "rb").read(), "text/css; charset=utf-8")
         if u.path == "/api/estado":
             with LOCK:
                 return self._send(200, {"pendientes": ESTADO["pendientes"], "error": ESTADO["error"],
@@ -287,20 +359,25 @@ class H(BaseHTTPRequestHandler):
                 return self._send(202, {"ok": True})
             except ValueError as e:
                 return self._send(400, {"error": str(e)})
+        if u.path == "/api/captura":
+            try:
+                import cv2
+
+                url = iniciar_captura()
+                qr = cv2.QRCodeEncoder_create().encode(url)
+                qr = cv2.copyMakeBorder(qr, 4, 4, 4, 4, cv2.BORDER_CONSTANT, value=255)
+                _, png = cv2.imencode(".png", qr)
+                return self._send(200, {"url": url, "qr": base64.b64encode(png).decode("ascii")})
+            except OSError:
+                return self._send(503, {"error": "No se pudo abrir la captura en la red local."})
         if u.path == "/api/subir":
             nombre = parse_qs(u.query).get("nombre", ["archivo"])[0]
             n = int(self.headers.get("Content-Length", 0))
             datos = self.rfile.read(n)
-            ext = os.path.splitext(nombre)[1].lower()
-            if ext != ".pdf" and ext not in motor.EXTS_IMG:
+            ext = ".psocr" if nombre.lower().endswith(".psocr.zip") else os.path.splitext(nombre)[1].lower()
+            if ext not in (".pdf", ".psocr") and ext not in motor.EXTS_IMG:
                 return self._send(400, {"error": "Formato no válido: " + nombre})
-            fd, ruta = tempfile.mkstemp(dir=TMP, suffix=ext)
-            with os.fdopen(fd, "wb") as f:
-                f.write(datos)
-            with LOCK:
-                ESTADO["pendientes"] += 1
-                ESTADO["error"] = ""
-            COLA.put((ruta, nombre))
+            encolar(datos, nombre, ext)
             return self._send(200, {"ok": True})
         if u.path == "/api/guardar":
             # guarda en la carpeta Descargas sin depender del navegador (que a veces bloquea descargas repetidas)
@@ -330,6 +407,57 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {"ruta": guardar_en_descargas(nombre, datos)})
             except Exception as e:
                 return self._send(400, {"error": "No se pudo: %s" % e})
+        if u.path == "/api/tanda/editar":
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                datos = json.loads(self.rfile.read(n))
+                with LOCK:
+                    if ESTADO["pendientes"] or tecleador.corriendo():
+                        raise ValueError("Termina la lectura y detén el tecleo antes de modificar la tanda.")
+                    nuevos = datos["partes"]
+                    if not isinstance(nuevos, list) or any(not isinstance(p, dict) or p.get("id") not in IMAGENES or (p.get("img_cert") and p["img_cert"] not in IMAGENES) for p in nuevos):
+                        raise ValueError("La tanda contiene imágenes no disponibles.")
+                    if len({p["id"] for p in nuevos}) != len(nuevos):
+                        raise ValueError("Un parte está repetido en la tanda.")
+                    import copy
+                    nuevos = copy.deepcopy(nuevos)
+                    if datos.get("certificado"):
+                        origen, destino = datos["certificado"]
+                        donante = next(p for p in nuevos if p["id"] == origen)
+                        receptor = next(p for p in nuevos if p["id"] == destino)
+                        if donante is receptor:
+                            raise ValueError("Elige otro parte como destino.")
+                        if receptor.get("img_cert"):
+                            raise ValueError("El destino ya tiene certificado. Reasígnalo primero.")
+                        imagen = donante.get("img_cert") or donante["id"]
+                        texto = TEXTOS.get(imagen)
+                        if texto is None:
+                            texto = motor.texto_pagina(motor.preparar(IMAGENES[imagen]))
+                        c = certificado.leer(texto)
+                        if not c.get("placa") or not any(c.get(k) for k in ("rut", "nombre", "modelo")):
+                            raise ValueError("No pude reconocer un certificado en esa imagen. Revisa el original.")
+                        aplicar_certificado(receptor, c, imagen)
+                        for key in ("RUT (certificado)", "Nombre (certificado)", "Dirección (certificado)", "Comuna (certificado)", "Marca (certificado)", "Modelo (certificado)", "Tipo de vehículo (certificado)", "Placa"):
+                            for bucket in ("ed", "ok", "done"):
+                                receptor.get(bucket, {}).pop(key, None)
+                        receptor.pop("avOk", None)
+                        if donante.get("img_cert"):
+                            previo = donante.pop("sin_cert", None)
+                            if previo:
+                                donante.update(previo)
+                            else:
+                                # Sesiones anteriores no guardaban los datos previos al certificado.
+                                donante["cert"] = dict(donante.get("cert", {}), rut="", nombre="", direccion="", comuna="")
+                                donante["cert_avisos"] = ["Certificado reasignado: revisa los datos del denunciado."]
+                            donante["img_cert"] = 0
+                            donante["ed"] = {}; donante["ok"] = {}; donante["done"] = {}
+                            donante.pop("avOk", None)
+                        else:
+                            nuevos.remove(donante)
+                    PARTES[:] = nuevos
+                    return self._send(200, {"partes": PARTES})
+            except (ValueError, KeyError, TypeError, StopIteration) as e:
+                return self._send(400, {"error": str(e) or "Parte no disponible."})
         if u.path.startswith("/api/tecleo/"):
             n = int(self.headers.get("Content-Length", 0))
             cuerpo = self.rfile.read(n)
@@ -344,6 +472,7 @@ class H(BaseHTTPRequestHandler):
             with LOCK:
                 PARTES.clear()
                 IMAGENES.clear()
+                TEXTOS.clear()
             return self._send(200, {"ok": True})
         if u.path.startswith("/api/perfil"):
             n = int(self.headers.get("Content-Length", 0))
@@ -366,6 +495,7 @@ def estado_perfil():
         "oficina_carabineros": cfg["oficina_carabineros"],
         "actuarios": perfil.actuarios(), "rol_actuario": perfil.rol_actuario(),
         "oficinas": perfil.oficinas_ordenadas(),
+        "comunas": sorted(catalogo.comuna_oficial(c) for c in catalogo._cargar_comunas()),
         "n_infracciones": len(perfil.infracciones()), "n_oficinas": len(perfil.oficinas()),
         "propia_infracciones": perfil.es_lista_propia("infracciones"), "propia_oficinas": perfil.es_lista_propia("oficinas"),
         "carpeta": str(perfil.carpeta()),
@@ -440,6 +570,7 @@ def armar_sesion(estado):
     b = io.BytesIO()
     with zipfile.ZipFile(b, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("estado.json", json.dumps(estado, ensure_ascii=False))
+        z.writestr("textos.json", json.dumps(TEXTOS, ensure_ascii=False))
         with LOCK:
             for pid, img in list(IMAGENES.items()):
                 im = img.convert("L")
@@ -455,6 +586,7 @@ def cargar_sesion(datos):
     from PIL import Image
     with zipfile.ZipFile(io.BytesIO(datos)) as z:
         estado = json.loads(z.read("estado.json").decode("utf-8"))
+        textos = json.loads(z.read("textos.json")) if "textos.json" in z.namelist() else {}
         imgs = {}
         for nom in z.namelist():
             m = re.fullmatch(r"img_(\d+)\.jpg", nom)
@@ -466,6 +598,8 @@ def cargar_sesion(datos):
         PARTES.clear()
         IMAGENES.clear()
         IMAGENES.update(imgs)
+        TEXTOS.clear()
+        TEXTOS.update({int(k): v for k, v in textos.items()})
         PARTES.extend(estado.get("partes", []))
     return estado
 
@@ -528,6 +662,63 @@ def _abrir_ventana(url):
     except Exception:
         print("No pude abrir la ventana propia; uso el navegador.\n" + traceback.format_exc())
         return False
+
+
+class Captura(H):
+    def autorizada(self):
+        return (time.monotonic() < self.server.vence and
+                secrets.compare_digest(self.path.encode(), self.server.ruta.encode()))
+
+    def do_GET(self):
+        if not self.autorizada():
+            return self._send(404, {"error": "Enlace inválido o vencido."})
+        with open(os.path.join(WEB, "captura.html"), "rb") as archivo:
+            return self._send(200, archivo.read(), "text/html; charset=utf-8")
+
+    def do_POST(self):
+        if not self.autorizada():
+            return self._send(404, {"error": "Enlace inválido o vencido."})
+        n = self.headers.get("Content-Length", "")
+        if not re.fullmatch(r"[0-9]{1,7}", n) or not 0 < int(n) <= 4000000:
+            return self._send(413, {"error": "La foto debe pesar hasta 4 MB."})
+        self.connection.settimeout(20)
+        try:
+            datos = self.rfile.read(int(n))
+        except TimeoutError:
+            return self._send(408, {"error": "Se agotó el tiempo de carga."})
+        if len(datos) != int(n) or not datos.startswith(b"\xff\xd8") or not datos.endswith(b"\xff\xd9"):
+            return self._send(400, {"error": "No se recibió un JPEG completo."})
+        with LOCK_CAPTURA:
+            if not self.autorizada():
+                return self._send(404, {"error": "Enlace inválido o vencido."})
+            hojas = self.server.hojas + 1
+            nombre = f"iPhone-{self.server.lote}-{hojas:03d}.jpg"
+            encolar(datos, nombre, ".jpg")
+            self.server.hojas = hojas
+        return self._send(200, {"hojas": hojas})
+
+
+CAPTURA = None
+LOCK_CAPTURA = threading.Lock()
+
+
+def iniciar_captura():
+    global CAPTURA
+    with LOCK_CAPTURA:
+        if CAPTURA is None:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as red:
+                red.connect(("192.0.2.1", 80))
+                ip = red.getsockname()[0]
+            CAPTURA = ThreadingHTTPServer((ip, 0), Captura)
+        CAPTURA.ruta = "/" + secrets.token_urlsafe(24)
+        CAPTURA.vence = time.monotonic() + 900
+        CAPTURA.hojas = 0
+        CAPTURA.lote = time.strftime("%Y%m%d-%H%M%S")
+        if not getattr(CAPTURA, "iniciado", False):
+            threading.Thread(target=CAPTURA.serve_forever, daemon=True).start()
+            CAPTURA.iniciado = True
+        ip, puerto = CAPTURA.server_address
+        return f"http://{ip}:{puerto}{CAPTURA.ruta}"
 
 
 def main():

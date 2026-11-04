@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 Exporta a un archivo TODA la lista de un cuadro de busqueda del sistema (infracciones, oficinas remisoras, etc.).
-SOLO LEE: no escribe nada en el sistema.
+Solo lee las listas. El usuario cambia manualmente las vocales en el sistema.
 
 Uso:
   1. En el sistema, abre el cuadro de busqueda (ej. 'Busca Infracciones': en la grilla de Infracciones, Enter
      hasta que aparezca el cuadro; o 'Busca Oficinas Remisoras' con Enter en el campo Oficina Emisora).
   2. Ejecuta:  python exportar_lista.py
-  3. Tienes 8 segundos para dejar el cuadro abierto y a la vista. No lo cierres hasta que termine.
+  3. Tienes 8 segundos para dejar el cuadro abierto y a la vista. Cambia el filtro a la siguiente vocal cuando lo indique la herramienta.
   4. Se crea <titulo>.csv y <titulo>.txt junto al script. Enviamelos.
 """
+import sys
 import csv
 import ctypes
 import ctypes.wintypes as wt
@@ -18,7 +19,7 @@ import re
 import time
 import traceback
 
-CARPETA = os.path.dirname(os.path.abspath(__file__))
+CARPETA = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
 user32 = ctypes.windll.user32
 WNDENUMPROC = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
 user32.EnumWindows.argtypes = [WNDENUMPROC, wt.LPARAM]
@@ -80,31 +81,65 @@ def leer_todo(lb):
     return items
 
 
-def main():
-    print("Deja abierto el cuadro de busqueda (Busca Infracciones / Oficinas...). Empiezo en 8 s...")
-    for s in range(8, 0, -1):
-        print(f"  {s}...", end="\r", flush=True)
+def cuenta_atras(vocal):
+    print(f"\nEscribe {vocal} en Tipo Vehiculo y abre su lista. La recogere en 8 segundos.", flush=True)
+    for segundos in range(8, 0, -1):
+        print(f"  {vocal}: {segundos} segundos...  ", end="\r", flush=True)
         time.sleep(1)
+
+
+def capturar_lista():
     cuadros = buscar_cuadros()
-    if not cuadros:
-        print("No encontre ningun cuadro de busqueda abierto.")
-        return
-    for w in cuadros:
-        nom = re.sub(r"[^A-Za-z0-9]+", "_", titulo(w)).strip("_") or "lista"
-        lbs = [h for h in hijos(w) if clase(h) == "ThunderRT6ListBox"]
-        if not lbs:
-            print(f"'{titulo(w)}': no tiene una lista legible.")
-            continue
-        items = leer_todo(lbs[0])
-        filas = []
-        for it in items:
-            m = re.match(r"^\s*(\S+)\s+(.*?)\s*$", it.replace("\t", "  "))
-            filas.append((m.group(1), m.group(2)) if m else ("", it.strip()))
-        with open(os.path.join(CARPETA, nom + ".csv"), "w", encoding="utf-8-sig", newline="") as f:
-            csv.writer(f, delimiter=";").writerows([("codigo", "descripcion")] + filas)
-        with open(os.path.join(CARPETA, nom + ".txt"), "w", encoding="utf-8") as f:
-            f.write("\n".join(items))
-        print(f"'{titulo(w)}': {len(items)} elementos guardados en {nom}.csv y {nom}.txt")
+    if len(cuadros) != 1:
+        raise RuntimeError("Debe haber un solo buscador abierto al terminar la cuenta atras.")
+    w = cuadros[0]
+    lbs = [h for h in hijos(w) if clase(h) == "ThunderRT6ListBox"]
+    if len(lbs) != 1:
+        raise RuntimeError("No pude identificar una unica lista legible en el buscador.")
+    items = leer_todo(lbs[0])
+    if not items:
+        raise RuntimeError("La lista esta vacia. Abre los resultados antes de que termine la cuenta atras.")
+    return titulo(w), items
+
+
+def guardar(items, nom):
+    filas = []
+    for it in items:
+        m = re.match(r"^\s*(\S+)\s+(.*?)\s*$", it.replace("\t", "  "))
+        filas.append((m.group(1), m.group(2)) if m else ("", it.strip()))
+    with open(os.path.join(CARPETA, nom + ".csv"), "w", encoding="utf-8-sig", newline="") as f:
+        csv.writer(f, delimiter=";").writerows([("codigo", "descripcion")] + filas)
+    with open(os.path.join(CARPETA, nom + ".txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(items))
+
+
+def main():
+    print("LECTURA DE TIPOS DE VEHICULO: A, E, I, O, U")
+    print("Tu cambias la letra y abres el buscador; esta herramienta solo lee.")
+    print("No acepta ni modifica registros. Deja el buscador visible al terminar cada cuenta atras.")
+    encontrados = {}
+    nombre = None
+    for vocal in "AEIOU":
+        cuenta_atras(vocal)
+        while True:
+            try:
+                titulo_actual, items = capturar_lista()
+                if nombre is not None and titulo_actual != nombre:
+                    raise RuntimeError("El buscador cambio. Abre nuevamente el de tipos de vehiculo.")
+                break
+            except RuntimeError as error:
+                print(f"\n{error}")
+                input(f"No avance a otra vocal. Presiona Enter para reintentar {vocal} con otros 8 segundos...")
+                cuenta_atras(vocal)
+        nombre = titulo_actual
+        for item in items:
+            clave = " ".join(item.split()).casefold()
+            if clave:
+                encontrados.setdefault(clave, item)
+        nom = re.sub(r"[^A-Za-z0-9]+", "_", nombre).strip("_") or "Tipos_vehiculo"
+        guardar(sorted(encontrados.values(), key=str.casefold), nom)
+        print(f"\n{vocal} recogida: {len(items)} filas. Total sin duplicados: {len(encontrados)}.", flush=True)
+    print(f"\nTerminado. Archivos guardados en {CARPETA}: {nom}.csv y {nom}.txt")
 
 
 if __name__ == "__main__":

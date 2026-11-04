@@ -1,3 +1,20 @@
+**ParteScan v4.1.0**
+
+- Consolida el nuevo diseño de revisión y las mejoras de reconocimiento usadas en el trabajo diario.
+- Permite eliminar partes, cambiar su orden y deshacer esos cambios conservando las correcciones y las imágenes.
+- Permite asociar una hoja reconocida como parte a su verdadero parte como certificado, o reasignar un certificado existente.
+- Reconoce certificados en tandas móviles aunque se hayan marcado como partes al escanear.
+- Ajusta los tipos de vehículo a la lista del sistema y marca para revisión los valores desconocidos.
+- Conserva el tecleo integrado, el guardado de sesiones y las actualizaciones diferenciales.
+
+**ParteScan Captura Android 0.9**
+
+- Revisión de todos los partes capturados, con imágenes ampliables y posibilidad de repetir las fotografías.
+- Eliminación de partes con opción de deshacer.
+- Apertura de tandas .psocr guardadas para seguir modificándolas.
+- Recuperación local de la tanda al volver a abrir la aplicación.
+- Conserva el diseño nuevo, la orientación de las fotos y la exportación a .psocr o PDF.
+
 **ParteScan v4.0.5** corrige el bloqueo de la aceptación automática. ParteScan verifica el botón Aceptar y su foco antes de activarlo.
 
 **ParteScan v4.0.4** unifica la revisión y el guardado de los campos compartidos entre formularios. Las versiones se distribuyen como una sola aplicación con el tecleo integrado.

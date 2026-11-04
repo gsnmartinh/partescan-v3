@@ -176,15 +176,18 @@ def tipo_pagina(texto):
     return "otra"
 
 
-def leer_parte(img, texto=None, g=None):
+def leer_parte(img, texto=None, g=None, *, solo_texto=False):
     """Imagen PIL (gris) -> dict con los campos leídos usando Tesseract como base."""
-    g = g or preparar(img)
+    if not solo_texto:
+        g = g or preparar(img)
     texto = texto if texto is not None else texto_pagina(g)
+    if solo_texto:
+        texto = extractor.completar_lineas_movil(texto)
     r = extractor.parte(texto)
     if es_formulario_inspeccion(texto):
         from . import perfil
         r["oficina"] = perfil.oficinas().get("32", "32")
-    r["folio_recorte"] = _folio_recorte(g)
+    r["folio_recorte"] = "" if solo_texto else _folio_recorte(g)
     r["n_parte_final"], av = votar(r["n_parte"], r["folio_recorte"], r["n_citacion_adjunta"])
     r["avisos"] = [a for a in r["avisos"] if "encabezado" not in a] + av
     r["texto_ocr"] = texto
@@ -304,7 +307,8 @@ def leer_carab(g, texto):
     av = []
 
     # Validaciones y respaldos secundarios con RapidOCR
-    av += cotejar_con_rapidocr(g, r)
+    if g is not None:
+        av += cotejar_con_rapidocr(g, r)
 
     if not r["n_parte_carab"]:
         av.append("No pude leer el número del parte de Carabineros.")

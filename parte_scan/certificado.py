@@ -35,6 +35,8 @@ def _sin_ruido(v):
 def _valor(t, etiqueta):
     # el OCR a veces lee los dos puntos como "?", "*", "—", "1", "g"...
     m = re.search(etiqueta + r"\W{0,4}(?:[:;?*1!|]|\b[gGjJ]\b)\s*(.+)", t, re.I)
+    if not m:
+        m = re.search(r"(?im)^[ \t]*" + etiqueta + r"[ \t]+([^\r\n]+)", t)
     return _sin_ruido(_limpiar(m.group(1))) if m else ""
 
 
@@ -60,8 +62,10 @@ def _dato_propietario(zona, etiqueta):
     m = re.search(r"^[^\w\r\n]*(?:" + etiqueta + r")\b[ \t:;?*|!]*([^\r\n]+)", zona, re.I | re.M)
     return _sin_ruido(_limpiar(m.group(1))) if m else ""
 
-
 def leer(t):
+    # Algunos OCR separan el rótulo y el valor en dos líneas.
+    etiquetas = r"(?:Inscripci[oó]n|Tipo\s+Veh\S{1,3}culo|Marca|Modelo|Color|Nombre|R\.?\s*U\.?\s*N\.?|Domicilio|Comuna)"
+    t = re.sub(r"(?im)^([ \t]*" + etiquetas + r"[ \t:;?*|!]*)\r?\n[ \t]*(?=\S)", r"\1 ", t)
     o, av = {}, []
     # Inscripción: PLACA.NN-D  (el dígito final es el verificador de la placa)
     m = re.search(r"\bInscripci[oó]n[ \t]*(?:[:;15l|$\-á][ \t]*)?"
@@ -73,6 +77,10 @@ def leer(t):
     m = re.search(r"A\S{1,2}o\s*[:;?]?\s*((?:19|20)\d{2})", tipo, re.I)
     if m:
         o["anio"] = m.group(1)
+    if not re.search(r"[A-Za-zÁÉÍÓÚÑ]", tipo):
+        siguiente = re.search(r"(?im)^Tipo\s+Veh\S{1,3}culo[^\r\n]*\r?\n([^\r\n]+)", t)
+        if siguiente:
+            tipo = siguiente.group(1)
     tipo = re.sub(r"\s*A\S{1,2}o\b.*$", "", tipo, flags=re.I)
     o["tipo_vehiculo"] = re.sub(r"[^A-ZÁÉÍÓÚÑ ]", "", tipo.upper()).strip()
     if not o["anio"]:

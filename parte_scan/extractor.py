@@ -52,6 +52,37 @@ def placa_ok(p):
     return bool(re.fullmatch(r"[A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3}", p))
 
 
+def completar_lineas_movil(t):
+    """Recupera valores vecinos cuando el OCR separa rótulo y contenido."""
+    lineas = [l.strip() for l in t.splitlines() if l.strip()]
+    for i, linea in enumerate(lineas):
+        anteriores = lineas[max(0, i - 2):i]
+        siguientes = lineas[i + 1:i + 3]
+        if re.search(r"Doy cuenta", linea, re.I) and not hora_de(linea):
+            hora = next((hora_de(v) for v in anteriores + siguientes
+                         if re.fullmatch(r"(?:a las\s+)?\d{1,2}:\d{2}\s*Hrs\.?", v, re.I)), "")
+            lineas[i] += " " + hora
+        if re.search(r"audiencia", linea, re.I) and not fecha_de(linea):
+            valor = next((v for v in anteriores + siguientes if fecha_de(v)), "")
+            lineas[i] += " " + valor
+        if re.fullmatch(r"en\s+la\s+calle", linea, re.I):
+            valor = next((v for v in anteriores + siguientes
+                          if re.search(r"se\s+sorprendi", v, re.I)
+                          and not re.match(r"se\s+sorprendi", v, re.I)), "")
+            lineas[i] += " " + valor
+        if re.fullmatch(r"Infractor", linea, re.I):
+            valor = next((v for v in anteriores + siguientes
+                          if re.search(r"\bC\.[I1l]\.", v, re.I)
+                          and re.search(r"\d{3}", v)), "")
+            lineas[i] += " " + valor
+        if re.fullmatch(r"Domiciliad[oa]\s+en\s+calle", linea, re.I):
+            valor = next((v for v in anteriores + siguientes
+                          if re.fullmatch(r"[A-ZÁÉÍÓÚÑ .]+\s+\d+[A-Z]?", v, re.I)
+                          and not re.search(r"DENUNCIO|CITACION", v, re.I)), "")
+            lineas[i] += " " + valor
+    return "\n".join(lineas)
+
+
 def parte(t):
     L = [l.strip() for l in t.splitlines() if l.strip()]
     o, av = {}, []
@@ -139,6 +170,9 @@ def parte(t):
     rut = re.search(r"\b\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK]\b", infractor, re.I)
     nombre = infractor[:rut.start()] if rut else infractor
     nombre = re.sub(r"\s+C\s*\.?\s*[IL1]\s*\.?\s*$", "", nombre, flags=re.I)
+    o["notificado_personalmente"] = bool(re.search(
+        r"(?:CITACI[OÓÔ]N\s+(?:ENTREGADA\s+PERSONALMENTE|EN\s+FORMA\s+PERSONAL)|"
+        r"NOTIFICAD[OA]\s+PERSONALMENTE)", "\n".join(L), re.I))
     o["persona"] = {
         "nombre": limpiar(re.sub(r"^\W*Infractor\b", "", nombre, flags=re.I)),
         "rut": re.sub(r"\s+", "", rut.group()) if rut else "",

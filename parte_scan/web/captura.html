@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Captura de ParteScan</title>
+<style>
+body { font: 1rem system-ui; max-width: 36rem; margin: auto; padding: 1rem; }
+button, label { display: inline-block; background: #164c83; color: white; border: 0; padding: .8rem; border-radius: .5rem; font: inherit; }
+button:disabled { opacity: .5; }
+img { display: block; max-width: 100%; max-height: 55vh; margin: 1rem auto; }
+</style>
+<h1>Captura de ParteScan</h1>
+<p>Fotografía una hoja a la vez. Revisa que se vean los bordes y que el texto esté enfocado.</p>
+<label for="foto">Tomar foto</label>
+<input id="foto" type="file" accept="image/*" capture="environment" hidden>
+<img id="vista" alt="Vista previa de la hoja" hidden>
+<button id="enviar" disabled>Enviar hoja</button>
+<p id="estado" role="status">0 hojas enviadas desde esta pantalla.</p>
+<script>
+const foto = document.getElementById('foto');
+const vista = document.getElementById('vista');
+const enviar = document.getElementById('enviar');
+const estado = document.getElementById('estado');
+let jpeg;
+let preview;
+
+function limpiar() {
+  jpeg = null;
+  vista.hidden = true;
+  vista.removeAttribute('src');
+  if (preview) URL.revokeObjectURL(preview);
+  preview = null;
+  enviar.disabled = true;
+}
+
+foto.onchange = async () => {
+  const archivo = foto.files[0];
+  foto.value = '';
+  if (!archivo) return;
+  limpiar();
+  foto.disabled = true;
+  const origen = URL.createObjectURL(archivo);
+  try {
+    const imagen = new Image();
+    imagen.src = origen;
+    await imagen.decode();
+    const escala = Math.min(1, 2600 / Math.max(imagen.width, imagen.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(imagen.width * escala);
+    canvas.height = Math.round(imagen.height * escala);
+    canvas.getContext('2d').drawImage(imagen, 0, 0, canvas.width, canvas.height);
+    jpeg = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .86));
+    if (!jpeg || jpeg.size > 4000000) throw new Error('La imagen supera el límite de 4 MB.');
+    preview = URL.createObjectURL(jpeg);
+    vista.src = preview;
+    vista.hidden = false;
+    enviar.disabled = false;
+    estado.textContent = 'Foto lista para enviar.';
+  } catch (error) {
+    estado.textContent = 'No se pudo preparar la foto. Intenta otra toma.';
+  } finally {
+    foto.disabled = false;
+    URL.revokeObjectURL(origen);
+  }
+};
+
+enviar.onclick = async () => {
+  enviar.disabled = true;
+  foto.disabled = true;
+  estado.textContent = 'Enviando…';
+  try {
+    const r = await fetch(location.pathname, {method: 'POST', body: jpeg});
+    const datos = await r.json();
+    if (!r.ok) throw new Error(datos.error);
+    limpiar();
+    estado.textContent = 'Hojas recibidas por el PC: ' + datos.hojas;
+  } catch (error) {
+    estado.textContent = 'No se confirmó la carga. ' + error.message;
+    enviar.disabled = false;
+  } finally {
+    foto.disabled = false;
+  }
+};
+</script>
+</html>

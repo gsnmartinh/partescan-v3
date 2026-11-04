@@ -40,7 +40,7 @@ def marca_limpia(m):
     return {"REANULT": "RENAULT", "RENAUL": "RENAULT", "CITROUN": "CITROEN", "CITROEM": "CITROEN", "CHEVROLER": "CHEVROLET"}.get(m, m)
 
 
-def tipo_limpio(t):
+def _tipo_semantico(t):
     """Lleva el tipo de vehículo a la descripción exacta de la lista del sistema (BuscaTipoVeh). Lo que el sistema no
     tiene (CAMIONETA, CAMIÓN, FURGÓN…) queda con la palabra limpia, sin restos del OCR."""
     import unicodedata
@@ -93,3 +93,26 @@ def tipo_limpio(t):
     if "TRICICLO" in x:
         return "TRICICLOS LENTOS" if "LENTO" in x else "TRICICLO RAPIDOS"
     return x
+
+
+def tipo_limpio(t):
+    """Usa la etiqueta exacta del sistema; conserva los desconocidos para revisión."""
+    from difflib import SequenceMatcher
+    from .tipos_vehiculo import TIPOS
+    literal = str(t or "").strip().upper()
+    if literal in TIPOS:
+        return literal
+    def clave(v):
+        return re.sub(r"[^A-Z0-9]", "", _txt(v))
+    originales = {clave(v): v for v in TIPOS}
+    x = clave(t)
+    if not x:
+        return ""
+    if x in originales:
+        return originales[x]
+    # Primero recupera espacios y errores breves, sin confundir subtipos.
+    candidatos = sorted(((SequenceMatcher(None, x, k).ratio(), v) for k, v in originales.items()), reverse=True)
+    if candidatos[0][0] >= .90 and candidatos[0][0] - candidatos[1][0] >= .06:
+        return candidatos[0][1]
+    limpio = _tipo_semantico(t)
+    return originales.get(clave(limpio), limpio)
