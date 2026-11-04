@@ -5,6 +5,10 @@ import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.ImageDecoder;
+import android.graphics.Matrix;
+import java.io.FileOutputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import android.graphics.Rect;
 import android.graphics.Point;
 import android.graphics.RectF;
@@ -89,9 +93,11 @@ public class MainActivity extends Activity {
         if (part != null) label(body, "Parte " + (completedParts + 1), 16);
         button(body, part == null ? "Escanear parte" : "Repetir foto del parte", true, () -> capture(PART));
         preview(body, part, "Foto del parte");
+        if (part != null) button(body, "Girar parte ↻", true, () -> orientPhoto(part, false));
         button(body, certificate == null ? "Agregar certificado (opcional)" : "Repetir foto del certificado",
                 part != null, () -> capture(CERTIFICATE));
         preview(body, certificate, "Foto del certificado");
+        if (certificate != null) button(body, "Girar certificado ↻", true, () -> orientPhoto(certificate, false));
         if (certificate != null) {
             button(body, "Quitar certificado", true, () -> {
                 delete(certificate);
@@ -219,7 +225,7 @@ public class MainActivity extends Activity {
                 delete(certificate);
                 certificate = captured;
             }
-            render("");
+            orientPhoto(captured, true);
         } else if (request == SAVE_OCR && result == RESULT_OK && data != null && data.getData() != null) {
             exportOcr(data.getData());
         } else if (request == SAVE && result == RESULT_OK && data != null && data.getData() != null) {
@@ -240,6 +246,93 @@ public class MainActivity extends Activity {
                 pdf.close();
             }
         }
+    }
+
+    // ImageDecoder already applies camera EXIF. Detect text direction in those decoded pixels.
+    private void orientPhoto(String name, boolean automatic) {
+        TextView progress = new TextView(this);
+        progress.setText(automatic ? "Orientando la foto…" : "Girando la foto…");
+        setContentView(progress);
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+        new Thread(() -> {
+            String message = "";
+            Bitmap bitmap = null;
+            TextRecognizer reader = null;
+            try {
+                int degrees = 90;
+                if (automatic) {
+                    reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+                    Bitmap sample = decode(name, 2000);
+                    try {
+                        Text text = Tasks.await(reader.process(InputImage.fromBitmap(sample, 0)));
+                        int[] votes = orientationVotes(text);
+                        int turn = dominantTurn(votes);
+                        int total = votes[0] + votes[1] + votes[2] + votes[3];
+                        // Avoid rotating sparse or mixed-direction text on weak evidence.
+                        degrees = total >= 20 && votes[turn] * 100L >= total * 65L
+                                ? (360 - turn * 90) % 360 : 0;
+                        if (total < 20 || votes[turn] * 100L < total * 65L)
+                            message = "No se pudo determinar la orientación. Revisa la foto y usa Girar si hace falta.";
+                    } finally {
+                        sample.recycle();
+                    }
+                }
+                if (degrees != 0) {
+                    bitmap = decode(name, 4000);
+                    Matrix matrix = new Matrix();
+                    matrix.postRotate(degrees);
+                    Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+                    try {
+                        File temporary = new File(folder, name + ".rotating");
+                        try {
+                            try (FileOutputStream output = new FileOutputStream(temporary)) {
+                                if (!rotated.compress(Bitmap.CompressFormat.JPEG, 95, output)) throw new IOException();
+                            }
+                            Files.move(temporary.toPath(), new File(folder, name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        } finally {
+                            temporary.delete();
+                        }
+                    } finally {
+                        if (rotated != bitmap) rotated.recycle();
+                    }
+                }
+            } catch (Exception error) {
+                message = "No se pudo girar la foto. Se conserva la captura; puedes usar Girar o repetirla.";
+            } finally {
+                if (bitmap != null) bitmap.recycle();
+                if (reader != null) reader.close();
+            }
+            String result = message;
+            runOnUiThread(() -> {
+                render(result);
+                setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            });
+        }).start();
+    }
+
+    private static int[] orientationVotes(Text recognized) {
+        int[] votes = new int[4];
+        for (Text.TextBlock block : recognized.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                Point[] corners = line.getCornerPoints();
+                if (corners == null || corners.length < 2) continue;
+                int dx = corners[1].x - corners[0].x;
+                int dy = corners[1].y - corners[0].y;
+                if (dx == 0 && dy == 0) continue;
+                double angle = Math.atan2(dy, dx);
+                int turn = Math.floorMod((int) Math.round(angle / (Math.PI / 2)), 4);
+                votes[turn] += line.getText().length();
+            }
+        }
+        return votes;
+    }
+
+    private static int dominantTurn(int[] votes) {
+        int dominant = 0;
+        for (int i = 1; i < votes.length; i++) {
+            if (votes[i] > votes[dominant]) dominant = i;
+        }
+        return dominant;
     }
 
     private void exportOcr(android.net.Uri destination) {
@@ -299,19 +392,7 @@ public class MainActivity extends Activity {
             }
         }
         if (lines.isEmpty()) return recognized.getText();
-        int[] votes = new int[4];
-        for (Text.Line line : lines) {
-            Point[] corners = line.getCornerPoints();
-            if (corners == null || corners.length < 2) continue;
-            double angle = Math.atan2(corners[1].y - corners[0].y, corners[1].x - corners[0].x);
-            int turn = Math.floorMod((int) Math.round(angle / (Math.PI / 2)), 4);
-            votes[turn] += line.getText().length();
-        }
-        int dominant = 0;
-        for (int i = 1; i < votes.length; i++) {
-            if (votes[i] > votes[dominant]) dominant = i;
-        }
-        final int turn = dominant;
+        final int turn = dominantTurn(orientationVotes(recognized));
         lines.sort(Comparator.comparingInt(line -> rowPosition(line.getBoundingBox(), turn)));
 
         StringBuilder text = new StringBuilder();
@@ -371,3 +452,4 @@ public class MainActivity extends Activity {
         if (name != null) new File(folder, name).delete();
     }
 }
+
