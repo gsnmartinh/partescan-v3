@@ -1,4 +1,10 @@
-ParteScan Captura 0.10.1 organiza la aplicación en tres secciones:
+ParteScan Captura 0.10.2 corrige la apertura de la cámara.
+
+- La cámara recibe acceso temporal a la carpeta donde se guardan las nuevas fotografías.
+- Mantiene los documentos existentes si cancelas la cámara o no se puede abrir.
+- Distingue los avisos por cámara no disponible, bloqueo del teléfono y fallo al preparar la foto.
+
+Conserva la organización Fluent 2 de la aplicación en tres secciones:
 
 - **Tanda:** lista visual de los partes capturados y sus certificados. Toca un parte para revisarlo; sus opciones permiten eliminarlo y deshacer la eliminación.
 - **Escanear:** captura del parte y, después, su certificado opcional. Las opciones de repetir, girar y quitar una foto están junto al documento correspondiente.

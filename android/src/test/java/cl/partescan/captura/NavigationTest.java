@@ -64,6 +64,68 @@ public class NavigationTest {
     private void clickDescription(String value) { View v=byDescription(root(),value); assertNotNull(value,v); v.performClick(); }
     private void click(String value) { Button b=button(root(),value); assertNotNull(value,b); assertTrue(b.isEnabled()); b.performClick(); }
 
+    private org.robolectric.shadows.ShadowActivity.IntentForResult startCamera(int request) {
+        ReflectionHelpers.callInstanceMethod(activity,"capture",ReflectionHelpers.ClassParameter.from(int.class,request));
+        org.robolectric.shadows.ShadowActivity.IntentForResult started = org.robolectric.Shadows.shadowOf(activity).getNextStartedActivityForResult();
+        assertNotNull("Debe abrir la cámara en vez de fallar al preparar la foto",started);
+        assertEquals(request,started.requestCode);
+        assertEquals(android.provider.MediaStore.ACTION_IMAGE_CAPTURE,started.intent.getAction());
+        return started;
+    }
+
+    @Test public void cameraReceivesWritablePrivatePhotoWithTemporaryAccess() throws Exception {
+        navigate(1);
+        org.robolectric.shadows.ShadowActivity.IntentForResult started=startCamera(1);
+        android.net.Uri uri=started.intent.getParcelableExtra(android.provider.MediaStore.EXTRA_OUTPUT);
+        assertNotNull(uri); assertEquals("content",uri.getScheme());
+        assertEquals(activity.getPackageName()+".fotos",uri.getAuthority());
+        int permissions=android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION|android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+        assertEquals(permissions,started.intent.getFlags()&permissions);
+        assertNotNull(started.intent.getClipData());
+        assertEquals(uri,started.intent.getClipData().getItemAt(0).getUri());
+        File folder=ReflectionHelpers.getField(activity,"folder");
+        File photo=new File(folder,(String)ReflectionHelpers.getField(activity,"pending"));
+        assertTrue(photo.isFile());
+        byte[] bytes={1,2,3};
+        try(java.io.OutputStream output=activity.getContentResolver().openOutputStream(uri)) { assertNotNull(output); output.write(bytes); }
+        assertArrayEquals(bytes,java.nio.file.Files.readAllBytes(photo.toPath()));
+    }
+
+    @Test public void cancellingNextPhotoPreservesPartAndCertificate() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        startCamera(4);
+        File folder=ReflectionHelpers.getField(activity,"folder");
+        File temporary=new File(folder,(String)ReflectionHelpers.getField(activity,"pending"));
+        activity.onActivityResult(4,android.app.Activity.RESULT_CANCELED,null);
+        assertEquals("first.jpg",ReflectionHelpers.getField(activity,"part"));
+        assertEquals("cert.jpg",ReflectionHelpers.getField(activity,"certificate"));
+        assertNull(ReflectionHelpers.getField(activity,"pending"));
+        assertFalse(temporary.exists());
+        assertTrue(new File(folder,"first.jpg").isFile());
+        assertTrue(new File(folder,"cert.jpg").isFile());
+    }
+
+    @Test public void certificateCameraUsesNewOutputWithoutReplacingExistingPhotos() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        org.robolectric.shadows.ShadowActivity.IntentForResult started=startCamera(2);
+        android.net.Uri output=started.intent.getParcelableExtra(android.provider.MediaStore.EXTRA_OUTPUT);
+        assertNotNull(output);
+        assertEquals("first.jpg",ReflectionHelpers.getField(activity,"part"));
+        assertEquals("cert.jpg",ReflectionHelpers.getField(activity,"certificate"));
+        File folder=ReflectionHelpers.getField(activity,"folder");
+        try(java.io.OutputStream stream=activity.getContentResolver().openOutputStream(output)) { assertNotNull(stream); }
+        assertNotEquals("first.jpg",ReflectionHelpers.getField(activity,"pending"));
+        assertNotEquals("cert.jpg",ReflectionHelpers.getField(activity,"pending"));
+        assertTrue(new File(folder,"first.jpg").isFile());
+        assertTrue(new File(folder,"cert.jpg").isFile());
+    }
+
+    @Test public void photoProviderDoesNotExposeOtherInternalFiles() throws Exception {
+        File other=new File(activity.getFilesDir(),"nota-privada.txt");
+        other.createNewFile();
+        assertThrows(IllegalArgumentException.class,() -> androidx.core.content.FileProvider.getUriForFile(activity,activity.getPackageName()+".fotos",other));
+    }
+
     private void photo(String name, String title) throws Exception {
         File folder=ReflectionHelpers.getField(activity,"folder");
         Bitmap bitmap=Bitmap.createBitmap(300,400,Bitmap.Config.ARGB_8888);

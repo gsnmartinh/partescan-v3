@@ -673,11 +673,22 @@ public class MainActivity extends Activity {
             camera.setClipData(ClipData.newRawUri("captura", uri));
             camera.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             startActivityForResult(camera, type);
-        } catch (IOException | RuntimeException error) {
-            delete(pending);
-            pending = null;
-            render("No se pudo abrir la cámara.");
+        } catch (android.content.ActivityNotFoundException error) {
+            cameraFailure(error, "No encontré una app de cámara. Comprueba que la cámara del teléfono esté disponible.");
+        } catch (SecurityException error) {
+            cameraFailure(error, "El teléfono no permitió abrir la cámara. Comprueba que la app Cámara funcione fuera de ParteScan y revisa el aviso de seguridad del teléfono.");
+        } catch (IOException | IllegalArgumentException error) {
+            cameraFailure(error, "No se pudo preparar el archivo de la foto. Vuelve a intentarlo.");
+        } catch (RuntimeException error) {
+            cameraFailure(error, "No se pudo abrir la cámara. Comprueba que la app Cámara funcione en el teléfono e inténtalo de nuevo.");
         }
+    }
+
+    private void cameraFailure(Exception error, String message) {
+        android.util.Log.e("ParteScan", "No se pudo iniciar la captura de una foto", error);
+        delete(pending);
+        pending = null;
+        render(message);
     }
 
     private void save(boolean ocr) {

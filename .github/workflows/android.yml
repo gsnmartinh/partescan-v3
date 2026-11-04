@@ -31,12 +31,12 @@ jobs:
           trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
           gradle -p android assembleRelease
-          cp android/build/outputs/apk/release/*.apk ParteScan-Captura-0.10.1.apk
-          sha256sum ParteScan-Captura-0.10.1.apk > ParteScan-Captura-0.10.1.apk.sha256
+          cp android/build/outputs/apk/release/*.apk ParteScan-Captura-0.10.2.apk
+          sha256sum ParteScan-Captura-0.10.2.apk > ParteScan-Captura-0.10.2.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: ParteScan-Captura-0.10.1
-          path: ParteScan-Captura-0.10.1.apk*
+          name: ParteScan-Captura-0.10.2
+          path: ParteScan-Captura-0.10.2.apk*
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
@@ -52,4 +52,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" ParteScan-Captura-0.10.1.apk* --title "ParteScan Captura 0.10.1" --notes-file android/RELEASE_NOTES.md --latest=false
+          gh release create "$GITHUB_REF_NAME" ParteScan-Captura-0.10.2.apk* --title "ParteScan Captura 0.10.2" --notes-file android/RELEASE_NOTES.md --latest=false
