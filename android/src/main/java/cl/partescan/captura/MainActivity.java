@@ -42,6 +42,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 public class MainActivity extends Activity {
     private File folder;
+    private FluentStyle fluent;
     private final ArrayList<String> pages = new ArrayList<>();
     private final ArrayList<Integer> attachments = new ArrayList<>();
     private int completedParts;
@@ -52,6 +53,10 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        fluent = new FluentStyle(this);
+        getWindow().setStatusBarColor(fluent.background);
+        getWindow().setNavigationBarColor(fluent.background);
+        getWindow().getDecorView().setSystemUiVisibility(fluent.dark ? 0 : android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         folder = new File(getCacheDir(), "capturas");
         folder.mkdirs();
         if (state != null) {
@@ -86,28 +91,41 @@ public class MainActivity extends Activity {
         body.setPadding(padding, padding, padding, padding);
         scroll.addView(body);
         setContentView(scroll);
-        label(body, "ParteScan Captura", 26);
-        label(body, "Fotografía cualquier tipo de parte. Agrega el certificado si corresponde.", 16);
+        scroll.setBackgroundColor(fluent.background);
+        label(body, "ParteScan", 28);
+        label(body, "CAPTURA DE DOCUMENTOS", 12);
+        label(body, "Escanea la tanda, reconoce el texto y llévala al computador por USB.", 16);
         int count = completedParts + (part == null ? 0 : 1);
-        label(body, "Partes en la tanda: " + count, 18);
-        if (part != null) label(body, "Parte " + (completedParts + 1), 16);
-        button(body, part == null ? "Escanear parte" : "Repetir foto del parte", true, () -> capture(PART));
-        preview(body, part, "Foto del parte");
-        if (part != null) button(body, "Girar parte ↻", true, () -> orientPhoto(part, false));
-        button(body, certificate == null ? "Agregar certificado (opcional)" : "Repetir foto del certificado",
+        LinearLayout summary = fluent.card(body);
+        label(summary, "Tanda actual", 20);
+        label(summary, count + (count == 1 ? " parte capturado" : " partes capturados"), 16);
+        label(summary, "La orientación se ajusta al tomar cada foto.", 14);
+        LinearLayout captureCard = fluent.card(body);
+        label(captureCard, "Parte " + (completedParts + 1), 20);
+        label(captureCard, "Fotografía cualquier tipo de parte.", 14);
+        preview(captureCard, part, "Foto del parte");
+        button(captureCard, part == null ? "Escanear parte" : "Repetir foto del parte", true, () -> capture(PART), true);
+        if (part != null) button(captureCard, "Girar parte ↻", true, () -> orientPhoto(part, false));
+        LinearLayout certificateCard = fluent.card(body);
+        label(certificateCard, "Certificado", 20);
+        label(certificateCard, "Opcional · Agrégalo si corresponde a este parte.", 14);
+        preview(certificateCard, certificate, "Foto del certificado");
+        button(certificateCard, certificate == null ? "Agregar certificado" : "Repetir foto del certificado",
                 part != null, () -> capture(CERTIFICATE));
-        preview(body, certificate, "Foto del certificado");
-        if (certificate != null) button(body, "Girar certificado ↻", true, () -> orientPhoto(certificate, false));
         if (certificate != null) {
-            button(body, "Quitar certificado", true, () -> {
+            button(certificateCard, "Girar certificado ↻", true, () -> orientPhoto(certificate, false));
+            button(certificateCard, "Quitar certificado", true, () -> {
                 delete(certificate);
                 certificate = null;
                 render("");
             });
         }
         button(body, "Siguiente parte", part != null, () -> capture(NEXT));
-        button(body, "Guardar tanda con OCR", count > 0, () -> save(true));
-        button(body, "Guardar PDF", count > 0, () -> save(false));
+        LinearLayout exportCard = fluent.card(body);
+        label(exportCard, "Guardar tanda", 20);
+        label(exportCard, "Todo se procesa en este teléfono.", 14);
+        button(exportCard, "Guardar tanda con OCR", count > 0, () -> save(true), true);
+        button(exportCard, "Guardar PDF", count > 0, () -> save(false));
         button(body, "Nueva tanda", count > 0, () ->
             new android.app.AlertDialog.Builder(this)
                 .setMessage("¿Borrar las capturas de esta tanda?")
@@ -122,22 +140,55 @@ public class MainActivity extends Activity {
                     part = certificate = null;
                     render("");
                 }).show());
-        label(body, message, 16);
+        if (!message.isEmpty()) {
+            LinearLayout notice = fluent.card(body);
+            label(notice, message, 14);
+            notice.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        }
     }
 
     private void label(LinearLayout body, String text, int size) {
         TextView view = new TextView(this);
         view.setText(text);
-        view.setTextSize(size);
-        body.addView(view);
+        fluent.text(view, size);
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2);
+        layout.bottomMargin = fluent.dp(8);
+        body.addView(view, layout);
     }
 
     private void button(LinearLayout body, String text, boolean enabled, Runnable action) {
+        button(body, text, enabled, action, false);
+    }
+
+    private void button(LinearLayout body, String text, boolean enabled, Runnable action, boolean primary) {
         Button button = new Button(this);
         button.setText(text);
         button.setEnabled(enabled);
+        fluent.button(button, primary, enabled);
         button.setOnClickListener(view -> action.run());
-        body.addView(button);
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2);
+        layout.topMargin = fluent.dp(4);
+        layout.bottomMargin = fluent.dp(4);
+        body.addView(button, layout);
+    }
+
+    private void progress(String message) {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(android.view.Gravity.CENTER);
+        panel.setPadding(fluent.dp(24), fluent.dp(24), fluent.dp(24), fluent.dp(24));
+        panel.setBackgroundColor(fluent.background);
+        android.widget.ProgressBar spinner = new android.widget.ProgressBar(this);
+        spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(fluent.brand));
+        panel.addView(spinner);
+        TextView text = new TextView(this);
+        text.setGravity(android.view.Gravity.CENTER);
+        text.setText(message);
+        fluent.text(text, 16);
+        text.setPadding(0, fluent.dp(16), 0, 0);
+        text.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        panel.addView(text);
+        setContentView(panel);
     }
 
     private void preview(LinearLayout body, String name, String description) {
@@ -145,6 +196,9 @@ public class MainActivity extends Activity {
         try {
             ImageView view = new ImageView(this);
             view.setContentDescription(description);
+            view.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            view.setBackground(fluent.surface());
+            view.setClipToOutline(true);
             view.setImageBitmap(decode(name, 500));
             int height = Math.round(210 * getResources().getDisplayMetrics().density);
             body.addView(view, ViewGroup.LayoutParams.MATCH_PARENT, height);
@@ -250,9 +304,7 @@ public class MainActivity extends Activity {
 
     // ImageDecoder already applies camera EXIF. Detect text direction in those decoded pixels.
     private void orientPhoto(String name, boolean automatic) {
-        TextView progress = new TextView(this);
-        progress.setText(automatic ? "Orientando la foto…" : "Girando la foto…");
-        setContentView(progress);
+        progress(automatic ? "Orientando la foto…" : "Girando la foto…");
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
         new Thread(() -> {
             String message = "";
@@ -343,9 +395,7 @@ public class MainActivity extends Activity {
             certificates.add(photos.size());
             photos.add(certificate);
         }
-        TextView progress = new TextView(this);
-        progress.setText("Reconociendo texto en el teléfono…");
-        setContentView(progress);
+        progress("Reconociendo texto en el teléfono…");
         new Thread(() -> {
             String message;
             TextRecognizer reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
