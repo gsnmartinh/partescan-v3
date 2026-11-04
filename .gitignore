@@ -22,6 +22,7 @@ dist/
 *.keystore
 *.jks
 *.psocr
+/.release-signing/
 /teclea/prueba.txt
 
 # Diagnósticos y grabaciones locales (pueden contener datos personales)

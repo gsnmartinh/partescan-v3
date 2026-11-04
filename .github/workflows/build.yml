@@ -8,7 +8,7 @@ on:
         required: false
         default: ""      # botón "Run workflow"
   push:
-    branches: [main, master, fix/activar-aceptar-y-refrescar-datos, codex/release-v4.1.0]
+    branches: [main, master, fix/activar-aceptar-y-refrescar-datos]
     tags: ["v*"]          # al crear una versión (v1.0.0, v1.1.0…) se publica una Release con el zip
 
 concurrency:
@@ -31,13 +31,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - run: gradle -p android assembleDebug
+      - name: Compilar APK con firma estable
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/partescan-release.p12"
+          trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          gradle -p android assembleRelease
       - name: Preparar APK instalable
-        run: cp android/build/outputs/apk/debug/*.apk ParteScan-Captura-0.9.apk
+        run: |
+          cp android/build/outputs/apk/release/*.apk ParteScan-Captura-0.9.apk
+          sha256sum ParteScan-Captura-0.9.apk > ParteScan-Captura-0.9.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: ParteScan-Captura-0.9
-          path: ParteScan-Captura-0.9.apk
+          path: ParteScan-Captura-0.9.apk*
           if-no-files-found: error
   build:
     runs-on: windows-latest
@@ -174,5 +184,5 @@ jobs:
           python herramientas/empaquetar_actualizacion.py dist/ParteScan build/actualizacion $tag
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh release create $tag --title "ParteScan $tag" --target ${{ github.sha }} --notes-file RELEASE_NOTES.md 2>$null
-          $assets = @("ParteScan-Windows-$tag.zip") + (Get-ChildItem salida\*).FullName + (Get-ChildItem build/actualizacion/*).FullName + (Get-ChildItem apk/*.apk).FullName
+          $assets = @("ParteScan-Windows-$tag.zip") + (Get-ChildItem salida\*).FullName + (Get-ChildItem build/actualizacion/*).FullName + (Get-ChildItem apk/*).FullName
           gh release upload $tag @assets --clobber

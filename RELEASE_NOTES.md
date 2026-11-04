@@ -15,6 +15,8 @@
 - Recuperación local de la tanda al volver a abrir la aplicación.
 - Conserva el diseño nuevo, la orientación de las fotos y la exportación a .psocr o PDF.
 
+El APK 0.9 usa una firma estable para las próximas actualizaciones. Si Android rechaza la instalación sobre una versión de prueba anterior, guarda primero la tanda como .psocr, desinstala esa versión e instala el APK nuevo. Después puedes volver a abrir la tanda guardada.
+
 **ParteScan v4.0.5** corrige el bloqueo de la aceptación automática. ParteScan verifica el botón Aceptar y su foco antes de activarlo.
 
 **ParteScan v4.0.4** unifica la revisión y el guardado de los campos compartidos entre formularios. Las versiones se distribuyen como una sola aplicación con el tecleo integrado.

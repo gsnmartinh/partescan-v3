@@ -2,7 +2,7 @@ name: Compilar ParteScan Captura Android
 on:
   workflow_dispatch:
   push:
-    branches: [codex/android-captura, codex/release-v4.1.0]
+    branches: [codex/android-captura]
     paths: ['android/**', '.github/workflows/android.yml']
 permissions:
   contents: read
