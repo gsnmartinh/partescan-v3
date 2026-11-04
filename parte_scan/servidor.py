@@ -310,6 +310,13 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(os.path.join(WEB, "index.html"), "rb").read(), "text/html; charset=utf-8")
         if u.path == "/fluent.css":
             return self._send(200, open(os.path.join(WEB, "fluent.css"), "rb").read(), "text/css; charset=utf-8")
+        logos = {"/brand/partescan.svg": ("partescan.svg", "image/svg+xml"),
+                 "/brand/captura.svg": ("captura.svg", "image/svg+xml"),
+                 "/favicon.ico": ("partescan.ico", "image/x-icon")}
+        if u.path in logos:
+            nombre, tipo = logos[u.path]
+            with open(os.path.join(WEB, "brand", nombre), "rb") as archivo:
+                return self._send(200, archivo.read(), tipo)
         if u.path == "/api/estado":
             with LOCK:
                 return self._send(200, {"pendientes": ESTADO["pendientes"], "error": ESTADO["error"],
@@ -659,7 +666,8 @@ def _abrir_ventana(url):
         import webview
         carpeta = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "ParteScan", "ventana")
         webview.create_window("ParteScan", url, width=1440, height=900, min_size=(1000, 650))
-        webview.start(private_mode=False, storage_path=carpeta)      # espera hasta que se cierre la ventana
+        webview.start(private_mode=False, storage_path=carpeta,
+                      icon=os.path.join(WEB, "brand", "partescan.ico"))
         return True
     except Exception:
         print("No pude abrir la ventana propia; uso el navegador.\n" + traceback.format_exc())

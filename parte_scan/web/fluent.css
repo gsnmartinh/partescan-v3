@@ -28,7 +28,7 @@
 body{font-family:var(--f);line-height:1.45;background:var(--bg)}
 header{background:var(--colorNeutralBackground2);padding:12px 20px;gap:12px}
 header h1{font-size:20px;line-height:28px;letter-spacing:-.3px}
-h1::before{border-radius:6px;background:var(--ac);box-shadow:none;width:28px;height:28px}
+h1::before{border-radius:0;background:transparent url('/brand/partescan.svg') center/contain no-repeat;box-shadow:none;width:32px;height:32px}
 button,.menu summary{border-radius:var(--borderRadiusMedium);min-height:32px;font-size:14px;line-height:20px;padding:5px 12px;border:1px solid var(--line2);font-weight:400;box-shadow:none}
 button:hover,.menu summary:hover{background:var(--colorSubtleBackgroundHover)}
 button:active{transform:none;background:var(--colorNeutralBackground3)}

@@ -1,3 +1,28 @@
+# ParteScan 5.0 · ParteScan Captura 1.0
+
+Las dos aplicaciones estrenan una identidad visual complementaria:
+
+- **Windows:** documento azul con marca de revisión, en el programa, el instalador, los accesos directos y la cabecera.
+- **Android:** documento turquesa con marco de escaneo, con iconos adaptativos y versión monocroma para iconos temáticos.
+
+## ParteScan 5.0
+
+Consolida el diseño Fluent 2, el tecleo integrado, la revisión junto a las imágenes, la eliminación y reordenación con deshacer, la reasignación de certificados y la normalización de tipos de vehículo. Conserva las sesiones y las actualizaciones diferenciales.
+
+## ParteScan Captura 1.0
+
+Consolida la navegación entre **Tanda**, **Escanear** y **Guardar**, la revisión de partes y certificados, la repetición y giro de fotos, la eliminación con deshacer, la apertura de tandas .psocr y la recuperación local. Incluye la apertura de cámara corregida, la exportación a .psocr y PDF y la navegación Atrás de Android reciente.
+
+## Descargas
+
+- **Windows:** `ParteScan-Instalador-v5.0.0.exe` o el ZIP portátil.
+- **Android:** `ParteScan-Captura-1.0.0.apk`.
+- **Logos:** originales SVG, exportaciones PNG e icono ICO en `ParteScan-Logos-v5.0.0.zip`.
+
+El APK conserva la firma de las versiones oficiales 0.9 y 0.10: se instala como actualización. Se conservan los identificadores de las aplicaciones y los formatos de archivos y sesiones.
+
+## Historial de versiones
+
 **ParteScan v4.1.0**
 
 - Consolida el nuevo diseño de revisión y las mejoras de reconocimiento usadas en el trabajo diario.

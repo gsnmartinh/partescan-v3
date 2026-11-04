@@ -133,6 +133,19 @@ public class NavigationTest {
         assertThrows(IllegalArgumentException.class,() -> androidx.core.content.FileProvider.getUriForFile(activity,activity.getPackageName()+".fotos",other));
     }
 
+    @Test public void launcherLoadsAdaptiveAndThemedBrandIcons() throws Exception {
+        android.graphics.drawable.Drawable icon=activity.getApplicationInfo().loadIcon(activity.getPackageManager());
+        assertTrue(icon instanceof android.graphics.drawable.AdaptiveIconDrawable);
+        android.graphics.drawable.AdaptiveIconDrawable adaptive=(android.graphics.drawable.AdaptiveIconDrawable)icon;
+        assertNotNull(adaptive.getBackground()); assertNotNull(adaptive.getForeground());
+        assertNotNull(adaptive.getMonochrome());
+        Bitmap bitmap=Bitmap.createBitmap(256,256,Bitmap.Config.ARGB_8888);
+        icon.setBounds(0,0,256,256); icon.draw(new Canvas(bitmap));
+        File directory=new File("build/test-screenshots"); directory.mkdirs();
+        try(FileOutputStream output=new FileOutputStream(new File(directory,"09-icono-adaptativo.png"))) { bitmap.compress(Bitmap.CompressFormat.PNG,100,output); }
+        bitmap.recycle();
+    }
+
     private void photo(String name, String title) throws Exception {
         File folder=ReflectionHelpers.getField(activity,"folder");
         Bitmap bitmap=Bitmap.createBitmap(300,400,Bitmap.Config.ARGB_8888);

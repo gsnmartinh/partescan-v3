@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ParteScan Captura · escaneo de documentos">
+<defs>
+<linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#26C6C0"/><stop offset=".55" stop-color="#008C9F"/><stop offset="1" stop-color="#006B91"/></linearGradient>
+<linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#E8F4FF"/></linearGradient>
+<linearGradient id="badge" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0A82CF"/><stop offset="1" stop-color="#1643A0"/></linearGradient>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#tile)"/>
+<path d="M160 112H128Q112 112 112 128V160M352 112H384Q400 112 400 128V160M400 352V384Q400 400 384 400H352M160 400H128Q112 400 112 384V352" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/><path d="M184 132H280L336 188V356Q336 376 316 376H184Q164 376 164 356V152Q164 132 184 132Z" fill="url(#paper)"/><path d="M280 132V172Q280 188 296 188H336Z" fill="#CDEBFA"/><path d="M200 224H300" fill="none" stroke="#008C9F" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><path d="M200 256H282" fill="none" stroke="#008C9F" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><path d="M200 288H246" fill="none" stroke="#008C9F" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

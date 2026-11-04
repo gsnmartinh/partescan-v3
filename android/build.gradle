@@ -8,8 +8,8 @@ android {
         applicationId 'cl.partescan.captura'
         minSdk 28
         targetSdk 35
-        versionCode 12
-        versionName '0.10.2'
+        versionCode 13
+        versionName '1.0.0'
     }
     signingConfigs {
         release {

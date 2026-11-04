@@ -1,4 +1,11 @@
-ParteScan Captura 0.10.2 corrige la apertura de la cámara.
+# ParteScan Captura 1.0
+
+- Nuevo logo: documento y marco de escaneo turquesa, complementario al logo de ParteScan 5.0 para Windows.
+- Iconos adaptativos para las distintas formas del launcher y versión monocroma para iconos temáticos.
+- Navegación Fluent 2 entre Tanda, Escanear y Guardar, con modo claro y oscuro.
+- La firma es la misma de las versiones oficiales 0.9 y 0.10, por lo que se instala como actualización.
+
+La versión 1.0 incorpora la corrección de cámara de 0.10.2:
 
 - La cámara recibe acceso temporal a la carpeta donde se guardan las nuevas fotografías.
 - Mantiene los documentos existentes si cancelas la cámara o no se puede abrir.

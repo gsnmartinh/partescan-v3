@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:label="ParteScan Captura" android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/Theme.ParteScan">
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="cl.partescan.captura.fotos" android:exported="false"

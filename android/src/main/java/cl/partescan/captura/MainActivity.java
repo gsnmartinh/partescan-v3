@@ -294,8 +294,8 @@ public class MainActivity extends Activity {
         header.setPadding(fluent.dp(20), fluent.dp(8), fluent.dp(8), fluent.dp(8));
         header.setBackgroundColor(fluent.surface);
         ImageView mark = new ImageView(this);
-        mark.setImageDrawable(fluent.icon(R.drawable.ic_scan, fluent.brand));
-        header.addView(mark, new LinearLayout.LayoutParams(fluent.dp(24), fluent.dp(24)));
+        mark.setImageDrawable(getDrawable(R.drawable.brand_capture));
+        header.addView(mark, new LinearLayout.LayoutParams(fluent.dp(32), fluent.dp(32)));
         TextView title = new TextView(this);
         title.setText("ParteScan"); fluent.text(title, 20);
         LinearLayout.LayoutParams name = new LinearLayout.LayoutParams(0, -2, 1);

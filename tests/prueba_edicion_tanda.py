@@ -113,6 +113,14 @@ class Edicion(unittest.TestCase):
                                ('TIPO DESCONOCIDO','TIPO DESCONOCIDO')]:
             self.assertEqual(exportar.tipo_limpio(text), expected)
 
+    def test_branding_served_by_the_application(self):
+        for route, mime, signature in [('/brand/partescan.svg','image/svg+xml',b'<svg'),
+                                        ('/brand/captura.svg','image/svg+xml',b'<svg'),
+                                        ('/favicon.ico','image/x-icon',b'\x00\x00\x01\x00')]:
+            with urlopen('http://127.0.0.1:%d%s' % (self.http.server_port,route),timeout=5) as response:
+                self.assertEqual(response.headers.get_content_type(),mime)
+                self.assertTrue(response.read().startswith(signature))
+
     def test_mobile_false_certificate_flag(self):
         # El certificado siguiente venía marcado false en los archivos afectados.
         with tempfile.TemporaryDirectory() as folder:

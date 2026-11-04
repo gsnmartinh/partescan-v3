@@ -1,0 +1,4 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="108dp" android:height="108dp" android:viewportWidth="512" android:viewportHeight="512">
+<group android:pivotX="256" android:pivotY="256" android:scaleX=".74" android:scaleY=".74"><path android:fillType="evenOdd" android:pathData="M184 132H280L336 188V356Q336 376 316 376H184Q164 376 164 356V152Q164 132 184 132Z M193 217H307V231H193Z M193 249H289V263H193Z M193 281H253V295H193Z" android:fillColor="#FFFFFF"/>
+<path android:pathData="M160 112H128Q112 112 112 128V160M352 112H384Q400 112 400 128V160M400 352V384Q400 400 384 400H352M160 400H128Q112 400 112 384V352" android:strokeColor="#FFFFFF" android:strokeWidth="16" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent"/></group>
+</vector>
