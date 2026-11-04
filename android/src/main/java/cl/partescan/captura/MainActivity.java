@@ -179,7 +179,7 @@ public class MainActivity extends Activity {
 
     private void save(boolean ocr) {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.setType(ocr ? "application/zip" : "application/pdf");
+        intent.setType(ocr ? "application/octet-stream" : "application/pdf");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
         String date = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT)
