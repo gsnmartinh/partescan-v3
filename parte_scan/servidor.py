@@ -37,7 +37,7 @@ def orden_natural(text):
 
 def armar(r, archivo, pagina, pid):
     causa, items, comodin = catalogo.resolver_o_comodin(r["infraccion_texto"])
-    escrito = not r["placa"] and catalogo.actividad_sin_patente(r["infraccion_texto"])
+    escrito = r.get("parte_escrito", False) or (not r["placa"] and catalogo.actividad_sin_patente(r["infraccion_texto"]))
     personal = r.get("notificado_personalmente", False)
     avisos = list(r["avisos"])
     if personal:

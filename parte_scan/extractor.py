@@ -181,6 +181,32 @@ def parte(t):
     return o
 
 
+def es_os10(texto):
+    return bool(re.search(r"OFICINA\s+(?:DE\s+)?SEGURIDAD\s+PRIVADA|\bOS\s*10\b", texto, re.I)
+                and re.search(r"INFORME\s+DE\s+INFRACCI[OÓ]N", texto, re.I))
+
+
+def parte_os10(texto):
+    t = re.sub(r"\s+", " ", texto)
+    r = parte(texto)
+    folio = re.search(r"\bNRO\.?\s*[:°º]?\s*(\d+)", t, re.I)
+    empresa = re.search(r"\bempresa\s+(.+?)\s*[,;]?\s*R\.?\s*U\.?\s*T\.?\s*[:;]?\s*(?:N[°ºo]?\s*)?"
+                        r"(\d[\d. ]{5,14}\s*-\s*[\dK])\b", t, re.I)
+    direccion = re.search(r"domicilio\s+comercial\s+(?:en\s+)?(?:calle\s+)?(.+?),?\s+"
+                          r"(?:de\s+la\s+)?comuna\s+de\s+(.+?)(?:,|\s+en\s+espera|\s+la\s+siguiente)", t, re.I)
+    persona = {"nombre": limpiar(empresa.group(1)) if empresa else "",
+               "rut": re.sub(r"[.\s]", "", empresa.group(2)).upper() if empresa else "",
+               "direccion": limpiar(direccion.group(1)) if direccion else "",
+               "comuna": limpiar(direccion.group(2)) if direccion else ""}
+    r.update(departamento="Oficina Seguridad Privada", parte_escrito=True,
+             n_parte_final=folio.group(1) if folio else "", persona=persona,
+             infraccion_texto="DS.93 SOBRE VIGILANCIA PRIVADA",
+             placa="", marca="", tipo_vehiculo="", avisos=[])
+    if not empresa:
+        r["avisos"].append("Revisa la razón social y el RUT de la empresa denunciada en el informe OS10.")
+    return r
+
+
 def es_dom(texto):
     return bool(re.search(r"direcci[oó]n\s+de\s+obras\s+municipales", texto, re.I)
                 and re.search(r"^\W*citaci[oó]n\s+N", texto, re.I | re.M))

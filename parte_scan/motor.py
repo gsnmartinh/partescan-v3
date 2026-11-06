@@ -163,6 +163,8 @@ def tipo_pagina(texto):
     from . import certificado, extractor_carab, extractor_mtt
     if certificado.es_certificado(texto):
         return "certificado"
+    if extractor.es_os10(texto):
+        return "parte"
     if extractor.es_dom(texto):
         return "dom"
     if es_formulario_inspeccion(texto):
@@ -181,6 +183,12 @@ def leer_parte(img, texto=None, g=None, *, solo_texto=False):
     if not solo_texto:
         g = g or preparar(img)
     texto = texto if texto is not None else texto_pagina(g)
+    if extractor.es_os10(texto):
+        from . import perfil
+        r = extractor.parte_os10(texto)
+        r["oficina"] = perfil.oficinas().get("33", "33")
+        r["texto_ocr"] = texto
+        return r
     if solo_texto:
         texto = extractor.completar_lineas_movil(texto)
     r = extractor.parte(texto)
