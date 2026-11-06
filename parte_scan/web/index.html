@@ -70,9 +70,10 @@ dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
   body>*:not(#listaImpresion){display:none!important}
   dialog::backdrop{display:none}
   body{display:block!important;height:auto!important;overflow:visible!important;background:white;color:black}
-  #listaImpresion{display:block;font:11pt Arial,sans-serif}
+  #listaImpresion{display:block;font:9pt Arial,sans-serif}
   #listaImpresion table{width:100%;border-collapse:collapse}
-  #listaImpresion th,#listaImpresion td{border-bottom:1px solid #999;padding:6px;text-align:left}
+  #listaImpresion th,#listaImpresion td{border-bottom:1px solid #ccc;padding:3px 5px;text-align:left;vertical-align:top}
+  #listaImpresion tr{break-inside:avoid}
 }
 /* Las acciones de revisión permanecen accesibles al bajar por el formulario. */
 :root{--cabecera:64px;--revision:64px}
@@ -153,6 +154,7 @@ main{display:grid;grid-template-columns:190px minmax(280px,.95fr) minmax(430px,1
 }
 
 #tira{align-items:stretch;width:100%}#tira .chip{box-sizing:border-box;width:100%}
+.acciones-tanda{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.acciones-tanda .val{flex:1 1 240px;min-width:160px}.acciones-tanda button{min-height:36px}
 </style><link rel="stylesheet" href="/fluent.css"></head><body>
 <section id="listaImpresion"></section>
 <header><h1>ParteScan</h1><span id="juz" class="note" style="margin-left:-4px"></span>
@@ -573,7 +575,7 @@ $('btnTecleo').onclick=()=>{
 };
 
 function accionesTanda(p){
-  const bar=document.createElement('div');bar.className='sec';
+  const bar=document.createElement('div');bar.className='sec acciones-tanda';
   const boton=(texto,accion,deshabilitado=false)=>{const b=document.createElement('button');b.textContent=texto;b.disabled=deshabilitado||editandoTanda;b.onclick=accion;bar.appendChild(b)};
   boton('↑ Subir',()=>moverParte(-1),sel===0);
   boton('↓ Bajar',()=>moverParte(1),sel===P.length-1);
@@ -581,7 +583,7 @@ function accionesTanda(p){
   const lista=document.createElement('select');lista.setAttribute('aria-label','Parte que recibirá el certificado');
   const vacio=document.createElement('option');vacio.value='';vacio.textContent='Elegir parte de destino…';lista.appendChild(vacio);
   P.filter(q=>q.id!==p.id&&!q.img_cert).forEach(q=>{const o=document.createElement('option');o.value=q.id;o.textContent=(q.folio||q.n_parte_carab||('Parte '+q.id))+' · '+(q.placa||'sin patente');lista.appendChild(o)});
-  bar.appendChild(document.createElement('br'));bar.appendChild(lista);
+  lista.className='val';bar.appendChild(lista);
   boton(p.img_cert?'Reasignar certificado':'Esta hoja es un certificado',()=>{
     if(!lista.value){toast('Elige el parte de destino');return}
     if(confirm('Se asociará la imagen del certificado al parte elegido. Revisa después la patente y los datos.')) modificarTanda(P,[p.id,Number(lista.value)]);
@@ -803,9 +805,10 @@ $('tImprimir').onclick=async()=>{
     const filas=estado.partes.map(f=>{
       const r=regTecleo(P.find(q=>q.id===f.uid));
       return '<tr><td>'+esc(r.origen==='insp'?(r.boleta||r.n_parte):(r.n_parte||r.boleta))
-        +'</td><td>'+esc(f.rol||'Sin registro')+'</td></tr>';
+        +'</td><td>'+esc(f.rol||'Sin registro')+'</td><td>'+esc(r.oficina||'')
+        +'</td><td>'+esc(r.infracciones.join(', '))+' · '+esc(r.descripcion||'')+'</td></tr>';
     });
-    $('listaImpresion').innerHTML='<h1>Partes ingresados</h1><table><thead><tr><th>Boleta u oficio</th><th>ROL</th></tr></thead><tbody>'
+    $('listaImpresion').innerHTML='<h1>Partes ingresados</h1><table><thead><tr><th>Boleta u oficio</th><th>ROL</th><th>Oficina / unidad</th><th>Infracción</th></tr></thead><tbody>'
       +filas.join('')+'</tbody></table>';
     window.print();
   }catch(e){alert('No se pudo preparar el listado: '+e.message)}

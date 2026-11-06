@@ -36,7 +36,8 @@ def es_carab(texto):
 
 
 def _plano(t):
-    return re.sub(r"\s+", " ", t or "")
+    t = re.sub(r"\bINERACCI[OÓ]N\b", "INFRACCION", t or "", flags=re.I)
+    return re.sub(r"\s+", " ", t)
 
 
 def _hoy():
@@ -189,6 +190,8 @@ def _lugar_hasta(t):
 def _infraccion(t, secs):
     v = _sec(secs, "INFRACCION", ultimo=False)
     todas = [s for r, s in secs if r.startswith("INFRACCION") and s]
+    todas = [s for s in todas if not re.fullmatch(
+        r"(?:A\s+LA\s+LEY\s+DE\s+TRANSITO|AL\s+TRANSITO)\W*", s, re.I)]
     v = todas[0] if todas else ""
     if not v:
         m = re.search(r"siguiente\s+infracci[oó]n\W{0,4}\s*[\"“”']?\s*(.{10,450}?)(?=\bINFRACTOR|\bREINCIDENCIA|\bDISP\.?\s*INFR|\bCITACI)",

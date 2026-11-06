@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
             catch (Exception error) { /* Las fotos originales siguen disponibles. */ }
         }
         render("");
+        new AppUpdater(this).check();
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
@@ -574,9 +575,12 @@ public class MainActivity extends Activity {
     }
     private void showPhoto(String name, String description) {
         try {
-            ImageView full = new ImageView(this); full.setImageBitmap(decode(name, 2400)); full.setAdjustViewBounds(true);
-            ScrollView document = new ScrollView(this); document.addView(full);
-            new android.app.AlertDialog.Builder(this).setTitle(description).setView(document).setPositiveButton("Cerrar", null).show();
+            ZoomImageView full = new ZoomImageView(this);
+            full.setImageBitmap(decode(name, 3200));
+            full.setLayoutParams(new android.widget.FrameLayout.LayoutParams(-1,
+                    fluent.dp(getResources().getConfiguration().screenHeightDp * 3 / 4)));
+            new android.app.AlertDialog.Builder(this).setTitle(description).setView(full)
+                    .setPositiveButton("Cerrar", null).show();
         } catch (IOException error) { render("No se pudo abrir la imagen."); }
     }
 
@@ -634,14 +638,7 @@ public class MainActivity extends Activity {
             view.setBackground(fluent.surface());
             view.setClipToOutline(true);
             view.setImageBitmap(decode(name, 500));
-            view.setOnClickListener(v -> {
-                try {
-                    ImageView full = new ImageView(this);
-                    full.setImageBitmap(decode(name, 2400)); full.setAdjustViewBounds(true);
-                    ScrollView document = new ScrollView(this); document.addView(full);
-                    new android.app.AlertDialog.Builder(this).setTitle(description).setView(document).setPositiveButton("Cerrar", null).show();
-                } catch (IOException error) { render("No se pudo abrir la imagen."); }
-            });
+            view.setOnClickListener(v -> showPhoto(name, description));
             int height = fluent.dp(Math.min(160, getResources().getConfiguration().screenHeightDp / 4));
             body.addView(view, ViewGroup.LayoutParams.MATCH_PARENT, height);
         } catch (IOException error) {

@@ -5,7 +5,7 @@ for(const path of ['parte_scan/web/index.html']){
  new Function(script);
  const elements={};const $=id=>elements[id]??=( {textContent:'',options:[{},{}],querySelectorAll:()=>[],value:'',checked:false});
  let rows=[{uid:0,estado:'interrumpido',n_parte:'1',errores:[],avisos:[],aviso:'guardado no detectado'}],saved=[],reject=false,pollResolve;
- const ctx=vm.createContext({$,P:[{fin:false}],pend:0,subiendo:0,ultimoAuto:'',Promise,Error,Option:function(){},esc:String,pintarTira(){},mostrar(){},alert(msg){ctx.alerts.push(msg)},alerts:[],estadoSesion:()=>JSON.stringify({partes:ctx.P}),fetch:async(url,opt)=>{
+ const ctx=vm.createContext({$,P:[{id:0,fin:false}],editandoTanda:false,historialTanda:[],pend:0,subiendo:0,ultimoAuto:'',Promise,Error,Option:function(){},esc:String,pintarTira(){},mostrar(){},alert(msg){ctx.alerts.push(msg)},alerts:[],estadoSesion:()=>JSON.stringify({partes:ctx.P}),fetch:async(url,opt)=>{
   if(url.includes('/sesion/auto')){saved.push(JSON.parse(opt.body));return {ok:true,json:async()=>({ok:true})}}
   if(url.endsWith('/marcar')){if(reject)return {json:async()=>({error:'En curso'})};rows[0].estado=JSON.parse(opt.body).estado;return {json:async()=>({ok:true})}}
   if(pollResolve===null)return new Promise(resolve=>pollResolve=()=>resolve({json:async()=>snapshot('interrumpido')}));
