@@ -8,6 +8,8 @@ import android.view.ScaleGestureDetector;
 import android.widget.ImageView;
 
 /** Vista de documentos con pellizco, arrastre y doble toque para restablecer. */
+// La aplicación usa Activity y tema nativos en Android 9 o posterior.
+@android.annotation.SuppressLint("AppCompatCustomView")
 public final class ZoomImageView extends ImageView {
     private final Matrix matrix = new Matrix();
     private final ScaleGestureDetector scaleDetector;
