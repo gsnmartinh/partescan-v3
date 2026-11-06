@@ -184,8 +184,10 @@ def paginas_ocr_movil(ruta):
                 raise ValueError("Una foto supera el límite de 25 MB.")
         for i, hoja in enumerate(hojas):
             with paquete.open(f"{i}.jpg") as archivo, Image.open(archivo, formats=["JPEG"]) as foto:
-                if foto.width * foto.height > 40_000_000:
-                    raise ValueError("La resolución de una foto supera el límite admitido.")
+                # JPEG reduce durante la decodificación, antes de reservar la imagen completa.
+                # El texto OCR del teléfono ya está en el manifiesto.
+                foto.draft("RGB", (2600, 2600))
+                foto.thumbnail((2600, 2600), Image.Resampling.LANCZOS)
                 yield ImageOps.exif_transpose(foto).convert("RGB"), hoja["texto"], hoja["certificado"]
 
 

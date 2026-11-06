@@ -141,4 +141,23 @@ class Edicion(unittest.TestCase):
             self.assertEqual(len(servidor.PARTES),1)
             self.assertEqual(servidor.PARTES[0]['img_cert'],2)
 
+    def test_mobile_high_resolution_photo(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'alta-resolucion.psocr'
+            photo = io.BytesIO()
+            image = Image.new('RGB', (8200, 6200), 'white')
+            image.save(photo, 'JPEG')
+            image.close()
+            texto = 'DENUNCIO N° 123456'
+            with zipfile.ZipFile(source, 'w') as paquete:
+                paquete.writestr('ocr.json', json.dumps([dict(texto=texto, certificado=False)]))
+                paquete.writestr('0.jpg', photo.getvalue())
+            hojas = list(servidor.paginas_ocr_movil(source))
+            self.assertEqual(len(hojas), 1)
+            imagen, reconocido, certificado = hojas[0]
+            self.assertLessEqual(max(imagen.size), 2600)
+            self.assertAlmostEqual(imagen.width / imagen.height, 8200 / 6200, places=2)
+            self.assertEqual(reconocido, texto)
+            self.assertFalse(certificado)
+
 if __name__ == '__main__': unittest.main()

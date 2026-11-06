@@ -1,4 +1,8 @@
-# ParteScan 5.0 · ParteScan Captura 1.0
+# ParteScan 5.0.1 · ParteScan Captura 1.0
+
+ParteScan 5.0.1 corrige la apertura de tandas .psocr con fotos de más de 40 megapíxeles. Reduce las imágenes durante la decodificación y conserva el texto OCR del teléfono.
+
+Los usuarios con ParteScan instalado pueden cerrar y abrir la aplicación y pulsar **Actualizar a v5.0.1**.
 
 Las dos aplicaciones estrenan una identidad visual complementaria:
 
