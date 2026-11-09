@@ -64,13 +64,16 @@ def armar(r, archivo, pagina, pid):
 
 
 def armar_carab(r, archivo, pagina, pid):
-    """Parte de Carabineros: el infractor sale del propio parte. Sin datos y con vehículo: SR + 'VEHICULO patente'.
-    Sin vehículo (conducir/transitar ebrio): solo RUT y nombre. Extranjero: SR + su nombre."""
+    """Arma el parte de Carabineros y distingue al denunciado del vehículo empadronado."""
     p = armar(r, archivo, pagina, pid)
     veh = r["tiene_vehiculo"]
     nombre = r["infractor_nombre"]
+    empadronado = r.get("empadronado", False)
     avisos = [r["aviso_infractor"]] if r["aviso_infractor"] else []
-    if not nombre and veh:
+    if empadronado:
+        nombre = " ".join(filter(None, (p["tipo_vehiculo"] or "VEHICULO", p["placa"])))
+        avisos = []
+    elif not nombre and veh:
         nombre = ("VEHICULO " + p["placa"]).strip()
         avisos.append("Infractor «por escrito» / sin datos: irá sin RUT (el sistema pone SR) y con el nombre «VEHICULO + patente». "
                       "Si tienes su certificado, escanéalo a continuación del parte.")
@@ -84,7 +87,8 @@ def armar_carab(r, archivo, pagina, pid):
         avisos.append("Sin RUT y sin vehículo: se repite la dirección del hecho como dirección del infractor.")
     p.update({
         "origen": "carab", "oficina": r.get("oficina", ""), "oficina_reconocida": bool(r.get("oficina_reconocida")), "n_parte_carab": r["n_parte_carab"], "boleta": r["boleta"], "tiene_vehiculo": veh,
-        "cert": {"rut": r["infractor_rut"] or r["rut_leido"], "nombre": nombre,
+        "empadronado": empadronado,
+        "cert": {"rut": "" if empadronado else r["infractor_rut"] or r["rut_leido"], "nombre": nombre,
                  "direccion": direccion, "comuna": r["infractor_comuna"] or perfil.cargar()["comuna"],
                  "marca": exportar.marca_limpia(r["marca"]), "modelo": r["modelo"], "tipo_vehiculo": exportar.tipo_limpio(r["tipo_vehiculo"]),
                  "dv_placa": "", "anio": "", "color": ""},
@@ -268,6 +272,8 @@ def trabajador():
                                 ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
                     else:
                         ESTADO["error"] = "«%s» pág. %d: hoja que no es un parte ni un certificado; la ignoré." % (nombre, n)
+            except zipfile.BadZipFile:
+                ESTADO["error"] = f"«{nombre}» está dañado o incompleto. Vuelve a exportar la tanda desde el teléfono."
             except Exception as e:  # no detener el programa por un archivo malo
                 traceback.print_exc()
                 ESTADO["error"] = "No pude leer «%s»: %s" % (nombre, e)
@@ -280,10 +286,22 @@ def trabajador():
                     pass
 
 
-def encolar(datos, nombre, ext):
+def encolar(datos, nombre, ext, longitud=None):
     fd, ruta = tempfile.mkstemp(dir=TMP, suffix=ext)
-    with os.fdopen(fd, "wb") as f:
-        f.write(datos)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            if longitud is None:
+                f.write(datos)
+            else:
+                while longitud:
+                    bloque = datos.read(min(longitud, 1024 * 1024))
+                    if not bloque:
+                        raise ValueError("La transferencia del archivo quedó incompleta.")
+                    f.write(bloque)
+                    longitud -= len(bloque)
+    except (OSError, ValueError):
+        os.remove(ruta)
+        raise
     with LOCK:
         ESTADO["pendientes"] += 1
         ESTADO["error"] = ""
@@ -381,12 +399,16 @@ class H(BaseHTTPRequestHandler):
                 return self._send(503, {"error": "No se pudo abrir la captura en la red local."})
         if u.path == "/api/subir":
             nombre = parse_qs(u.query).get("nombre", ["archivo"])[0]
-            n = int(self.headers.get("Content-Length", 0))
-            datos = self.rfile.read(n)
             ext = ".psocr" if nombre.lower().endswith(".psocr.zip") else os.path.splitext(nombre)[1].lower()
             if ext not in (".pdf", ".psocr") and ext not in motor.EXTS_IMG:
                 return self._send(400, {"error": "Formato no válido: " + nombre})
-            encolar(datos, nombre, ext)
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                if n <= 0:
+                    raise ValueError("El archivo está vacío.")
+                encolar(self.rfile, nombre, ext, longitud=n)
+            except (ValueError, OSError) as e:
+                return self._send(400, {"error": str(e)})
             return self._send(200, {"ok": True})
         if u.path == "/api/guardar":
             # guarda en la carpeta Descargas sin depender del navegador (que a veces bloquea descargas repetidas)

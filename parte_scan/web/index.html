@@ -252,7 +252,10 @@ function copiar(t){ if(navigator.clipboard&&window.isSecureContext){navigator.cl
 async function subir(files){
   for(const f of files){
     subiendo++; actualizarEstado();
-    try{ await fetch('/api/subir?nombre='+encodeURIComponent(f.name),{method:'POST',body:f}); }catch(e){toast('No pude enviar '+f.name)}
+    try{
+      const respuesta=await fetch('/api/subir?nombre='+encodeURIComponent(f.name),{method:'POST',body:f});
+      if(!respuesta.ok) throw new Error((await respuesta.json()).error);
+    }catch(e){alert('No pude enviar '+f.name+'. '+e.message)}
     subiendo--;
   }
 }
@@ -406,8 +409,8 @@ function campos(p){
   const filaInf=multi?[gc('Infractor de esta copia (1, 2)',String(infIdx(p)+1),'check','Infractores múltiples.')]:[];
   S.push({t:'4 · Datos del denunciado',sub:p.notificado_personalmente?'Fuente de identidad: infractor del parte. El certificado aporta datos del vehículo.':p.img_cert?'Fuente: certificado del Registro Civil.':p.parte_escrito||carab||p.origen==='dom'?'Fuente: parte escaneado.':'',f:[
     ...filaInf,
-    gc('RUT (certificado)',c.rut||'',c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
-    gc('Nombre (certificado)',/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String((p.ed&&p.ed['Placa'])!==undefined?p.ed['Placa']:(p.placa||'')).trim().toUpperCase()).trim():(c.nombre||''),c.nombre?'ok':'check',''),
+    gc('RUT (certificado)',esEmpadronado(p)?'':c.rut||'',esEmpadronado(p)?'blank':c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
+    gc('Nombre (certificado)',esEmpadronado(p)?nombreEmpadronado(p):/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String(p.ed?.Placa??p.placa??'').trim().toUpperCase()).trim():c.nombre||'',c.nombre?'ok':'check',''),
     gc('Dirección (certificado)',c.direccion||'',c.direccion?'ok':(carab?'blank':'check'),''),
     gc('Comuna (certificado)',c.comuna||'',c.comuna?'ok':'check',''),
     gc('Marca (certificado)',c.marca||p.marca||'',(c.marca||p.marca)?'ok':'blank',''),
@@ -464,6 +467,7 @@ function mostrar(){
         '<input class="val" aria-label="'+esc(key)+'"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+esc(val)+'" placeholder="(en blanco)">';
       r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+estado+'">'+(estado==='ok'&&p.ok?.[key]?'Confirmado':LAB[estado])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((estado==='check'&&String(val).trim())?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
+      if(esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)'].includes(key)) el.readOnly=true;
       el.oninput=el.onchange=e=>{
         if(e.type==='change'){
           if(key==='RUT (certificado)') el.value=formatoRut(el.value);
@@ -481,11 +485,11 @@ function mostrar(){
         const confirmar=r.querySelector('.cf');
         if(confirmar) confirmar.hidden=actual!=='check'||!el.value.trim();
         pintarTira();
-        if(key==='Infractor de esta copia (1, 2)') mostrar();
+        if(key==='Infractor de esta copia (1, 2)'||(e.type==='change'&&esEmpadronado(p)&&['Placa','Tipo de vehículo (certificado)'].includes(key))) mostrar();
         if(e.type==='change') autoguardar().catch(()=>{});
       };
       el.onfocus=()=>{activeKey=key};
-      if(key==='Placa')el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
+      if(key==='Placa'&&!esEmpadronado(p))el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
       r.querySelector('button').onclick=()=>{activeKey=key;copiarCampo(p,key)};
       const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; p.ok[key]=true; pintarTira(); mostrar() };
@@ -523,7 +527,19 @@ function formatoRut(valor){
   const m=limpio.match(/^(\d{6,9})-?([\dK])$/);
   return m?m[1]+'-'+m[2]:limpio;
 }
+function esEmpadronado(p){
+  return p.empadronado||/^PORESCRITO[.:;]*$/i.test((p.cert?.nombre||'').replace(/\s/g,''));
+}
+function nombreEmpadronado(p){
+  const tipo=p.ed?.['Tipo de vehículo (certificado)']??(p.cert?.tipo_vehiculo||p.tipo_vehiculo||'VEHICULO');
+  const placa=p.ed?.['Placa']??p.placa??'';
+  return [tipo,placa].map(v=>String(v).trim().toUpperCase()).filter(Boolean).join(' ');
+}
 function valorActual(p,key){
+  if(esEmpadronado(p)){
+    if(key==='RUT (certificado)') return '';
+    if(key==='Nombre (certificado)') return nombreEmpadronado(p);
+  }
   const formato=key==='RUT (certificado)'?formatoRut:v=>v;
   if (p.ed && key in p.ed) return formato(p.ed[key]);
   for(const s of campos(p)) for(const f of s.f) if(f.k===key) return formato(f.v);
@@ -548,7 +564,7 @@ document.addEventListener('keydown',e=>{
 function carab0(p){return p.origen==='carab'}
 function V(p,k){
   const v=valorActual(p,k);
-  if(k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
+  if(!esEmpadronado(p)&&k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}
 function estadoCampo(p,f,valor){

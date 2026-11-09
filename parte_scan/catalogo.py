@@ -13,6 +13,7 @@ SUG = {"ENTRADA": "ENTRADA", "FISCAL": "FISCAL"}
 
 # Códigos reales del sistema (de la lista completa «Busca Infracciones», codigos_sistema.py).
 CODIGOS = {
+    "24": "24", "504": "504",
     "19": "19", "48": "48", "DOBLE": "17", "ESQUINA": "43", "DISCA": "20", "GRIFO": "492", "PARE": "52",
     "PARAD": "53", "CEDA": "494", "AREA": "499", "PASO": "49", "IZQ": "11", "SENTID": "13", "CONTRA": "15",
     "HABER": "16", "ENTRADA": "483", "SALI": "483", "LV": "60", "BEBER": "300", "EBRIO": "301",
@@ -148,6 +149,23 @@ def resolver(texto):
         if re.search(r"ESTACION.{0,60}\b(?:ACERA|PLATABANDA)\b", T):
             its.append(crear_item(por_abrev("48")))
         return its[0]["x"]["t"], its
+    if re.search(r"\b(?:ANIMALES?|PERROS?)\b.{0,90}\bSUELT[OA]S?\b.{0,35}\bVIA PUBLICA\b", T):
+        concepto = por_abrev("ANIMALES")
+        return concepto["t"], [crear_item(concepto)]
+    if re.search(r"NO\s+SOLICITAR\s+CEDULA\s+DE\s+IDENTIDAD.{0,90}EXPENDER\s+BEBIDAS\s+ALCOHOLI\s*CAS|"
+                 r"SOBREPASAR.{0,75}ESPACIO\s+DESTINADO\s+A\s+EXPENDIO\s+DE\s+BEBIDAS\s+ALCOHOLICAS", T):
+        concepto = por_abrev("504")
+        return concepto["t"], [crear_item(concepto)]
+    total = bool(re.search(r"TOTALI\s*DAD\s+DE\s+LA\s+DOCUMENTACION", T))
+    if re.search(r"BOLETA\s+DE\s+CITACION.{0,55}\bVENCIDA\b", T):
+        concepto = por_abrev("24")
+        return concepto["t"], [crear_item(concepto)] + (tres() if total else [])
+    if total and re.search(r"SIN\s+HABER\s+OBTENI\s*DO\s+[LI]ICENCIA|SIN\s+HABER\s+OBTENI\s*DO\s+LICENCIA", T):
+        concepto = por_abrev("HABER")
+        return concepto["t"], [crear_item(concepto)] + [crear_item(por_abrev(a)) for a in ("REVISION", "PERMISO", "SEGURO")]
+    if re.search(r"ESTACION.{0,150}SALIDA\s+DE\s+MALL.{0,45}VISIBILIDAD", T):
+        concepto = por_abrev("ENTRADA")
+        return concepto["t"], [crear_item(concepto)]
     # alcohol en la vía pública: el parte dice «ingerir», «ingringir» (mal escrito), «consumo», «beber», «bebidas alcohólicas»
     # o solo «art. 25 ley 19.925». Es siempre «BEBER ALCOHOL EN LA VIA PUBLICA» (300), salvo que conduzca ebrio.
     if (not re.search(r"CONDUC|MANEJ|EBRI|CONDICION", T)

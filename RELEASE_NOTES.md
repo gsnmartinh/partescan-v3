@@ -1,4 +1,12 @@
-# ParteScan 5.1.0 · ParteScan Captura 1.1.0
+# ParteScan 5.1.1 · ParteScan Captura 1.1.0
+
+- Carga las tandas grandes por bloques y avisa si el archivo está dañado o la transferencia quedó incompleta.
+- Reconoce «POR ESCRITO» con letras juntas o separadas. En partes empadronados, forma el nombre con el tipo de vehículo y la patente y deja vacío el RUT.
+- Mejora la extracción de folios e infracciones de Carabineros e incorpora las correcciones de códigos verificadas con la tanda.
+
+En Windows, cierra y abre ParteScan y pulsa **Actualizar a v5.1.1**.
+
+## Novedades de 5.1.0
 
 - Windows reconoce los informes OS10 con oficina 33 e infracción 400 y extrae los datos de la empresa denunciada.
 - Mejora la lectura del rótulo de infracción en los partes de Carabineros.
@@ -7,7 +15,6 @@
 - Android permite ampliar y recorrer las fotos con dos dedos y ajustar con doble toque.
 - Android busca nuevas versiones al abrir y ofrece descargarlas. La instalación se confirma en el teléfono. Instala este APK una vez para activar esa función.
 
-En Windows, cierra y abre ParteScan y pulsa **Actualizar a v5.1.0**.
 
 ParteScan 5.0.1 corrige la apertura de tandas .psocr con fotos de más de 40 megapíxeles. Reduce las imágenes durante la decodificación y conserva el texto OCR del teléfono.
 

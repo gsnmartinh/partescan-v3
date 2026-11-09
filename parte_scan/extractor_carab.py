@@ -188,7 +188,13 @@ def _lugar_hasta(t):
 
 
 def _infraccion(t, secs):
-    v = _sec(secs, "INFRACCION", ultimo=False)
+    # La descripción citada puede contener palabras que también son rótulos,
+    # como LICENCIA o VEHÍCULO. Léela completa antes de consultar las secciones.
+    cita = re.search(r"\b(?:notificaron\s+al\s+infractor|si[gq]uiente\s*(?:in(?:fr|f|er)acci[oó]n\s*)?)"
+                     r"(?:(?:(?:a\s+)?la\s+ley\s+de|al)\s+tr[aá]nsito\s*)?"
+                     r"[.:;\s]*[\"“]\s*([^\"”]{10,450})[\"”]", t, re.I)
+    if cita:
+        return limpiar(cita.group(1)).upper()
     todas = [s for r, s in secs if r.startswith("INFRACCION") and s]
     todas = [s for s in todas if not re.fullmatch(
         r"(?:A\s+LA\s+LEY\s+DE\s+TRANSITO|AL\s+TRANSITO)\W*", s, re.I)]
@@ -295,10 +301,13 @@ def _trozo_nombre(s):
     return _tokens_nombre(bruto)
 
 
+POR_ESCRITO = re.compile(r"^\W*" + r"\s*".join("PORESCRITO") + r"\b", re.I)
+
+
 def _infractor(texto_inf):
     """-> (nombre, rut, direccion, comuna, aviso, rut_leido)"""
     s = re.sub(r"^[\W_]+", "", limpiar(texto_inf))
-    if not s or re.match(r"(?:por\s+escrito|ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
+    if not s or POR_ESCRITO.match(s) or re.match(r"(?:ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
     s = re.split(r"\bD[I1l]SP\.?\s*[I1l]NFR\w*|\bD[I1l]SP[O0]S[I1lÍ]C[I1l][OÓ0]N\s+[I1l]NFR\w*", s, 1, flags=re.I)[0].strip()
     nombre = _trozo_nombre(s)
@@ -454,7 +463,7 @@ def parte(texto):
     t = _plano(texto)
     av = []
     secs = _secciones(t)
-    m = re.search(r"Parte\s*N\w{0,4}[.\s:*°º]*(\d{2,5})", t, re.I)
+    m = re.search(r"Parte\s*N\w{0,4}[.,\s:*°º]*(\d{2,5})", t, re.I)
     n_parte = (m.group(1).lstrip("0") or m.group(1)) if m else ""
     fecha_parte = _fecha_cabecera(t) or _fecha_texto(t)
     m = re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{1,2})\s*[:.;,]\s*(\d{2})", t, re.I) \
@@ -525,6 +534,7 @@ def parte(texto):
     return {
         "origen": "carab", "departamento": "CARABINEROS", "oficina": _of[0], "oficina_reconocida": _of[1], "n_parte": boleta, "n_parte_final": boleta,
         "n_parte_carab": n_parte, "boleta": boleta, "n_citacion_adjunta": "",
+        "empadronado": bool(POR_ESCRITO.match(_sec(secs, "INFRACTOR"))),
         "fecha_parte": fecha_parte, "anio_leido": anio_leido, "fecha_infraccion": fecha_parte, "hora_infraccion": hora,
         "lugar": _u(_lugar_final(t)), "infraccion_texto": infr, "bloques_infraccion": bloques_infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
         "modelo": v["modelo"], "color": v["color"], "anio": v["anio"], "placa": v["placa"],
