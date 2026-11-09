@@ -131,6 +131,13 @@ def es_formulario_inspeccion(texto):
                              texto[:400], re.I)))
 
 
+def _releer_zona(imagen, modo):
+    try:
+        return pytesseract.image_to_string(imagen, lang="spa", config=f"--psm {modo}")
+    except (pytesseract.TesseractNotFoundError, pytesseract.TesseractError):
+        return ""
+
+
 def leer_certificado(g, texto, *, imagen=None):
     from . import catalogo, certificado
 
@@ -156,7 +163,7 @@ def leer_certificado(g, texto, *, imagen=None):
             if k not in faltan:
                 continue
             zona = g.crop((0, int(alto * limites[0]), ancho, int(alto * limites[1])))
-            recorte = pytesseract.image_to_string(zona, lang="spa", config="--psm 6")
+            recorte = _releer_zona(zona, 6)
             otros = certificado.leer(recorte)
             if valido(k, otros[k]):
                 datos[k] = otros[k]
@@ -166,7 +173,7 @@ def leer_certificado(g, texto, *, imagen=None):
                 faltan.remove(k)
     if faltan:
         # La segmentación por columnas recupera líneas que el modo de bloque mezcla u omite.
-        alternativo = pytesseract.image_to_string(g, lang="spa", config="--psm 4")
+        alternativo = _releer_zona(g, 4)
         if re.search(r"\bPROPIETARIO\b", alternativo, re.I):
             otros = certificado.leer(alternativo)
             for k in faltan:
@@ -219,7 +226,7 @@ def leer_parte(img, texto=None, g=None, *, solo_texto=False):
             gris = g if g is not None else preparar(img)
             ancho, alto = gris.size
             zona = gris.crop((0, int(alto * 0.18), ancho, int(alto * 0.48)))
-            respaldo = pytesseract.image_to_string(zona, lang="spa", config="--psm 6")
+            respaldo = _releer_zona(zona, 6)
             fecha, hora = extractor.momento_infraccion(respaldo.splitlines())
             r["fecha_infraccion"] = r["fecha_infraccion"] or fecha
             r["hora_infraccion"] = r["hora_infraccion"] or hora
