@@ -131,29 +131,49 @@ def es_formulario_inspeccion(texto):
                              texto[:400], re.I)))
 
 
-def leer_certificado(g, texto):
+def leer_certificado(g, texto, *, imagen=None):
     from . import catalogo, certificado
 
     datos = certificado.leer(texto)
-    campos = ("nombre", "rut", "direccion", "comuna")
+    campos = ("nombre", "rut", "direccion", "comuna", "placa")
 
     def valido(campo, valor):
         if campo == "rut":
             return certificado.rut_ok(valor)
         if campo == "comuna":
             return bool(valor) and catalogo.comuna_en_sistema(valor)
+        if campo == "placa":
+            return extractor.placa_ok(valor) and not re.fullmatch(r"(?=[A-Z]{4}\d{2}$)[A-Z]*[AEIOU][A-Z]*\d{2}", valor)
         return bool(valor)
 
     faltan = [k for k in campos if not valido(k, datos[k])]
+    if faltan:
+        if g is None:
+            g = preparar(imagen)
+        ancho, alto = g.size
+        etiquetas = {"nombre": "nombre", "rut": "rut", "direccion": "dirección", "comuna": "comuna", "placa": "placa"}
+        for k, limites in (("placa", (0, 0.53)), ("rut", (0.25, 0.85))):
+            if k not in faltan:
+                continue
+            zona = g.crop((0, int(alto * limites[0]), ancho, int(alto * limites[1])))
+            recorte = pytesseract.image_to_string(zona, lang="spa", config="--psm 6")
+            otros = certificado.leer(recorte)
+            if valido(k, otros[k]):
+                datos[k] = otros[k]
+                if k == "placa":
+                    datos["dv_placa"] = otros["dv_placa"]
+                datos["avisos"] = [a for a in datos["avisos"] if etiquetas[k] not in a.lower()]
+                faltan.remove(k)
     if faltan:
         # La segmentación por columnas recupera líneas que el modo de bloque mezcla u omite.
         alternativo = pytesseract.image_to_string(g, lang="spa", config="--psm 4")
         if re.search(r"\bPROPIETARIO\b", alternativo, re.I):
             otros = certificado.leer(alternativo)
-            etiquetas = {"nombre": "nombre", "rut": "rut", "direccion": "dirección", "comuna": "comuna"}
             for k in faltan:
                 if valido(k, otros[k]):
                     datos[k] = otros[k]
+                    if k == "placa":
+                        datos["dv_placa"] = otros["dv_placa"]
                     datos["avisos"] = [a for a in datos["avisos"] if etiquetas[k] not in a.lower()]
     return datos
 
@@ -195,6 +215,14 @@ def leer_parte(img, texto=None, g=None, *, solo_texto=False):
     if es_formulario_inspeccion(texto):
         from . import perfil
         r["oficina"] = perfil.oficinas().get("32", "32")
+        if not r["fecha_infraccion"] or not r["hora_infraccion"]:
+            gris = g if g is not None else preparar(img)
+            ancho, alto = gris.size
+            zona = gris.crop((0, int(alto * 0.18), ancho, int(alto * 0.48)))
+            respaldo = pytesseract.image_to_string(zona, lang="spa", config="--psm 6")
+            fecha, hora = extractor.momento_infraccion(respaldo.splitlines())
+            r["fecha_infraccion"] = r["fecha_infraccion"] or fecha
+            r["hora_infraccion"] = r["hora_infraccion"] or hora
     r["folio_recorte"] = "" if solo_texto else _folio_recorte(g)
     r["n_parte_final"], av = votar(r["n_parte"], r["folio_recorte"], r["n_citacion_adjunta"])
     r["avisos"] = [a for a in r["avisos"] if "encabezado" not in a] + av

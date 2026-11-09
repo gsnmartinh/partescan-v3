@@ -857,6 +857,7 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             String message;
             TextRecognizer reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            File staged = null;
             try {
                 JSONArray manifest = new JSONArray();
                 for (int i = 0; i < photos.size(); i++) {
@@ -870,7 +871,9 @@ public class MainActivity extends Activity {
                     manifest.put(new JSONObject().put("texto", text)
                         .put("certificado", certificates.contains(i)));
                 }
-                try (OutputStream stream = getContentResolver().openOutputStream(destination);
+                // Termina el ZIP local antes de copiarlo al proveedor elegido para compartir.
+                staged = File.createTempFile("partescan-", ".psocr", getCacheDir());
+                try (OutputStream stream = java.nio.file.Files.newOutputStream(staged.toPath());
                      ZipOutputStream zip = new ZipOutputStream(stream)) {
                     zip.putNextEntry(new ZipEntry("ocr.json"));
                     zip.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
@@ -881,15 +884,35 @@ public class MainActivity extends Activity {
                         zip.closeEntry();
                     }
                 }
+                try (OutputStream stream = getContentResolver().openOutputStream(destination, "wt")) {
+                    if (stream == null) throw new java.io.IOException("Destino no disponible");
+                    java.nio.file.Files.copy(staged.toPath(), stream);
+                }
+                try (java.io.InputStream saved = getContentResolver().openInputStream(destination);
+                     java.io.InputStream original = java.nio.file.Files.newInputStream(staged.toPath())) {
+                    if (saved == null || !java.util.Arrays.equals(exportDigest(original), exportDigest(saved))) {
+                        throw new java.io.IOException("La copia guardada no coincide con la exportación local");
+                    }
+                }
                 message = "Tanda guardada. Lleva el archivo .psocr al computador y ábrelo en ParteScan.";
             } catch (Exception error) {
-                message = "No se pudo guardar la tanda con OCR. Puedes volver a intentarlo.";
+                message = "No se pudo guardar y verificar el archivo. La tanda sigue en el teléfono. Vuelve a exportarla.";
             } finally {
+                if (staged != null) staged.delete();
                 reader.close();
             }
             String result = message;
             runOnUiThread(() -> render(result));
         }).start();
+    }
+
+    private static byte[] exportDigest(java.io.InputStream stream)
+            throws java.io.IOException, java.security.NoSuchAlgorithmException {
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[64 * 1024];
+        int read;
+        while ((read = stream.read(buffer)) != -1) digest.update(buffer, 0, read);
+        return digest.digest();
     }
 
     private static String orderedText(Text recognized) {

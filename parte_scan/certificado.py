@@ -25,6 +25,8 @@ def es_certificado(t):
 
 
 RUIDO_FINAL = re.compile(r"(?:\s+[|!\\/\[\]\u2018\u2019'`´‘’:;,.\-_]+|\s+[IilLjJ1](?![\w/-]))+\s*$")
+ENCABEZADO_PROPIETARIO = re.compile(r"\bPROPIE\s*TARIO\b", re.I)
+ROTULO_PROPIETARIO = re.compile(r"^(?:Nombre|Domicilio|Direcci[oó]n|Comuna|R\.?\s*U\.?\s*[NT]\.?)(?=\W|$)", re.I)
 
 
 def _sin_ruido(v):
@@ -43,7 +45,7 @@ def _valor(t, etiqueta):
 def _propietario(t):
     """Líneas de «DATOS DEL PROPIETARIO» sin su rótulo: [nombre, rut, domicilio, comuna, ...]. Sirve cuando el OCR
     estropea el rótulo («Nombre», «Comuna»...) y la búsqueda por rótulo falla."""
-    m = re.search(r"PROPIETARIO", t, re.I)
+    m = ENCABEZADO_PROPIETARIO.search(t)
     if not m:
         return []
     out = []
@@ -63,6 +65,23 @@ def _dato_propietario(zona, etiqueta):
     return _sin_ruido(_limpiar(m.group(1))) if m else ""
 
 def leer(t):
+    # El OCR móvil a veces deja el valor justo antes de su rótulo.
+    lineas = t.splitlines()
+    inicio = next((i + 1 for i, l in enumerate(lineas) if ENCABEZADO_PROPIETARIO.search(l)), len(lineas))
+    for i in range(max(1, inicio), len(lineas) - 1):
+        rotulo = lineas[i].strip(" \t:;?*|!")
+        previo = lineas[i - 1].strip()
+        siguiente = lineas[i + 1].strip()
+        proximo_rotulo = lineas[i + 2].strip(" \t:;?*|!") if i + 2 < len(lineas) else ""
+        if (re.fullmatch(r"Nombre|Domicilio|Direcci[oó]n|Comuna", rotulo, re.I)
+                and previo and not ROTULO_PROPIETARIO.match(previo)
+                and not ENCABEZADO_PROPIETARIO.search(previo)
+                and (ROTULO_PROPIETARIO.match(siguiente)
+                     or re.match(r"Fec\.|Repertorio\b", siguiente, re.I)
+                     or re.fullmatch(r"Nombre|Domicilio|Direcci[oó]n|Comuna", proximo_rotulo, re.I))):
+            lineas[i] = rotulo + ": " + previo
+            lineas[i - 1] = ""
+    t = "\n".join(lineas)
     # Algunos OCR separan el rótulo y el valor en dos líneas.
     etiquetas = r"(?:Inscripci[oó]n|Tipo\s+Veh\S{1,3}culo|Marca|Modelo|Color|Nombre|R\.?\s*U\.?\s*N\.?|Domicilio|Comuna)"
     t = re.sub(r"(?im)^([ \t]*" + etiquetas + r"[ \t:;?*|!]*)\r?\n[ \t]*(?=\S)", r"\1 ", t)
@@ -90,14 +109,14 @@ def leer(t):
     o["modelo"] = _valor(t, r"Modelo").upper()
     o["color"] = _valor(t, r"Color").upper()
     prop = _propietario(t)
-    encabezado = re.search(r"PROPIETARIO[^\r\n]*", t, re.I)
-    zona = t[encabezado.end():] if encabezado else t
+    encabezado = ENCABEZADO_PROPIETARIO.search(t)
+    zona = t[encabezado.end():].partition("\n")[2] if encabezado else t
     zona = re.split(r"^\W*(?:Fec\.?\s*adq|Repertorio|FECHA)", zona, maxsplit=1, flags=re.I | re.M)[0]
     o["nombre"] = _dato_propietario(zona, r"Nombre").upper()
     if not o["nombre"] and prop:
         o["nombre"] = prop[0].upper()
     # RUN: tolera coma por punto, espacios y letras confundidas
-    m = re.search(r"R\.?[ \t]*U\.?[ \t]*[NT]\.?[ \t:;?*|!]*([\d., \t]{6,15})[ \t]*[-–][ \t]*([\dK])\b", zona, re.I)
+    m = re.search(r"R\.?[ \t]*U\.?[ \t]*[NT]\.?[ \t:;?*|!]*([\d., \t]{6,15})[ \t]*[-–]+[ \t]*([\dK])\b", zona, re.I)
     rut = ""
     if m:
         rut = re.sub(r"\D", "", m.group(1)) + "-" + m.group(2).upper()
@@ -142,6 +161,9 @@ def conciliar_placa(placa_parte, placa_cert):
     """Devuelve (placa_elegida, aviso). La placa del certificado manda si cumple formato."""
     fmt = re.compile(r"[A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3}")
     a, b = placa_parte or "", placa_cert or ""
+    if (re.fullmatch(r"[A-Z]{4}\d{2}", a) and re.fullmatch(r"[A-Z]{4}\d{2}", b)
+            and [(x, y) for x, y in zip(a, b) if x != y] == [("F", "E")]):
+        return a, "Revisa la patente: el parte muestra F y el certificado se leyó con E en la misma posición."
     if a == b and a:
         return a, ""
     if a and b and _parecidas(a, b) >= 0.7:
@@ -151,4 +173,7 @@ def conciliar_placa(placa_parte, placa_cert):
         return elegida, "La placa del parte (%s) y la del certificado (%s) se leyeron distinto: comprueba cuál es." % (a, b)
     if a and b:
         return a, "La placa del parte (%s) NO coincide con la del certificado (%s): ¿el certificado es de otro parte?" % (a, b)
-    return a or b, ""
+    elegida = a or b
+    if re.fullmatch(r"[A-Z]{4}\d{2}", elegida) and "E" in elegida[:4]:
+        return elegida, "Revisa la patente: el OCR puede confundir la letra E con F."
+    return elegida, ""
