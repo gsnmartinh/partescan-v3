@@ -453,7 +453,7 @@ function mostrar(){
     :'<div class="avisos"><b>Escribe arriba el «Rol Disponible»</b></div>');
   if(av.length){F.insertAdjacentHTML('beforeend','<div class="avisos"><b>Revisa este parte:</b><br>'+av.map(x=>'· '+x).join('<br>')+'<div style="margin-top:8px"><button id="avOk">✓ Ya revisé todo</button></div></div>')}
   const nav=document.createElement('div');nav.className='nav';
-  nav.innerHTML='<button id="ant">← Anterior</button><button id="sig">Saltar →</button><button class="p" id="ing">Ingresado → siguiente parte</button>';
+  nav.innerHTML='<button id="ant">← Anterior</button><button id="sig">Siguiente →</button>';
   F.appendChild(nav);
   F.appendChild(accionesTanda(p));
   S.forEach(s=>{
@@ -525,7 +525,7 @@ function mostrar(){
     if(s.t.startsWith('3 · Infracciones')) d.appendChild(barraInfracciones(p));
     F.appendChild(d);
   });
-  $('ant').onclick=()=>ir(sel-1);$('sig').onclick=()=>ir(sel+1);$('ing').onclick=ingresado;
+  $('ant').onclick=()=>ir(sel-1);$('sig').onclick=()=>ir(sel+1);
   if($('avOk')) $('avOk').onclick=()=>{ p.ok=p.ok||{}; p.avOk=true; campos(p).forEach(s=>s.f.forEach(f=>{ if(f.st==='check') p.ok[f.k]=true })); pintarTira(); mostrar(); toast('Marcado como revisado') };
   if(!F.dataset.k)F.dataset.k=1;
 }

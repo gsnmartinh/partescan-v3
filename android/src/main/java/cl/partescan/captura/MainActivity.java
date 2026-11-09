@@ -305,6 +305,7 @@ public class MainActivity extends Activity {
             android.widget.PopupMenu menu = new android.widget.PopupMenu(this, view);
             menu.getMenu().add("Abrir tanda guardada").setOnMenuItemClickListener(item -> { requestOpen(); return true; });
             if (partCount() > 0) menu.getMenu().add("Nueva tanda").setOnMenuItemClickListener(item -> { requestNewBatch(); return true; });
+            if (partCount() > 0) menu.getMenu().add("Exportar copia en PDF").setOnMenuItemClickListener(item -> { save(false); return true; });
             menu.show();
         });
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
@@ -396,9 +397,7 @@ public class MainActivity extends Activity {
             text(document, "Usa buena luz y apoya el documento en una superficie plana.", 14);
             return;
         }
-        preview(document, part, "Foto del parte");
-        text(document, "Toca la imagen para ampliarla.", 12);
-        button(document, "Repetir foto", true, () -> capture(PART));
+        compactPhoto(document, part, "Foto del parte", PART);
         LinearLayout attachment = fluent.card(body);
         LinearLayout certificateTitle = row();
         certificateTitle.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -419,18 +418,7 @@ public class MainActivity extends Activity {
         });
         attachment.addView(certificateTitle);
         if (certificate == null) button(attachment, "Agregar certificado", true, () -> capture(CERTIFICATE));
-        else {
-            LinearLayout certificateRow = row(); certificateRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            ImageView photo = thumbnail(certificate, 64, 80);
-            photo.setContentDescription("Ampliar certificado");
-            photo.setOnClickListener(view -> showPhoto(certificate, "Certificado"));
-            certificateRow.addView(photo);
-            LinearLayout actions = column(); actions.setPadding(fluent.dp(12), 0, 0, 0);
-            text(actions, "Certificado adjunto", 16);
-            button(actions, "Repetir foto", true, () -> capture(CERTIFICATE));
-            certificateRow.addView(actions, new LinearLayout.LayoutParams(0, -2, 1));
-            attachment.addView(certificateRow);
-        }
+        else compactPhoto(attachment, certificate, "Certificado", CERTIFICATE);
     }
 
     private void renderSave(LinearLayout body) {
@@ -444,10 +432,6 @@ public class MainActivity extends Activity {
         label(recommended, "Archivo para ParteScan", 20);
         text(recommended, "Imágenes y texto en un solo archivo, para revisar y editar en ParteScan.", 16);
         text(recommended, "Formato .psocr · Se prepara en este teléfono", 14);
-        LinearLayout other = fluent.card(body);
-        label(other, "Copia en PDF", 18);
-        text(other, "Para consultar o imprimir las imágenes de los documentos.", 14);
-        button(other, "Guardar como PDF", count > 0, () -> save(false));
         space(body, 12);
         text(body, count == 0 ? "Agrega un parte en Escanear para preparar tu archivo." : "Después de guardar, copia el archivo al computador por USB y ábrelo en ParteScan.", 14);
     }
@@ -629,21 +613,19 @@ public class MainActivity extends Activity {
         setContentView(panel);
     }
 
-    private void preview(LinearLayout body, String name, String description) {
-        if (name == null) return;
-        try {
-            ImageView view = new ImageView(this);
-            view.setContentDescription(description);
-            view.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            view.setBackground(fluent.surface());
-            view.setClipToOutline(true);
-            view.setImageBitmap(decode(name, 500));
-            view.setOnClickListener(v -> showPhoto(name, description));
-            int height = fluent.dp(Math.min(160, getResources().getConfiguration().screenHeightDp / 4));
-            body.addView(view, ViewGroup.LayoutParams.MATCH_PARENT, height);
-        } catch (IOException error) {
-            label(body, "La foto ya no está disponible. Repite la captura.", 16);
-        }
+    private void compactPhoto(LinearLayout body, String name, String description, int captureMode) {
+        LinearLayout photoRow = row();
+        photoRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        ImageView photo = thumbnail(name, 56, 72);
+        photo.setContentDescription("Ampliar: " + description);
+        photo.setOnClickListener(view -> showPhoto(name, description));
+        photoRow.addView(photo);
+        LinearLayout actions = column();
+        actions.setPadding(fluent.dp(12), 0, 0, 0);
+        text(actions, "Toca la foto para ampliarla.", 12);
+        button(actions, "Repetir foto", true, () -> capture(captureMode));
+        photoRow.addView(actions, new LinearLayout.LayoutParams(0, -2, 1));
+        body.addView(photoRow);
     }
 
     private Bitmap decode(String name, int limit) throws IOException {
