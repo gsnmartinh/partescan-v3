@@ -902,7 +902,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private String readOcr(String name) throws Exception {
+    String readOcr(String name) throws Exception {
         File cache = ocrCache(name);
         if (cache.isFile()) {
             try {

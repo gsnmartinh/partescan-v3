@@ -29,14 +29,19 @@ import static org.junit.Assert.*;
 @Config(sdk = 34, qualifiers = "w393dp-h852dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class NavigationTest {
-    private ActivityController<MainActivity> controller;
+    public static class NavigationActivity extends MainActivity {
+        @Override String readOcr(String name) {
+            return "";
+        }
+    }
+    private ActivityController<NavigationActivity> controller;
     private MainActivity activity;
 
     @Before public void create() {
         // Each Robolectric test has a different app data directory; FileProvider caches paths.
         java.util.Map<?,?> photoRoots = ReflectionHelpers.getStaticField(androidx.core.content.FileProvider.class,"sCache");
         photoRoots.clear();
-        controller = Robolectric.buildActivity(MainActivity.class).setup();
+        controller = Robolectric.buildActivity(NavigationActivity.class).setup();
         activity = controller.get();
         list("pages").clear(); list("attachments").clear();
         ReflectionHelpers.setField(activity, "part", null);
