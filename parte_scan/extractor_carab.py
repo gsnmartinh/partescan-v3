@@ -193,6 +193,8 @@ def _infraccion(t, secs):
     cita = re.search(r"\b(?:notificaron\s+al\s+infractor|si[gq]uiente\s*(?:in(?:fr|f|er)acci[oó]n\s*)?)"
                      r"(?:(?:(?:a\s+)?la\s+ley\s+de|al)\s+tr[aá]nsito\s*)?"
                      r"[.:;\s]*[\"“]\s*([^\"”]{10,450})[\"”]", t, re.I)
+    if not cita:
+        cita = re.search(r'\binfracci[oó]n\s+al\s+tr[aá]nsito\s*:\s*["“]\s*([^"”]{10,450})["”]', t, re.I)
     if cita:
         return limpiar(cita.group(1)).upper()
     todas = [s for r, s in secs if r.startswith("INFRACCION") and s]
@@ -355,7 +357,7 @@ def _vehiculo(s):
     mt = re.match(r"(.+?)[,\s]+(?:marca|P\.?\s?P\.?\s?U\.?|patente)\b", s, re.I)
     if mt:
         tipo = limpiar(mt.group(1)).upper()
-        if re.search(r"\d|^(?:PPU|P\.P\.U|PLACA|PATENTE)", tipo):
+        if re.search(r"\d|^(?:PPU|P\.P\.U|PLACA|PATENTE|COLOR|MODELO|AÑO)\b", tipo):
             tipo = ""
     fin = r"(?:,|\bmodelo\b|\ba[ñn]o\b|\bcolor\b|\bP\.?\s?P\.?\s?U\b|\bpatente\b|$)"
     marca = re.search(r"marca\s+[\"“”']?(.+?)[\"“”']?\s*" + fin, s, re.I)
@@ -522,6 +524,11 @@ def parte(texto):
                 x["boleta"] = bol
     tiene_vehiculo = any(r.startswith("VEHICULO") for r, _ in secs)
     v = _vehiculo(_sec(secs, "VEHICULO")) if tiene_vehiculo else _vehiculo("")
+    if tiene_vehiculo and not v["tipo"]:
+        tipo_desplazado = re.search(r"\b(camioneta|autom[oó]vil|motocicleta|camión|furg[oó]n)\s*,?\s+marca\s*$",
+                                    _sec(secs, "INFRACTOR"), re.I)
+        if tipo_desplazado:
+            v["tipo"] = tipo_desplazado[1].upper()
     if not tiene_vehiculo or not (v["placa"] or v["marca"] or v["tipo"]):
         clausula = SM.vehiculo(texto)
         if clausula:

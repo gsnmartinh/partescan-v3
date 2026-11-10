@@ -43,6 +43,8 @@ def armar(r, archivo, pagina, pid):
     for bloque in r.get("bloques_infraccion", []):
         _, adicionales = catalogo.resolver(bloque)
         for item in adicionales:
+            if item["cod"] == "19" and any(i["cod"] == "43" for i in items) and re.search(r"LINEA\s+AMARILLA", catalogo.sin_tildes(bloque)):
+                continue
             if item["cod"] not in {i["cod"] for i in items}:
                 items.append(dict(item, estado="check", nota="Confirma esta infracción adicional en la imagen: " + bloque))
     if len(items) > 1:

@@ -128,6 +128,9 @@ def actividad_sin_patente(texto):
 def resolver(texto):
     """Devuelve (descripcion_causa, [items]) a partir del texto de la infracción del parte."""
     T = sin_tildes(texto)
+    if re.search(r"\bESTACION\w*\b", T) and re.search(r"LINEA\s+AMARILLA", T) and re.search(r"\bESQUINA\b", T):
+        concepto = por_abrev("ESQUINA")
+        return concepto["t"], [crear_item(concepto)]
     if T.strip() == "DS.93 SOBRE VIGILANCIA PRIVADA":
         concepto = {"a": "400", "t": "DS.93 SOBRE VIGILANCIA PRIVADA"}
         return concepto["t"], [crear_item(concepto)]
@@ -151,7 +154,7 @@ def resolver(texto):
             item["nota"] = "Verifica en la imagen: «" + sin_documentos[0] + "»."
         if re.search(r"\b(?:SIN|NO)\s+PORTAR\s+LICENCIA\b", T):
             licencia = crear_item(por_abrev("SINL"))
-            return licencia["x"]["t"], [licencia, *documentos]
+            return "CONDUCIR SIN PORTAR LICENCIA Y SIN LA TOTALIDAD DE LA DOCUMENTACION", [licencia, *documentos]
         return "CONDUCIR SIN LA TOTALIDAD DE LA DOCUMENTACION", documentos
 
     # «no detenerse ante señal PARE de Carabineros» (código 38): se ingresa junto con las demás infracciones del parte
@@ -254,7 +257,7 @@ def resolver_o_comodin(texto):
         t = sin_tildes(texto)
         if "ESTACION" in t:
             opciones = [a for patron, a in ESPECIFICAS if re.search(patron, t)]
-            if re.search(r"LINEA\s+AMARILLA|(?:LUGAR|SITIO)\s+PROHIBIDO", t):
+            if re.search(r"(?:LUGAR|SITIO)\s+PROHIBIDO", t) or ("ESQUINA" not in opciones and re.search(r"LINEA\s+AMARILLA", t)):
                 opciones.append("19")
             if len(opciones) > 1:
                 codigos = ", ".join(CODIGOS[a] for a in opciones)
