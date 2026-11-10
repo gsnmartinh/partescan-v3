@@ -182,7 +182,15 @@ main{display:grid;grid-template-columns:190px minmax(280px,.95fr) minmax(430px,1
 <div id="drop"><strong>Abre o arrastra una tanda</strong><br>Arrastra aquí una tanda .psocr, un PDF o fotos, o usa «Abrir tanda…»</div>
 <div class="leyenda" id="leyenda" hidden>Atajo: <b>F2</b> copia el siguiente campo. · Colores de cada parte: <b style="color:var(--ok)">verde</b> = todos los datos completos · <b style="color:var(--ck)">amarillo</b> = 1 o 2 campos por revisar · <b style="color:var(--rj)">rojo</b> = 3 o más, revisar con cuidado. Al corregir un campo, se actualiza.</div>
 <main id="main" hidden>
-  <aside id="revision" hidden><h2>Tanda de partes</h2><button id="deshacerTanda" disabled>Deshacer cambio</button><div id="tira" aria-label="Partes de la tanda"></div></aside>
+  <aside id="revision" hidden><h2>Tanda de partes</h2><button id="deshacerTanda" disabled>Deshacer cambio</button>
+    <label for="filtroPendientes">Revisar por campo</label>
+    <select id="filtroPendientes" class="val"><option value="">Toda la tanda</option></select>
+    <button id="siguientePendiente" hidden>Siguiente pendiente</button>
+    <button id="resumenCorrecciones">Correcciones locales</button>
+    <div id="tira" aria-label="Partes de la tanda"></div>
+  </aside>
+  <dialog id="dlgCorrecciones"><div class="dh"><h2>Correcciones locales</h2><form method="dialog"><button>Cerrar</button></form></div><div class="db" id="listaCorrecciones"></div></dialog>
+  <dialog id="dlgInfracciones"><div class="dh"><h2>Revisar descripción e infracciones</h2><form method="dialog"><button>Cerrar</button></form></div><div class="db" id="lecturaInfracciones"></div></dialog>
   <section id="documento">
     <div id="visorBar">
       <div class="tabs" aria-label="Documento visible"><button id="tabP" class="on">Parte</button><button id="tabC">Certificado</button></div>
@@ -487,6 +495,178 @@ fetch('/calles-valdivia.txt').then(r=>r.ok?r.text():'').then(txt=>{
   callejeroValdivia=txt.split(/\r?\n/).map(nombre=>nombre.trim()).filter(nombre=>nombre&&!nombre.startsWith('#'))
     .map(nombre=>({nombre,clave:normalizarCalle(nombre.replace(prefijoCalle,''))}));
 }).catch(()=>{});
+const CAMPOS_BUSQUEDA=new Map([
+  ['Fecha del parte','fecha_parte'], ['Hora de la infracción','hora_infraccion'], ['Placa','placa'],
+  ['RUT (certificado)','rut'], ['Nombre (certificado)','nombre'],
+  ['Dirección (certificado)','direccion'], ['Comuna (certificado)','comuna'],
+]);
+function campoBusqueda(key){
+  return CAMPOS_BUSQUEDA.get(key)||(/^Infracción \d+ · fecha$/.test(key)?'fecha_infraccion':'');
+}
+const CLAVE_CORRECCIONES='partescan-correcciones-v1';
+function leerCorrecciones(){
+  try{return JSON.parse(localStorage.getItem(CLAVE_CORRECCIONES))||{}}catch{return {}}
+}
+function contarCorreccion(p,key){
+  const tipo={carab:'Carabineros',mtt:'MTT',dom:'DOM'}[p.origen]||
+    (String(p.oficina).includes('Seguridad Privada')?'Seguridad Privada':'Inspección');
+  const datos=leerCorrecciones(), camposTipo=datos[tipo]??={};
+  camposTipo[key]=(camposTipo[key]||0)+1;
+  try{localStorage.setItem(CLAVE_CORRECCIONES,JSON.stringify(datos))}catch{}
+}
+function campoPendiente(p,key){
+  if(p.fin) return false;
+  if(esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)','Comuna (certificado)'].includes(key)) return false;
+  const campo=campos(p).flatMap(s=>s.f).find(f=>f.k===key);
+  return campo&&estadoCampo(p,campo,valorActual(p,key))==='check';
+}
+function siguientePendiente(){
+  const key=$('filtroPendientes').value;
+  for(let paso=1;paso<=P.length;paso++){
+    const i=(sel+paso)%P.length;
+    if(!campoPendiente(P[i],key)) continue;
+    ir(i);
+    const entrada=[...$('form').querySelectorAll('.val')].find(el=>el.getAttribute('aria-label')===key);
+    entrada?.focus();
+    return;
+  }
+}
+for(const key of CAMPOS_BUSQUEDA.keys()) $('filtroPendientes').add(new Option(key,key));
+$('filtroPendientes').onchange=()=>{pintarTira();siguientePendiente()};
+$('siguientePendiente').onclick=siguientePendiente;
+$('resumenCorrecciones').onclick=()=>{
+  const lista=$('listaCorrecciones');
+  lista.replaceChildren();
+  for(const [tipo,datos] of Object.entries(leerCorrecciones())){
+    const titulo=document.createElement('h3'), items=document.createElement('ul');
+    titulo.textContent=tipo;
+    for(const [campo,total] of Object.entries(datos).sort((a,b)=>b[1]-a[1])){
+      const item=document.createElement('li');
+      item.textContent=campo+' · '+total;
+      items.appendChild(item);
+    }
+    lista.append(titulo,items);
+  }
+  if(!lista.childElementCount) lista.textContent='Todavía no hay correcciones registradas.';
+  $('dlgCorrecciones').showModal();
+};
+async function revisarInfracciones(p){
+  const dialogo=$('dlgInfracciones'), cuerpo=$('lecturaInfracciones');
+  cuerpo.textContent='Volviendo a leer la descripción del parte…';
+  dialogo.showModal();
+  try{
+    const consulta=new URLSearchParams({id:p.id,campo:'descripcion'});
+    const respuesta=await fetch('/api/buscar-campo?'+consulta,{method:'POST',headers:{'X-ParteScan-Buscar':'1'}});
+    const datos=await respuesta.json();
+    if(!respuesta.ok) throw new Error(datos.error);
+    if(!dialogo.open||P[sel]!==p) return;
+    const fuente=document.createElement('p'), texto=document.createElement('p');
+    fuente.textContent=datos.fuente;
+    texto.textContent=datos.texto||'No pude leer la descripción.';
+    cuerpo.replaceChildren(fuente,texto);
+    const vigentes=new Set(infrVigentes(p).map(String));
+    const opciones=[];
+    for(const {codigo,texto:fragmento} of datos.codigos){
+      const hit=buscarInfr(codigo);
+      if(!hit) continue;
+      const fila=document.createElement('p'), etiqueta=document.createElement('label');
+      const check=document.createElement('input');
+      check.type='checkbox';
+      check.disabled=vigentes.has(codigo);
+      etiqueta.append(check,' '+codigo+' · '+hit[1]+(check.disabled?' (ya ingresado en el parte)':''));
+      fila.append(etiqueta,document.createElement('br'),fragmento);
+      cuerpo.append(fila);
+      if(!check.disabled) opciones.push({check,codigo,nombre:hit[1]});
+    }
+    if(!opciones.length){
+      cuerpo.append('No se encontraron códigos nuevos. Puedes editar la descripción y los códigos en el formulario.');
+      return;
+    }
+    const aplicar=document.createElement('button');
+    aplicar.className='p';
+    aplicar.textContent='Agregar códigos seleccionados';
+    aplicar.disabled=true;
+    for(const {check} of opciones) check.onchange=()=>{aplicar.disabled=!opciones.some(o=>o.check.checked)};
+    aplicar.onclick=()=>{
+      const seleccion=opciones.filter(o=>o.check.checked);
+      if(P[sel]!==p||!seleccion.length) return;
+      const actuales=new Set(infrVigentes(p).map(String));
+      if(!actuales.size&&p.items.length===1&&!p.items[0].cod) p.items.pop();
+      for(const {codigo,nombre} of seleccion){
+        if(!actuales.has(codigo)) p.items.push({cod:codigo,estado:'ok',nota:nombre,manual:true});
+      }
+      sincronizarDescripcion(p);
+      dialogo.close();
+      refrescarConScroll();
+      autoguardar().catch(()=>{});
+    };
+    cuerpo.append(aplicar);
+  }catch(error){
+    cuerpo.textContent=error.message||'No se pudo releer la descripción.';
+  }
+}
+function agregarBusqueda(p,key,el){
+  const boton=document.createElement('button'), panel=document.createElement('div');
+  boton.textContent='Buscar en el documento';
+  panel.className='meta';
+  panel.setAttribute('aria-live','polite');
+  el.after(boton,panel);
+  boton.onclick=async()=>{
+    boton.disabled=true;
+    panel.textContent='Volviendo a leer…';
+    let resultados=[], mensaje='No encontré otra lectura. Puedes escribir el dato.';
+    try{
+      const consulta=new URLSearchParams({id:p.id,campo:campoBusqueda(key)});
+      if(p.origen==='mtt') consulta.set('modalidad',p.modalidad_mtt||'');
+      const respuesta=await fetch('/api/buscar-campo?'+consulta,{method:'POST',headers:{'X-ParteScan-Buscar':'1'}});
+      const datos=await respuesta.json();
+      if(!respuesta.ok) throw new Error(datos.error);
+      resultados=datos.resultados;
+    }catch(error){
+      mensaje=error.message||'No se pudo buscar el dato.';
+    }finally{
+      boton.disabled=false;
+    }
+    if(!el.isConnected) return;
+    const elegir=document.createElement('select'), aplicar=document.createElement('button');
+    const evidencia=document.createElement('div');
+    elegir.className='val';
+    elegir.setAttribute('aria-label','Resultados para '+key);
+    elegir.add(new Option('Valor actual · '+(el.value||'(en blanco)'),''));
+    resultados.forEach(({valor,fuente},i)=>elegir.add(new Option(valor+' · '+fuente,String(i))));
+    elegir.add(new Option('Escribir manualmente','manual'));
+    aplicar.textContent='Usar este valor';
+    aplicar.disabled=true;
+    elegir.onchange=()=>{
+      evidencia.replaceChildren();
+      aplicar.disabled=!elegir.value;
+      aplicar.textContent=elegir.value==='manual'?'Editar':'Usar este valor';
+      const resultado=elegir.value&&resultados[elegir.value];
+      if(resultado?.imagen){
+        const foto=document.createElement('img');
+        foto.src='data:image/jpeg;base64,'+resultado.imagen;
+        foto.alt=resultado.zona+' · '+resultado.fuente;
+        foto.style.maxWidth='100%';
+        evidencia.append(foto);
+      }else if(resultado){
+        evidencia.textContent='Lectura original de '+resultado.fuente.toLowerCase()+'.';
+      }
+    };
+    aplicar.onclick=()=>{
+      let valor=resultados[elegir.value]?.valor;
+      if(elegir.value==='manual'){
+        if(el.tagName!=='SELECT'){el.focus();el.select();return}
+        valor=prompt('Escribe '+key.toLowerCase(),el.value)?.trim().toUpperCase();
+        if(!valor) return;
+      }
+      if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===valor)) el.add(new Option(valor,valor));
+      el.value=valor;
+      el.dispatchEvent(new Event('change'));
+      panel.replaceChildren();
+    };
+    panel.replaceChildren(...(resultados.length?[]:[mensaje]),elegir,aplicar,evidencia);
+  };
+}
 function mostrar(){
   $('drop').hidden=Boolean(P.length);
   $('leyenda').hidden=!P.length;
@@ -601,6 +781,17 @@ function mostrar(){
         actualizarCalles();
       }
       if(esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)'].includes(key)) el.readOnly=true;
+      const identidad=key.endsWith(' (certificado)');
+      if(key==='Descripción de la causa'){
+        const revisar=document.createElement('button');
+        revisar.textContent='Releer y sugerir códigos';
+        revisar.onclick=()=>revisarInfracciones(p);
+        el.after(revisar);
+      }
+      if(campoBusqueda(key)&&!el.readOnly&&
+        !(identidad&&((p.infractores||[]).length>1||esEmpadronado(p)))&&
+        !(key==='Placa'&&f.st==='blank')) agregarBusqueda(p,key,el);
+      let valorGuardado=String(val??'').trim().toUpperCase();
       el.oninput=el.onchange=e=>{
         let infraccionCorregida=false;
         if(e.type==='change'){
@@ -612,6 +803,10 @@ function mostrar(){
               infraccionCorregida=el.value!==String(f.v);
             }
           }
+        }
+        if(e.type==='change'&&campoBusqueda(key)){
+          const nuevo=el.value.trim().toUpperCase();
+          if(nuevo!==valorGuardado){contarCorreccion(p,key);valorGuardado=nuevo}
         }
         p.ed[key]=e.target.value;
         p.ok=p.ok||{};
@@ -859,8 +1054,13 @@ function semaforo(p){
 }
 function pintarTira(){
   document.getElementById("revision").hidden=!P.length;
+  const filtro=$('filtroPendientes').value;
+  const siguiente=$('siguientePendiente');
+  siguiente.hidden=!filtro;
+  siguiente.disabled=!filtro||!P.some(p=>campoPendiente(p,filtro));
   const t=$('tira'); t.innerHTML='';
-  P.forEach((p,i)=>{const c=document.createElement('span');const sm=semaforo(p); c.className='chip'+(p.fin?' fin':' '+sm.c)+(i===sel?' sel':''); c.title=p.fin?'Ingresado':(sm.n?sm.n+' campo(s) por revisar':'Todos los datos completos');
+  if(filtro&&siguiente.disabled) t.textContent='No quedan pendientes para este campo.';
+  P.forEach((p,i)=>{if(filtro&&!campoPendiente(p,filtro))return; const c=document.createElement('span');const sm=semaforo(p); c.className='chip'+(p.fin?' fin':' '+sm.c)+(i===sel?' sel':''); c.title=p.fin?'Ingresado':(sm.n?sm.n+' campo(s) por revisar':'Todos los datos completos');
     const rv=rolPrevisto(p); c.textContent=(p.fin?'✓ ':'')+(p.origen==='carab'?('Carab. '+(p.n_parte_carab||p.folio)):(p.origen==='mtt'?('MTT '+p.folio):(p.folio||('Parte '+(i+1)))))+(rv?' · rol '+rv:'');c.onclick=()=>ir(i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-pressed',String(i===sel));c.setAttribute('aria-label',c.textContent+'. '+c.title);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();ir(i)}};t.appendChild(c)});
   const seleccionado=t.querySelector('.sel');
   if(seleccionado){

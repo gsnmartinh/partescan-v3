@@ -5,7 +5,7 @@ import io, json, os, sys, zipfile, time, queue, re, shutil, tempfile, threading,
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import actualizador, catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
+from . import actualizador, busqueda, catalogo, certificado, equivalencia, exportar, extractor_mtt, motor, perfil, tecleador
 
 WEB = os.path.join(motor._base(), "parte_scan", "web")
 if not os.path.isdir(WEB):
@@ -17,6 +17,7 @@ IMAGENES = {}        # id -> imagen PIL
 COLA = queue.Queue()
 ESTADO = {"pendientes": 0, "error": ""}
 LOCK = threading.Lock()
+LOCK_BUSQUEDA = threading.Lock()
 TMP = tempfile.mkdtemp(prefix="partescan_")
 
 
@@ -432,6 +433,42 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == "/api/buscar-campo":
+            if self.headers.get("X-ParteScan-Buscar") != "1":
+                return self._send(403, {"error": "Solicitud de búsqueda no válida."})
+            query = parse_qs(u.query)
+            campo = query.get("campo", [""])[0]
+            identificador = query.get("id", [""])[0]
+            if campo not in busqueda.CAMPOS or not re.fullmatch(r"[0-9]{1,10}", identificador):
+                return self._send(400, {"error": "Campo o parte no válido."})
+            with LOCK:
+                parte = next((p for p in PARTES if p["id"] == int(identificador)), None)
+                fuentes = []
+                if parte:
+                    origen = parte.get("origen") or "inspeccion"
+                    personal = parte.get("notificado_personalmente") or parte.get("parte_escrito")
+                    modalidad = query.get("modalidad", [parte.get("modalidad_mtt", "")])[0]
+                    if origen == "mtt":
+                        personal = modalidad == "personal"
+                    identidad = campo in busqueda.IDENTIDAD
+                    if not identidad or origen != "mtt" or personal:
+                        fuentes.append(("Parte", IMAGENES.get(parte["id"]), TEXTOS.get(parte["id"], "")))
+                    cid = parte.get("img_cert")
+                    usa_cert = identidad and not personal and (origen != "mtt" or modalidad == "empadronado")
+                    if cid and (campo == "placa" or usa_cert):
+                        if usa_cert:
+                            fuentes.clear()
+                        fuentes.append(("Certificado", IMAGENES.get(cid), TEXTOS.get(cid, "")))
+            if parte is None:
+                return self._send(404, {"error": "El parte ya no está en la tanda."})
+            if not LOCK_BUSQUEDA.acquire(blocking=False):
+                return self._send(409, {"error": "Hay otra búsqueda en curso. Intenta nuevamente."})
+            try:
+                if campo == "descripcion":
+                    return self._send(200, busqueda.releer_descripcion(origen, fuentes))
+                return self._send(200, {"resultados": busqueda.buscar(campo, origen, fuentes)})
+            finally:
+                LOCK_BUSQUEDA.release()
         if u.path == "/api/actualizacion":
             if self.headers.get("X-ParteScan-Actualizar") != "1":
                 return self._send(403, {"error": "Solicitud de actualización no válida."})

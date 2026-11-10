@@ -142,7 +142,7 @@ def _lugar_rotulo(t):
     if not m:
         return ""
     v = m.group(1).strip(" .,;")
-    v = re.sub(r",?\s+(?:de\s+esta\s+\w+|valdivia)\s*$", "", v, flags=re.I)
+    v = re.sub(r",?\s+(?:de\s+esta\s+\w+)\s*$", "", v, flags=re.I)
     v = re.sub(r"\bfrente\s+(?:al|a\s+la|del|el)\s+(?:Nro\.?|N[°º])?\s*[\"“”']?\s*", " ", v, flags=re.I)
     v = re.sub(r"\bintersecci[oó]n(?:\s+con)?\b", " CON ", v, flags=re.I)
     v = re.sub(r"\b(?:Nro\.?|N[°º]|numeraci[oó]n|n[uú]mero)\s*(?=\d)", " ", v, flags=re.I)
@@ -162,13 +162,11 @@ def _lugar(t):
     s = previo[ms[-1].end():]
     if len(s) > 140:
         return _lugar_hasta(t)
-    s = re.split(r",?\s+(?:de\s+esta\b|personal\s+de\b|sorprendi\w*|notific\w*|comuna\s+de|la\s+siguiente)", s, 1, flags=re.I)[0]
+    s = re.split(r",?\s+(?:de\s+esta\b|personal\s+de\b|sorprendi\w*|notific\w*|la\s+siguiente)", s, 1, flags=re.I)[0]
     if not re.search(r"\d|calle|aven|avda|av\.|pasaje|ruta|camino", s, re.I):
         return _lugar_hasta(t) or limpiar(s).upper()[:70]
     s = re.sub(r"\bfrente\s+(?:al|a\s+la|del|el)\s+(?:Nro\.?|N[°º]|numeraci[oó]n|n[uú]mero)?\s*[\"“”']?\s*", " ", s, flags=re.I)
     s = re.sub(r"\b(?:altura\s+del?\s+)?(?:Nro\.?|N[°º]|numeraci[oó]n|n[uú]mero)\s*[\"“”']?\s*(?=\d)", " ", s, flags=re.I)
-    s = re.sub(r"\s+con\s+(?=(?:calle|pasaje|avenida|avda|av\.|pje))", " / ", s, flags=re.I)
-    s = re.sub(r"\besquina\s+(?:con\s+)?", " / ", s, flags=re.I)
     s = re.sub(r"^\W*(?:la\s+)?(?:calles?|\w{0,2}alle)\b\s*", "", s.strip(), flags=re.I)
     s = re.sub(r"^(?:la\s+|el\s+)", "", s, flags=re.I)
     return limpiar(s).upper()[:70]
@@ -557,7 +555,7 @@ def parte(texto):
         "n_parte_carab": n_parte, "boleta": boleta, "n_citacion_adjunta": "",
         "empadronado": bool(POR_ESCRITO.match(_sec(secs, "INFRACTOR"))),
         "fecha_parte": fecha_parte, "anio_leido": anio_leido, "fecha_infraccion": fecha_parte, "hora_infraccion": hora,
-        "lugar": _u(_lugar_final(t)), "infraccion_texto": infr, "bloques_infraccion": bloques_infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
+        "lugar": SM.formato_lugar(_u(_lugar_final(t)), conservar_comuna=str(_of[0]) == "5"), "infraccion_texto": infr, "bloques_infraccion": bloques_infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
         "modelo": v["modelo"], "color": v["color"], "anio": v["anio"], "placa": v["placa"],
         "tiene_vehiculo": tiene_vehiculo,
         "fecha_citacion": fecha_cit, "hora_citacion": "", "articulo": "",

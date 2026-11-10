@@ -1,3 +1,12 @@
+# ParteScan 5.1.11
+
+- Relee campos con OCR local y muestra alternativas con su fuente y, cuando es posible, el recorte donde aparecen.
+- Abre una ventana para releer la descripción de la causa y seleccionar los códigos de infracción que quieres agregar.
+- Filtra los pendientes por campo y cuenta las correcciones localmente por tipo de parte.
+- Conserva CON o ESQUINA en el lugar de los hechos y omite VALDIVIA al final, salvo en partes de Tenencia Corral.
+
+En Windows, vuelve a abrir ParteScan y pulsa **Actualizar a v5.1.11**.
+
 # ParteScan 5.1.1 · ParteScan Captura 1.1.0
 
 - Carga las tandas grandes por bloques y avisa si el archivo está dañado o la transferencia quedó incompleta.

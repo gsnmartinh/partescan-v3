@@ -136,6 +136,15 @@ MALO = re.compile(r"TRIBUNAL|JUZGADO|DEPENDENCIAS|DESTACAMENTO|TENENCIA|COMISAR|
                   r"TESTIGO|CARABINERO|JEFE|C[EÉ]DULA|DOMICILI", re.I)
 
 
+def formato_lugar(valor, conservar_comuna=False):
+    """Conserva el cruce y omite la comuna implícita del lugar del hecho."""
+    valor = re.sub(r"\besquina\s+con\s+", "ESQUINA ", valor, flags=re.I)
+    valor = re.sub(r"\bintersecci[oó]n(?:\s+con)?\s+", "CON ", valor, flags=re.I)
+    if not conservar_comuna:
+        valor = re.sub(r",?\s+(?:de\s+(?:la\s+)?(?:ciudad|comuna)\s+de\s+|comuna\s+de\s+)?valdivia[ ,.;]*$", "", valor, flags=re.I)
+    return valor.strip(" ,.;").upper()
+
+
 def lugar(texto):
     """Primera referencia a una calle del parte («en calle Esmeralda frente al Nro. 622»), sin depender del orden."""
     t = _plano(texto)

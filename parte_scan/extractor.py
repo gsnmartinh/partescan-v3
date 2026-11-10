@@ -1,5 +1,6 @@
 """Lee el texto OCR de un parte (modelo 1) línea por línea y devuelve campos + avisos."""
 import re
+from .semantica import formato_lugar
 from . import perfil
 
 MESES = {m: i + 1 for i, m in enumerate(
@@ -142,7 +143,7 @@ def parte(t):
     lugar = m.group(1) if m else ""
     lugar = re.sub(r"\b(FRTE|FTE)\.?\s*", "", lugar, flags=re.I)
     lugar = re.sub(r"\bN\W{0,2}(?=\d)", "", lugar)
-    o["lugar"] = limpiar(lugar).upper()
+    o["lugar"] = formato_lugar(limpiar(lugar))
 
     # el OCR a veces lee "intracción", "inftacción", etc.
     PAT_INF = r"^\W*[il1]n\w{0,4}cci[oó0]n"
@@ -265,7 +266,7 @@ def parte_dom(texto):
     return {
         "departamento": "Dirección de Obras Municipales", "n_parte_final": folio.group() if folio else "",
         "fecha_parte": fecha_de(fecha), "fecha_infraccion": fecha_de(hecho),
-        "hora_infraccion": hora_de(hecho), "lugar": limpiar(re.sub(r"^.*?notificado\s+en\s+calle\s+", "", lugar, flags=re.I)),
+        "hora_infraccion": hora_de(hecho), "lugar": formato_lugar(limpiar(re.sub(r"^.*?notificado\s+en\s+calle\s+", "", lugar, flags=re.I))),
         "infraccion_texto": infraccion, "fecha_citacion": fecha_de(citacion), "hora_citacion": hora_de(citacion),
         "articulo": articulo.group(1).rstrip(".") if articulo else "", "avisos": [],
         "placa": "", "marca": "", "tipo_vehiculo": "",
