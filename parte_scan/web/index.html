@@ -145,7 +145,7 @@ main{display:grid;grid-template-columns:190px minmax(280px,.95fr) minmax(430px,1
  main{grid-template-columns:150px minmax(240px,.85fr) minmax(370px,1.2fr);gap:10px;padding:10px}
  .row{grid-template-columns:105px minmax(0,1fr) auto}
 }
-@media(max-width:950px){
+@media(max-width:1000px){
  header{height:auto;flex-wrap:wrap}
  main{height:auto;grid-template-columns:140px minmax(0,1fr)}
  #documento{height:60vh}
@@ -155,6 +155,26 @@ main{display:grid;grid-template-columns:190px minmax(280px,.95fr) minmax(430px,1
 }
 
 #tira{align-items:stretch;width:100%}#tira .chip{box-sizing:border-box;width:100%}
+#compacto,#tecleoCompacto{display:none}
+@media screen and (max-width:1000px){
+ header{position:static}
+ main{display:flex;flex-direction:column;padding-bottom:72px}
+ main[hidden]{display:none}
+ #compacto{display:grid;gap:8px;background:var(--card);padding:12px;border:1px solid var(--line);border-radius:8px;position:sticky;top:0;z-index:6}
+ #compacto .val{width:100%;min-width:0}
+ #compacto .controles{display:flex;gap:6px;flex-wrap:wrap}
+ #compacto [aria-pressed="true"]{border-color:var(--ac);color:var(--ac)}
+ #revision{display:none;position:static;max-height:45vh}
+ main.ver-tanda #revision:not([hidden]){display:flex}
+ main:not(.ver-documento) #documento,main.ver-documento #form{display:none}
+ #documento{height:65vh}
+ #visorBar .tabs,#form #ant,#form #sig,.lote #btnTec{display:none}
+ #form{padding:0}
+ #form .row{grid-template-columns:minmax(0,1fr) auto}
+ #form .row>.lab{grid-column:1/-1}
+ #tecleoCompacto{display:block;position:fixed;bottom:0;left:0;right:0;z-index:10;padding:8px 12px;background:var(--card);border-top:1px solid var(--line)}
+ #tecleoCompacto button{width:100%}
+}
 .acciones-tanda{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.acciones-tanda .val{flex:1 1 240px;min-width:160px}.acciones-tanda button{min-height:36px}
 </style><link rel="stylesheet" href="/fluent.css"></head><body>
 <section id="listaImpresion"></section>
@@ -182,6 +202,12 @@ main{display:grid;grid-template-columns:190px minmax(280px,.95fr) minmax(430px,1
 <div id="drop"><strong>Abre o arrastra una tanda</strong><br>Arrastra aquí una tanda .psocr, un PDF o fotos, o usa «Abrir tanda…»</div>
 <div class="leyenda" id="leyenda" hidden>Atajo: <b>F2</b> copia el siguiente campo. · Colores de cada parte: <b style="color:var(--ok)">verde</b> = todos los datos completos · <b style="color:var(--ck)">amarillo</b> = 1 o 2 campos por revisar · <b style="color:var(--rj)">rojo</b> = 3 o más, revisar con cuidado. Al corregir un campo, se actualiza.</div>
 <main id="main" hidden>
+  <section id="compacto" aria-label="Navegación compacta">
+    <strong id="parteCompacto" aria-live="polite"></strong>
+    <div class="controles"><button id="antCompacto">← Anterior</button><button id="sigCompacto">Siguiente →</button><button id="opcionesCompacto" aria-expanded="false" aria-controls="revision">Opciones de tanda</button></div>
+    <select id="tandaCompacto" class="val" aria-label="Elegir parte de la tanda"></select>
+    <div class="controles" role="group" aria-label="Vista del parte"><button id="datosCompacto" aria-pressed="true">Datos</button><button id="parteFotoCompacto" aria-pressed="false">Parte</button><button id="certFotoCompacto" aria-pressed="false">Certificado</button></div>
+  </section>
   <aside id="revision" hidden><h2>Tanda de partes</h2><button id="deshacerTanda" disabled>Deshacer cambio</button>
     <label for="filtroPendientes">Revisar por campo</label>
     <select id="filtroPendientes" class="val"><option value="">Toda la tanda</option></select>
@@ -204,6 +230,7 @@ main{display:grid;grid-template-columns:190px minmax(280px,.95fr) minmax(430px,1
     <div id="imgbox"><img id="img" alt="Documento escaneado" hidden></div>
   </section>
   <section id="form" aria-label="Datos del parte"></section>
+  <div id="tecleoCompacto"><button id="btnTecCompacto" class="p">Teclear en Juzgado</button></div>
 </main>
 <dialog id="dlgJuz"><div class="dh"><h2>Ajustes de ParteScan</h2><button id="dClose">Cerrar</button></div><div class="db" id="dBody"></div><div class="df"><button id="dGuardar" class="p">Guardar cambios</button></div></dialog>
 <dialog id="dlgTec" style="width:min(1150px,96vw)"><div class="dh"><h2>Teclear en el sistema del Juzgado</h2><button id="tCerrar">Cerrar</button></div>
@@ -1042,7 +1069,7 @@ function autoguardar(){
   return colaAuto;
 }
 setInterval(()=>{autoguardar().catch(()=>{})},5000);
-function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; vista='p'; pintarTira(); mostrar(); document.getElementById('form').scrollTop=0 }
+function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; vista='p'; volverDatosCompactos(false); pintarTira(); mostrar(); document.getElementById('form').scrollTop=0 }
 function ingresado(){
   const p=P[sel]; p.fin=true;
   let n=P.findIndex((q,i)=>i>sel&&!q.fin); if(n<0) n=P.findIndex(q=>!q.fin);
@@ -1069,7 +1096,67 @@ function pintarTira(){
     if(chip.bottom>caja.bottom)t.scrollTop+=chip.bottom-caja.bottom+4;
     if(chip.top<caja.top)t.scrollTop-=caja.top-chip.top+4;
   }
+  actualizarCompacto();
 }
+const anchoCompacto=window.matchMedia('(max-width:1000px)');
+let posicionDatosCompactos=0, campoDatosCompactos=null;
+function actualizarCompacto(){
+  const p=P[sel], lista=$('tandaCompacto');
+  const filtro=$('filtroPendientes').value;
+  lista.replaceChildren();
+  P.forEach((parte,i)=>{
+    if(i!==sel&&filtro&&!campoPendiente(parte,filtro)) return;
+    const folio=parte.n_parte_carab||folioReal(parte)||String(i+1);
+    const rol=rolPrevisto(parte);
+    lista.add(new Option((parte.fin?'✓ ':'')+'Parte '+folio+(rol?' · Rol '+rol:''),String(i)));
+  });
+  lista.value=String(sel);
+  const estado=p?(p.fin?'Ingresado':(semaforo(p).n?'Por revisar':'Listo')):'';
+  $('parteCompacto').textContent=p?(lista.selectedOptions[0]?.textContent||'')+' · '+estado:'';
+  $('antCompacto').disabled=sel<=0;
+  $('sigCompacto').disabled=sel>=P.length-1;
+  $('certFotoCompacto').disabled=!p?.img_cert;
+}
+function marcarVistaCompacta(modo){
+  $('main').classList.toggle('ver-documento',modo!=='datos');
+  for(const [id,valor] of [['datosCompacto','datos'],['parteFotoCompacto','p'],['certFotoCompacto','c']]){
+    $(id).setAttribute('aria-pressed',String(modo===valor));
+  }
+}
+function volverDatosCompactos(restaurar){
+  marcarVistaCompacta('datos');
+  if(restaurar){
+    const campo=[...$('form').querySelectorAll('.val')].find(el=>el.getAttribute('aria-label')===campoDatosCompactos);
+    campo?.focus({preventScroll:true});
+    window.scrollTo(0,posicionDatosCompactos);
+  }
+}
+function abrirDocumentoCompacto(modo){
+  const p=P[sel];
+  if(!p||(modo==='c'&&!p.img_cert)) return;
+  if(!$('main').classList.contains('ver-documento')){
+    posicionDatosCompactos=window.scrollY;
+    campoDatosCompactos=activeKey;
+  }
+  vista=modo;
+  mostrarFoto(p);
+  marcarVistaCompacta(modo);
+  const documento=$('documento');
+  const arriba=window.scrollY+documento.getBoundingClientRect().top-$('compacto').offsetHeight-10;
+  window.scrollTo(0,arriba);
+}
+$('antCompacto').onclick=()=>ir(sel-1);
+$('sigCompacto').onclick=()=>ir(sel+1);
+$('tandaCompacto').onchange=e=>ir(Number(e.target.value));
+$('opcionesCompacto').onclick=()=>{
+  const visible=$('main').classList.toggle('ver-tanda');
+  $('opcionesCompacto').setAttribute('aria-expanded',String(visible));
+};
+$('datosCompacto').onclick=()=>volverDatosCompactos(true);
+$('parteFotoCompacto').onclick=()=>abrirDocumentoCompacto('p');
+$('certFotoCompacto').onclick=()=>abrirDocumentoCompacto('c');
+$('btnTecCompacto').onclick=()=>$('btnTec').click();
+anchoCompacto.addEventListener('change',()=>volverDatosCompactos(false));
 let zoomVisor=1, giroVisor=0;
 function actualizarVisor(){
   $('img').style.width=(zoomVisor*100)+'%';
@@ -1091,7 +1178,7 @@ function zonaDocumento(){
 }
 function seguirSeccion(){
   const p=P[sel];
-  if(!p) return;
+  if(!p||anchoCompacto.matches) return;
   const zona=zonaDocumento();
   if(ultimaZona?.parte===p&&ultimaZona.zona===zona) return;
   ultimaZona={parte:p,zona};

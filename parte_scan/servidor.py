@@ -784,7 +784,7 @@ def _abrir_ventana(url):
     try:
         import webview
         carpeta = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "ParteScan", "ventana")
-        webview.create_window("ParteScan", url, width=1440, height=900, min_size=(1000, 650))
+        webview.create_window("ParteScan", url, width=1440, height=900, min_size=(440, 520))
         webview.start(private_mode=False, storage_path=carpeta,
                       icon=os.path.join(WEB, "brand", "partescan.ico"))
         return True

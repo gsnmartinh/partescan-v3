@@ -1,3 +1,8 @@
+# ParteScan 5.1.13
+
+- Agrega el modo compacto en Windows para trabajar con ParteScan y el sistema del Juzgado lado a lado.
+- En ventanas estrechas, permite elegir el parte desde un desplegable, alternar entre datos y documentos y mantener visible el boton de tecleo.
+
 # ParteScan 5.1.12
 
 - Teclea SR en los partes empadronados que lo usan y elimina el aviso de RUT no reconocible.
