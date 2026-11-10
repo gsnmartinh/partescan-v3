@@ -1,3 +1,8 @@
+# ParteScan 5.1.12
+
+- Teclea SR en los partes empadronados que lo usan y elimina el aviso de RUT no reconocible.
+- Completa y acepta la ficha nueva del Juzgado cuando el RUT es valido, fue confirmado en ParteScan y estan disponibles el nombre, la direccion y la comuna.
+
 # ParteScan 5.1.11
 
 - Relee campos con OCR local y muestra alternativas con su fuente y, cuando es posible, el recorte donde aparecen.

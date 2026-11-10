@@ -407,6 +407,7 @@ def partes_desde_lista(lista):
             "lugar": limpiar(g("lugar")),
             "hora": g("hora"),
             "rut": g("rut"),
+            "rut_confirmado": g("rut_confirmado") is True,
             "nombre": limpiar(g("nombre")),
             "direccion": limpiar(g("direccion")),
             "comuna": comuna_sistema(g("comuna")),
@@ -429,7 +430,9 @@ def validar_parte(p):
         avi.append(f"fecha_citacion invalida: {p['fecha_citacion']!r} (no se tecleara)")
     if p["hora"] and not hora(p["hora"]):
         avi.append(f"hora invalida: {p['hora']!r} (no se tecleara)")
-    if p["rut"]:
+    if limpiar(p["rut"]).upper() == "SR":
+        pass
+    elif p["rut"]:
         r, ok = rut(p["rut"])
         if not r:
             avi.append(f"rut no reconocible: {p['rut']!r} (lo ingresaras tu)")
@@ -479,7 +482,7 @@ def mostrar_plan(i, n, p, fat, avi):
         ("Fecha citacion (id 195)", fecha(p["fecha_citacion"]) or "(se deja la del sistema)"),
         ("Lugar (id 189)", p["lugar"] or "(vacio)"),
         ("Hora (mascara)", hora(p["hora"]) or "(se deja la del sistema)"),
-        ("RUT (id 159)", r or "(lo ingresas tu)"),
+        ("RUT (id 159)", r or ("SR" if limpiar(p["rut"]).upper() == "SR" else "(lo ingresas tu)")),
         ("Nombre (id 138)", (p["nombre"] or "(vacio)") + "   [solo si el RUT es nuevo]"),
         ("Direccion (id 137)", (p["direccion"] or "SIN DIRECCION") + "   [actualiza si difiere del parte]"),
         ("Comuna (id 136)", (p["comuna"] or "(se deja la del sistema)") + "   [solo si el RUT es nuevo]"),
@@ -886,16 +889,24 @@ class Sistema:
         return False
 
     def chequear_ficha(self):
-        """RUT nuevo: el sistema abre la ficha de la persona (panel 'R.U.T.'). La completas tu."""
+        """Completa la ficha nueva y guarda automáticamente si el RUT fue revisado."""
         if not self.ficha_visible():
             return False
+        completo = False
         try:
             self.llenar_ficha()
+            completo = True
         except Detener as e:
             if PARAR.is_set() or "ESC" in str(e):
                 raise
             print(f"  [aviso] No pude completar toda la ficha ({e}). Termina tu.")
-        print("  [tu turno] Revisa la ficha de la persona y presiona su Aceptar; sigo solo cuando se cierre.")
+        numero, valido = rut(self.p["rut"])
+        auto = (completo and numero and valido and self.p.get("rut_confirmado")
+                and all(self.p[k] for k in ("nombre", "direccion", "comuna")))
+        if auto and self.ficha_visible():
+            self.aceptar_ficha()
+        elif self.ficha_visible():
+            print("  [tu turno] Revisa la ficha de la persona y presiona su Aceptar; sigo solo cuando se cierre.")
         t0 = time.time()
         while self.ficha_visible():
             revisar_teclas()
@@ -907,6 +918,26 @@ class Sistema:
         self.recuperar_foco(tipo_si_falla=False)
         print("  [info] Ficha de la persona cerrada: continuo.")
         return True
+
+    def aceptar_ficha(self):
+        botones = {
+            h for panel in self.paneles if user32.IsWindowVisible(panel) and rect(panel)[0] > -900
+            for h in hijos(panel)
+            if clase(h) == "ThunderRT6CommandButton" and user32.IsWindowEnabled(h)
+            and user32.IsWindowVisible(h) and rect(h)[0] > -900
+            and limpiar(leer(h)).replace("&", "").strip().lower() == "aceptar"
+        }
+        if len(botones) != 1:
+            raise Detener("No pude identificar el Aceptar de la ficha nueva. Revisa la ficha antes de continuar.")
+        h = next(iter(botones))
+        dar_foco(h)
+        pausa(0.15)
+        revisar_teclas()
+        self.asegurar_primer_plano()
+        if foco_actual() != h or not self.ficha_visible():
+            raise Detener("No pude enfocar el Aceptar de la ficha nueva.")
+        send_keys("{SPACE}", pause=PAUSA_TECLA)
+        print("  [auto] Aceptar enviado a la ficha de la persona.")
 
     def _campos_ficha(self, panel):
         """Los 7 campos de la ficha en orden: paterno, materno, nombres, comuna, calle, numero, aclaracion.
@@ -1231,7 +1262,7 @@ class Sistema:
         self.avanzar(ctl, "Hora")
 
     def h_rut(self, ctl, p):
-        r, _ = rut(p["rut"])
+        r = "SR" if limpiar(p["rut"]).upper() == "SR" else rut(p["rut"])[0]
         self.rut_hecho = True
         if not r and not str(p["rut"] or "").strip():
             print("  [ok] RUT vacio (parte sin RUT): Enter")

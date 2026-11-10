@@ -952,6 +952,7 @@ const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.orig
     boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
     oficina:V(p,'Oficina emisora'),descripcion:V(p,'Descripción de la causa'),lugar:V(p,'Lugar'),hora:V(p,'Hora de la infracción'),
     rut:V(p,'RUT (certificado)'),nombre:V(p,'Nombre (certificado)'),direccion:V(p,'Dirección (certificado)'),comuna:V(p,'Comuna (certificado)'),
+    rut_confirmado:Boolean(p.ok?.['RUT (certificado)']&&V(p,'RUT (certificado)')&&!esEmpadronado(p)),
     placa:(p.origen==='carab'&&p.tiene_vehiculo===false)?'':placa6(V(p,'Placa')),tipo_vehiculo:V(p,'Tipo de vehículo (certificado)'),marca:V(p,'Marca (certificado)'),
     infracciones:infrVigentes(p),causa:V(p,'Descripción de la causa'),uid:p.id,ingresado:!!p.fin,rol_ingresado:p.fin?p.rol_ingresado:undefined});
 $('btnTecleo').onclick=()=>{

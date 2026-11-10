@@ -1,2 +1,2 @@
 """Versión del programa. En desarrollo vale «dev»; la compilación automática la reemplaza por la de la Release (ej. v3.0.0)."""
-VERSION = "v5.1.11"
+VERSION = "v5.1.12"
