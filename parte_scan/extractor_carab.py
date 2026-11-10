@@ -461,13 +461,18 @@ def problemas(r):
     return n
 
 
-def fecha_citacion_recorte(texto):
+def fechas_citacion_recorte(texto):
     fechas = set()
     for m in re.finditer(r"\b(?:audiencia|comparecer|citaci[oó]n)\b(?=[^\d]{0,45}(\d.{0,31}))", _plano(texto), re.I):
         fecha = _fecha_num(m[1]) or fecha_de(m[1])
         if fecha:
             fechas.add(fecha)
-    return next(iter(fechas)) if len(fechas) == 1 else ""
+    return sorted(fechas)
+
+
+def fecha_citacion_recorte(texto):
+    fechas = fechas_citacion_recorte(texto)
+    return fechas[0] if len(fechas) == 1 else ""
 
 
 def parte(texto):

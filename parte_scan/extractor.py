@@ -236,6 +236,17 @@ def es_dom(texto):
                 and re.search(r"^\W*citaci[oó]n\s+N", texto, re.I | re.M))
 
 
+def fecha_documento(cabecera):
+    fechas = set()
+    lineas = cabecera.splitlines()
+    for i, linea in enumerate(lineas):
+        if re.match(r"^\W*(?:VALDIVIA|CORRAL|FECHA\s*:)", linea, re.I):
+            fecha = fecha_de(linea) or (fecha_de(lineas[i + 1]) if i + 1 < len(lineas) else "")
+            if fecha:
+                fechas.add(fecha)
+    return next(iter(fechas)) if len(fechas) == 1 else ""
+
+
 def parte_dom(texto):
     lineas = [l.strip() for l in texto.splitlines() if l.strip()]
     _, encabezado = primera(lineas, r"^\W*citaci[oó]n\s+N")

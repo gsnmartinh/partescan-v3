@@ -76,6 +76,8 @@ def armar_carab(r, archivo, pagina, pid):
     """Arma el parte de Carabineros y distingue al denunciado del vehículo empadronado."""
     p = armar(r, archivo, pagina, pid)
     p["lecturas"] = {}
+    if r.get("fechas_citacion"):
+        p["lecturas"]["Fecha de citación"] = [[fecha, "Recorte"] for fecha in r["fechas_citacion"]]
     if r.get("placa_rapid"):
         p["lecturas"]["Placa"] = [[p["placa"], "Tesseract"], [exportar.placa6(r["placa_rapid"]), "RapidOCR"]]
     if r.get("boleta_rapid"):
@@ -263,6 +265,9 @@ def trabajador():
                             PARTES.append(ultimo)
                     elif tipo == "dom":
                         r = motor.extractor.parte_dom(texto)
+                        if not r["fecha_parte"]:
+                            cabecera = motor.releer_franja(g if g is not None else motor.preparar(img), 0, 0.32)
+                            r["fecha_parte"] = motor.extractor.fecha_documento(cabecera)
                         r["oficina"] = perfil.oficinas().get("31", "31")
                         with LOCK:
                             pid = len(IMAGENES) + 1
@@ -274,6 +279,14 @@ def trabajador():
                             PARTES.append(ultimo)
                     elif tipo == "mtt":
                         r = extractor_mtt.parte(texto, None if movil else motor.leer_celdas(g))
+                        if not r["infracciones"] or not r["lugar"] or not r["hora_infraccion"]:
+                            gris = g if g is not None else motor.preparar(img)
+                            respaldo = extractor_mtt.parte(motor.releer_franja(gris, 0, 0.6))
+                            for campo in ("infracciones", "infraccion_texto", "norma", "lugar", "hora_infraccion"):
+                                if not r[campo] and respaldo[campo]:
+                                    r[campo] = respaldo[campo]
+                            if r["infracciones"]:
+                                r["avisos"] = [a for a in r["avisos"] if a != "No pude leer la infracción."]
                         if not r["modalidad_mtt"]:
                             pie = motor.releer_franja(g if g is not None else motor.preparar(img), 0.65, 1)
                             r["modalidad_mtt"] = extractor_mtt.modalidad_notificacion(pie)

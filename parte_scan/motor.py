@@ -218,6 +218,9 @@ def leer_parte(img, texto=None, g=None, *, solo_texto=False):
     if extractor.es_os10(texto):
         from . import perfil
         r = extractor.parte_os10(texto)
+        if not r["fecha_parte"] and img is not None:
+            cabecera = releer_franja(g if g is not None else preparar(img), 0, 0.32)
+            r["fecha_parte"] = extractor.fecha_documento(cabecera)
         r["oficina"] = perfil.oficinas().get("33", "33")
         r["texto_ocr"] = texto
         return r
@@ -357,9 +360,16 @@ def leer_carab(g, texto, *, imagen=None):
     # Validaciones y respaldos secundarios con RapidOCR
     if g is not None:
         av += cotejar_con_rapidocr(g, r)
-    if not r["fecha_citacion"] and (g is not None or imagen is not None):
+    if (not r["fecha_citacion"] or not r["boleta"]) and (g is not None or imagen is not None):
         franja = releer_franja(g if g is not None else preparar(imagen), 0.45, 1)
-        r["fecha_citacion"] = EC.fecha_citacion_recorte(franja)
+        fechas = EC.fechas_citacion_recorte(franja) if not r["fecha_citacion"] else []
+        if len(fechas) == 1:
+            r["fecha_citacion"] = fechas[0]
+        elif fechas:
+            r["fechas_citacion"] = fechas
+        if not r["boleta"]:
+            r["boleta"] = EC._boleta_texto(franja)
+            r["n_parte_final"] = r["boleta"]
     if not r["fecha_citacion"]:
         av.append("Revisa la fecha en el bloque de citación del parte.")
 

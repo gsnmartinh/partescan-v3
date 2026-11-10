@@ -1027,7 +1027,7 @@ class Sistema:
 
     def teclear(self, texto):
         self._seguro()
-        send_keys(esc_keys(texto), pause=PAUSA_TECLA, with_spaces=True)
+        send_keys(esc_keys(texto.upper()), pause=PAUSA_TECLA, with_spaces=True)
 
     def tecla(self, k):
         self._seguro()
@@ -1069,8 +1069,7 @@ class Sistema:
 
     # ---- grillas ----
     def escribir_en_grilla(self, texto, id_overlay, etiqueta):
-        self._seguro()
-        send_keys(esc_keys(texto[0]), pause=PAUSA_TECLA, with_spaces=True)
+        self.teclear(texto[0])
         ov = self.foco_estable(lambda c: c.id == id_overlay and c.hwnd in self.todos, 3.0,
                                f"la caja de edicion de {etiqueta}")
         if len(texto) > 1:
