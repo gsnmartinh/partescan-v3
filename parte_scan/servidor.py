@@ -372,6 +372,9 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, open(os.path.join(WEB, "index.html"), "rb").read(), "text/html; charset=utf-8")
         if u.path == "/fluent.css":
             return self._send(200, open(os.path.join(WEB, "fluent.css"), "rb").read(), "text/css; charset=utf-8")
+        if u.path == "/calles-valdivia.txt":
+            with open(os.path.join(WEB, "calles-valdivia.txt"), "rb") as archivo:
+                return self._send(200, archivo.read(), "text/plain; charset=utf-8")
         logos = {"/brand/partescan.svg": ("partescan.svg", "image/svg+xml"),
                  "/brand/captura.svg": ("captura.svg", "image/svg+xml"),
                  "/favicon.ico": ("partescan.ico", "image/x-icon")}

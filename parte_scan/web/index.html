@@ -421,10 +421,10 @@ function campos(p){
   }
   S.push({t:'4 · Datos del denunciado',empadronadoControl:carab,modalidadControl:mtt&&p.modalidad_mtt!==undefined,sub:esEmpadronado(p)?'Identificación por tipo de vehículo y patente.':mtt&&p.modalidad_mtt!==undefined?({personal:'Fuente: folio del MTT.',empadronado:'Fuente: certificado del Registro Civil.'}[p.modalidad_mtt]||'Revisa la modalidad al pie del parte.'):p.notificado_personalmente?'Fuente de identidad: infractor del parte. El certificado aporta datos del vehículo.':p.img_cert?'Fuente: certificado del Registro Civil.':p.parte_escrito||carab||p.origen==='dom'?'Fuente: parte escaneado.':'',f:[
     ...(esEmpadronado(p)?[]:filaInf),
-    gc('RUT (certificado)',esEmpadronado(p)?'':c.rut||'',esEmpadronado(p)?'blank':c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
-    gc('Nombre (certificado)',esEmpadronado(p)?nombreEmpadronado(p):/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String(p.ed?.Placa??p.placa??'').trim().toUpperCase()).trim():c.nombre||'',c.nombre?'ok':'check',''),
+    gc('RUT (certificado)',esEmpadronado(p)?(carab?'SR':''):c.rut||'',esEmpadronado(p)?(carab?'ok':'blank'):c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
+    gc('Nombre (certificado)',esEmpadronado(p)?nombreEmpadronado(p):/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String(p.ed?.Placa??p.placa??'').trim().toUpperCase()).trim():c.nombre||'',esEmpadronado(p)||c.nombre?'ok':'check',''),
     gc('Dirección (certificado)',c.direccion||'',c.direccion?'ok':(carab?'blank':'check'),''),
-    gc('Comuna (certificado)',c.comuna||'',c.comuna?'ok':'check',''),
+    gc('Comuna (certificado)',c.comuna||(carab&&esEmpadronado(p)?'VALDIVIA':''),c.comuna||(carab&&esEmpadronado(p))?'ok':'check',''),
     gc('Marca (certificado)',c.marca||p.marca||'',(c.marca||p.marca)?'ok':'blank',''),
     gc('Modelo (certificado)',c.modelo||'',c.modelo?'ok':'blank',''),
     ...(mtt?[gc('Año (certificado)',c.anio||'',c.anio?'ok':'check','')]:[]),
@@ -452,6 +452,33 @@ function mostrarFoto(p){
   $('tabC').classList.toggle('on',vista==='c');
   $('tabC').disabled=!p.img_cert;
 }
+let callejeroValdivia=[];
+const prefijoCalle=/^\s*(?:calle|av\.?|avenida|pasaje|pje\.?)\s+/i;
+function normalizarCalle(texto){
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()
+    .replace(/0(?=[A-Z])|(?<=[A-Z])0/g,'O').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+function sugerirCalles(texto){
+  const tramos=texto.split(/(\s+esquina\s+|\s+con\s+|\s+\/\s+)/i);
+  const sugerencias=[];
+  for(let i=0;i<tramos.length;i+=2){
+    const m=tramos[i].match(/^(\s*(?:(?:calle|av\.?|avenida|pasaje|pje\.?)\s+)?)(.*?)(\s+(?:N[°º.]?\s*)?\d.*|\s+S\/N.*|,.*)?$/i);
+    if(!m||/^\s*ruta\b/i.test(tramos[i])) continue;
+    const clave=normalizarCalle(m[2]);
+    if(clave.length<3) continue;
+    for(const calle of callejeroValdivia.filter(c=>c.clave.startsWith(clave)||c.clave.includes(' '+clave)).slice(0,6)){
+      const copia=tramos.slice();
+      copia[i]=m[1]+(m[1].trim()?calle.nombre.replace(prefijoCalle,''):calle.nombre)+(m[3]||'');
+      const valor=copia.join('');
+      if(valor!==texto&&!sugerencias.includes(valor)) sugerencias.push(valor);
+    }
+  }
+  return sugerencias.slice(0,8);
+}
+fetch('/calles-valdivia.txt').then(r=>r.ok?r.text():'').then(txt=>{
+  callejeroValdivia=txt.split(/\r?\n/).map(nombre=>nombre.trim()).filter(nombre=>nombre&&!nombre.startsWith('#'))
+    .map(nombre=>({nombre,clave:normalizarCalle(nombre.replace(prefijoCalle,''))}));
+}).catch(()=>{});
 function mostrar(){
   $('drop').hidden=Boolean(P.length);
   $('leyenda').hidden=!P.length;
@@ -529,6 +556,41 @@ function mostrar(){
         '<input class="val" aria-label="'+esc(key)+'"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+esc(val)+'" placeholder="(en blanco)">';
       r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+estado+'">'+(estado==='ok'&&p.ok?.[key]?'Confirmado':LAB[estado])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((estado==='check'&&String(val).trim())?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
       const el=r.querySelector('.val');
+      if(key==='Lugar'||key==='Dirección (certificado)'){
+        const lista=document.createElement('div');
+        lista.className='meta';
+        lista.setAttribute('aria-label','Sugerencias del callejero de Valdivia');
+        const actualizarCalles=()=>{
+          const comuna=key==='Lugar'?'':normalizarCalle(valorActual(p,'Comuna (certificado)'));
+          const oficina=normalizarCalle(valorActual(p,'Oficina emisora'));
+          const esCorral=carab0(p)&&/\bCORRAL\b/.test(oficina);
+          const valores=!esCorral&&(!comuna||comuna==='VALDIVIA')?sugerirCalles(el.value):[];
+          const opciones=valores.map(valor=>{
+            const boton=document.createElement('button');
+            boton.type='button';
+            boton.textContent=valor;
+            boton.onclick=()=>{
+              el.value=valor;
+              el.dispatchEvent(new Event('change'));
+              lista.replaceChildren();
+            };
+            return boton;
+          });
+          lista.replaceChildren(...opciones);
+          if(opciones.length){
+            const fuente=document.createElement('a');
+            fuente.href='https://www.openstreetmap.org/copyright';
+            fuente.target='_blank';
+            fuente.rel='noopener noreferrer';
+            fuente.textContent='© OpenStreetMap';
+            lista.appendChild(fuente);
+          }
+        };
+        el.addEventListener('focus',actualizarCalles);
+        el.addEventListener('input',actualizarCalles);
+        el.after(lista);
+        actualizarCalles();
+      }
       if(esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)'].includes(key)) el.readOnly=true;
       el.oninput=el.onchange=e=>{
         if(e.type==='change'){
@@ -547,6 +609,7 @@ function mostrar(){
         const confirmar=r.querySelector('.cf');
         if(confirmar) confirmar.hidden=actual!=='check'||!el.value.trim();
         pintarTira();
+        if(e.type==='change'&&(esOfi||key==='Comuna (certificado)')) refrescarConScroll();
         if(key==='Infractor de esta copia (1, 2)'||(e.type==='change'&&esEmpadronado(p)&&['Placa','Tipo de vehículo (certificado)'].includes(key))) mostrar();
         if(e.type==='change') autoguardar().catch(()=>{});
       };
@@ -577,7 +640,7 @@ function mostrar(){
       }
       if(key==='Placa'&&!esEmpadronado(p))el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
-      r.querySelector('button').onclick=()=>{activeKey=key;copiarCampo(p,key)};
+      r.lastElementChild.firstElementChild.onclick=()=>{activeKey=key;copiarCampo(p,key)};
       const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; p.ok[key]=true; pintarTira(); mostrar() };
       if(key==='Nombre (certificado)' && p.notificado_personalmente){
         const ordenar=document.createElement('button');
@@ -623,6 +686,9 @@ function nombreEmpadronado(p){
   return [tipo,placa].map(v=>String(v).trim().toUpperCase()).filter(Boolean).join(' ');
 }
 function valorActual(p,key){
+  if(p.origen==='carab'&&esEmpadronado(p)&&key==='Comuna (certificado)'&&key in (p.ed||{})){
+    return String(p.ed[key]??'').trim()||'VALDIVIA';
+  }
   if(esEmpadronado(p)){
     if(key==='RUT (certificado)') return p.origen==='carab'?'SR':'';
     if(key==='Nombre (certificado)') return nombreEmpadronado(p);
@@ -655,12 +721,17 @@ function V(p,k){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}
 function estadoCampo(p,f,valor){
+  if(p.origen==='carab'&&esEmpadronado(p)&&f.k==='Dirección (certificado)'&&!String(valor??'').trim()) return 'blank';
   if(!String(valor??'').trim()) return f.st==='blank'?'blank':'check';
   if(p.ok?.[f.k]||f.k in (p.ed||{})) return 'ok';
   if(new Set((p.lecturas?.[f.k]||[]).map(([valor])=>valor).filter(Boolean)).size>1) return 'check';
   return f.st;
 }
-const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>estadoCampo(p,f,p.ed?.[f.k]??f.v)==='check').length,0);
+const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>{
+  const identidadAutomatica=esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)'].includes(f.k);
+  if(p.origen==='carab'&&esEmpadronado(p)&&f.k==='Comuna (certificado)') return false;
+  return estadoCampo(p,f,identidadAutomatica?f.v:p.ed?.[f.k]??f.v)==='check';
+}).length,0);
 function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
 const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
     boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
