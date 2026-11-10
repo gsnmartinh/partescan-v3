@@ -15,6 +15,7 @@ import android.graphics.RectF;
 import android.graphics.pdf.PdfDocument;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -45,6 +46,11 @@ public class MainActivity extends Activity {
     private FluentStyle fluent;
     private final ArrayList<String> pages = new ArrayList<>();
     private final ArrayList<Integer> attachments = new ArrayList<>();
+    private final java.util.concurrent.ExecutorService ocrQueue =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.Set<File> queuedOcr = new java.util.HashSet<>();
+    private final java.util.Map<TextView, java.util.List<String>> photoNotices = new java.util.HashMap<>();
+    private TextView ocrStatus;
     private int completedParts;
     private String part;
     private String certificate;
@@ -52,6 +58,8 @@ public class MainActivity extends Activity {
     private int editingIndex = -1;
     private String undoDelete;
     private static final int OPEN_BATCH = 6;
+    private static final int SAVE_BLOCKS = 7;
+    private static final int PARTS_PER_BLOCK = 25;
     private boolean busy;
     private android.window.OnBackInvokedCallback systemBackCallback;
     private static final int TANDA = 0, CAPTURA = 1, GUARDAR = 2;
@@ -110,6 +118,7 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        ocrQueue.shutdown();
         if (android.os.Build.VERSION.SDK_INT >= 33 && systemBackCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBackCallback);
         }
@@ -266,14 +275,20 @@ public class MainActivity extends Activity {
 
     private void render(String message) {
         busy = false;
+        photoNotices.clear();
         if (screen != CAPTURA) commitCurrent();
         persist();
+        for (String page : pages) queueOcr(page);
+        queueOcr(part);
+        queueOcr(certificate);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(fluent.background);
         root.setFitsSystemWindows(true);
         setContentView(root);
         renderHeader(root);
+        ocrStatus = text(root, "", 14);
+        ocrStatus.setPadding(fluent.dp(20), fluent.dp(6), fluent.dp(20), fluent.dp(6));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -287,6 +302,7 @@ public class MainActivity extends Activity {
         else renderSave(body);
         renderPrimaryAction(root);
         renderNavigation(root);
+        updateOcrStatus();
     }
 
     private void renderHeader(LinearLayout root) {
@@ -355,6 +371,7 @@ public class MainActivity extends Activity {
             detail.setPadding(fluent.dp(12), fluent.dp(4), fluent.dp(4), fluent.dp(4));
             label(detail, "Parte " + (index + 1), 18);
             text(detail, group.size() > 1 ? "Certificado adjunto" : "Sin certificado", 14);
+            photoNotices.put(text(detail, "", 14), group);
             target.addView(detail, new LinearLayout.LayoutParams(0, -2, 1));
             card.addView(target, new LinearLayout.LayoutParams(0, -2, 1));
             iconAction(card, R.drawable.ic_more, "Opciones del parte " + (index + 1), view -> {
@@ -432,6 +449,17 @@ public class MainActivity extends Activity {
         label(recommended, "Archivo para ParteScan", 20);
         text(recommended, "Imágenes y texto en un solo archivo, para revisar y editar en ParteScan.", 16);
         text(recommended, "Formato .psocr · Se prepara en este teléfono", 14);
+        if (count > PARTS_PER_BLOCK) {
+            button(recommended, "Guardar por bloques de 25 partes", true, () -> {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+                try {
+                    startActivityForResult(intent, SAVE_BLOCKS);
+                } catch (RuntimeException error) {
+                    render("No se pudo abrir el selector de carpetas.");
+                }
+            });
+        }
         space(body, 12);
         text(body, count == 0 ? "Agrega un parte en Escanear para preparar tu archivo." : "Después de guardar, copia el archivo al computador por USB y ábrelo en ParteScan.", 14);
     }
@@ -593,7 +621,7 @@ public class MainActivity extends Activity {
         body.addView(button, layout);
     }
 
-    private void progress(String message) {
+    private TextView progress(String message) {
         busy = true;
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -611,9 +639,11 @@ public class MainActivity extends Activity {
         text.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
         panel.addView(text);
         setContentView(panel);
+        return text;
     }
 
     private void compactPhoto(LinearLayout body, String name, String description, int captureMode) {
+        photoNotices.put(text(body, "", 14), java.util.Collections.singletonList(name));
         LinearLayout photoRow = row();
         photoRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         ImageView photo = thumbnail(name, 56, 72);
@@ -712,8 +742,8 @@ public class MainActivity extends Activity {
                 certificate = captured;
             }
             orientPhoto(captured, true);
-        } else if (request == SAVE_OCR && result == RESULT_OK && data != null && data.getData() != null) {
-            exportOcr(data.getData());
+        } else if ((request == SAVE_OCR || request == SAVE_BLOCKS) && result == RESULT_OK && data != null && data.getData() != null) {
+            exportOcr(data.getData(), request == SAVE_BLOCKS);
         } else if (request == SAVE && result == RESULT_OK && data != null && data.getData() != null) {
             PdfDocument pdf = new PdfDocument();
             try {
@@ -773,7 +803,9 @@ public class MainActivity extends Activity {
                             try (FileOutputStream output = new FileOutputStream(temporary)) {
                                 if (!rotated.compress(Bitmap.CompressFormat.JPEG, 95, output)) throw new IOException();
                             }
+                            File previousOcr = ocrCache(name);
                             Files.move(temporary.toPath(), new File(folder, name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                            new android.util.AtomicFile(previousOcr).delete();
                         } finally {
                             temporary.delete();
                         }
@@ -826,33 +858,189 @@ public class MainActivity extends Activity {
         return dominant;
     }
 
-    private void exportOcr(android.net.Uri destination) {
-        commitCurrent();
+    private File ocrCache(String name) {
+        File photo = new File(folder, name);
+        return new File(folder, name + "." + photo.lastModified() + "." + photo.length() + ".v2.ocr");
+    }
+
+    private void updateOcrStatus() {
         ArrayList<String> photos = new ArrayList<>(pages);
-        ArrayList<Integer> certificates = new ArrayList<>(attachments);
         if (part != null) photos.add(part);
-        if (certificate != null) {
-            certificates.add(photos.size());
-            photos.add(certificate);
+        if (certificate != null) photos.add(certificate);
+        int read = 0;
+        for (String photo : photos) if (ocrCache(photo).isFile()) read++;
+        if (ocrStatus != null) {
+            ocrStatus.setVisibility(photos.isEmpty() ? View.GONE : View.VISIBLE);
+            ocrStatus.setText(read + " de " + photos.size() + " páginas leídas");
         }
-        progress("Reconociendo texto en el teléfono…");
-        new Thread(() -> {
-            String message;
-            TextRecognizer reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            File staged = null;
+        photoNotices.forEach((notice, names) -> {
+            boolean review = false;
+            for (String name : names) {
+                File cache = ocrCache(name);
+                if (cache.isFile() && cache.length() < 80) review = true;
+            }
+            notice.setText(review ? "Revisar foto · poco texto legible" : "");
+            notice.setVisibility(review ? View.VISIBLE : View.GONE);
+        });
+    }
+
+    private void queueOcr(String name) {
+        if (name == null || ocrQueue.isShutdown()) return;
+        File cache = ocrCache(name);
+        if (cache.isFile() || !queuedOcr.add(cache)) return;
+        ocrQueue.execute(() -> {
             try {
-                JSONArray manifest = new JSONArray();
-                for (int i = 0; i < photos.size(); i++) {
-                    Bitmap bitmap = decode(photos.get(i), 3000);
-                    String text;
-                    try {
-                        text = orderedText(Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0))));
-                    } finally {
-                        bitmap.recycle();
+                if (new File(folder, name).isFile() && cache.equals(ocrCache(name))) readOcr(name);
+            } catch (Exception error) {
+                // Al exportar se reintentan las páginas que quedaron pendientes.
+            } finally {
+                runOnUiThread(() -> {
+                    queuedOcr.remove(cache);
+                    if (!busy && !isDestroyed()) updateOcrStatus();
+                });
+            }
+        });
+    }
+
+    private String readOcr(String name) throws Exception {
+        File cache = ocrCache(name);
+        if (cache.isFile()) {
+            try {
+                return new String(Files.readAllBytes(cache.toPath()), StandardCharsets.UTF_8);
+            } catch (IOException error) {
+                // Si la copia local no se puede leer, se vuelve a reconocer la foto.
+            }
+        }
+        Bitmap bitmap = decode(name, 3000);
+        TextRecognizer reader = null;
+        String text;
+        try {
+            reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            text = orderedText(Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0))));
+            text = rereadMissing(reader, bitmap, text);
+        } finally {
+            bitmap.recycle();
+            if (reader != null) reader.close();
+        }
+        if (new File(folder, name).isFile() && cache.equals(ocrCache(name))) {
+            android.util.AtomicFile target = new android.util.AtomicFile(cache);
+            FileOutputStream output = null;
+            try {
+                output = target.startWrite();
+                output.write(text.getBytes(StandardCharsets.UTF_8));
+                target.finishWrite(output);
+            } catch (IOException error) {
+                target.failWrite(output);
+            }
+        }
+        return text;
+    }
+
+    private String rereadMissing(TextRecognizer reader, Bitmap bitmap, String text) {
+        String normalized = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toUpperCase(java.util.Locale.ROOT);
+        String missing;
+        int start = 0, end = 100;
+        if (normalized.contains("ANTECEDENTES DEL INFRACTOR")
+                && !normalized.matches("(?s).*(NOTIFICAD[OA]\\s+PERSONALMENTE|EMPADRONAD[OA]).*")) {
+            start = 65;
+            missing = "NOTIFICAD[OA]\\s+PERSONALMENTE|EMPADRONAD[OA]";
+        } else if (normalized.contains("DATOS DEL PROPIETARIO")
+                && !normalized.matches("(?s).*R\\.?\\s*U\\.?\\s*[NT]\\.?\\s*[:;]?\\s*[0-9. ]{7,14}[-–]\\s*[0-9K].*")) {
+            start = 30;
+            end = 85;
+            missing = "R\\.?\\s*U\\.?\\s*[NT]\\.?\\s*[:;]?\\s*[0-9. ]{7,14}[-–]\\s*[0-9K]";
+        } else if (normalized.contains("JUZGADO") && !normalized.matches("(?s).*BOLETA[^\\n]{0,25}\\d{4,}.*")) {
+            end = 35;
+            missing = "(?:BOLETA|PARTE)[^\\n]{0,25}\\d{4,}";
+        } else if (normalized.contains("VEHICULO")
+                && !normalized.matches("(?s).*(?:PATENTE|P\\.?P\\.?U\\.?)[^\\n]{0,12}[A-Z]{2,4}[- .]*\\d{2,4}.*")) {
+            start = 35;
+            end = 85;
+            missing = "(?:PATENTE|P\\.?P\\.?U\\.?)[^\\w\\n]{0,12}[A-Z]{2,4}[- .]*\\d{2,4}";
+        } else {
+            return text;
+        }
+        int top = bitmap.getHeight() * start / 100;
+        Bitmap crop = Bitmap.createBitmap(bitmap, 0, top, bitmap.getWidth(),
+                Math.max(1, bitmap.getHeight() * end / 100 - top));
+        try {
+            String extra = orderedText(Tasks.await(reader.process(InputImage.fromBitmap(crop, 0))));
+            java.util.regex.Matcher match = java.util.regex.Pattern.compile(missing, java.util.regex.Pattern.CASE_INSENSITIVE).matcher(extra);
+            if (match.find()) {
+                String line = match.group();
+                int owner = normalized.indexOf("DATOS DEL PROPIETARIO");
+                if (owner >= 0 && start == 30) {
+                    java.util.regex.Matcher header = java.util.regex.Pattern.compile("(?im)^.*DATOS DEL PROPIETARIO[^\\r\\n]*").matcher(text);
+                    if (header.find()) return text.substring(0, header.end()) + "\n" + line + text.substring(header.end());
+                } else if (start == 65 || start == 35) return text + "\n" + line;
+                else return line + "\n" + text;
+            }
+        } catch (Exception error) {
+            // La primera lectura sigue disponible.
+        } finally {
+            if (crop != bitmap) crop.recycle();
+        }
+        return text;
+    }
+
+    private void exportOcr(android.net.Uri destination, boolean byBlocks) {
+        commitCurrent();
+        ArrayList<ArrayList<String>> parts = groups();
+        TextView status = progress("Completando las lecturas pendientes…");
+        ocrQueue.execute(() -> {
+            int saved = 0;
+            try {
+                int size = byBlocks ? PARTS_PER_BLOCK : Math.max(1, parts.size());
+                String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT)
+                        .format(new java.util.Date());
+                for (int offset = 0; offset < parts.size(); offset += size) {
+                    android.net.Uri output = destination;
+                    if (byBlocks) {
+                        android.net.Uri parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                                destination, android.provider.DocumentsContract.getTreeDocumentId(destination));
+                        output = android.provider.DocumentsContract.createDocument(getContentResolver(), parent,
+                                "application/octet-stream", String.format(java.util.Locale.ROOT,
+                                        "ParteScan-%s-bloque-%03d.psocr", stamp, saved + 1));
+                        if (output == null) throw new IOException("No se pudo crear el bloque");
                     }
-                    manifest.put(new JSONObject().put("texto", text)
-                        .put("certificado", certificates.contains(i)));
+                    try {
+                        writeOcrBlock(parts.subList(offset, Math.min(offset + size, parts.size())), output, status);
+                    } catch (Exception error) {
+                        if (byBlocks) {
+                            try { android.provider.DocumentsContract.deleteDocument(getContentResolver(), output); }
+                            catch (Exception ignored) { }
+                        }
+                        throw error;
+                    }
+                    saved++;
                 }
+                String message = byBlocks ? saved + " bloques guardados y verificados."
+                        : "Tanda guardada. Lleva el archivo .psocr al computador y ábrelo en ParteScan.";
+                runOnUiThread(() -> { if (!isDestroyed()) render(message); });
+            } catch (Exception error) {
+                String message = (saved > 0 ? saved + " bloques verificados. " : "")
+                        + "No se completó la exportación. La tanda sigue en el teléfono.";
+                runOnUiThread(() -> { if (!isDestroyed()) render(message); });
+            }
+        });
+    }
+
+    private void writeOcrBlock(java.util.List<ArrayList<String>> parts, android.net.Uri destination,
+                               TextView status) throws Exception {
+        File staged = null;
+        try {
+                runOnUiThread(() -> status.setText("Completando las lecturas pendientes…"));
+                ArrayList<String> photos = new ArrayList<>();
+                JSONArray manifest = new JSONArray();
+                for (ArrayList<String> group : parts) {
+                    for (int i = 0; i < group.size(); i++) {
+                        String photo = group.get(i);
+                        photos.add(photo);
+                        manifest.put(new JSONObject().put("texto", readOcr(photo)).put("certificado", i > 0));
+                    }
+                }
+                runOnUiThread(() -> status.setText("Creando el archivo…"));
                 // Termina el ZIP local antes de copiarlo al proveedor elegido para compartir.
                 staged = File.createTempFile("partescan-", ".psocr", getCacheDir());
                 try (OutputStream stream = java.nio.file.Files.newOutputStream(staged.toPath());
@@ -870,22 +1058,16 @@ public class MainActivity extends Activity {
                     if (stream == null) throw new java.io.IOException("Destino no disponible");
                     java.nio.file.Files.copy(staged.toPath(), stream);
                 }
+                runOnUiThread(() -> status.setText("Verificando la copia…"));
                 try (java.io.InputStream saved = getContentResolver().openInputStream(destination);
                      java.io.InputStream original = java.nio.file.Files.newInputStream(staged.toPath())) {
                     if (saved == null || !java.util.Arrays.equals(exportDigest(original), exportDigest(saved))) {
                         throw new java.io.IOException("La copia guardada no coincide con la exportación local");
                     }
                 }
-                message = "Tanda guardada. Lleva el archivo .psocr al computador y ábrelo en ParteScan.";
-            } catch (Exception error) {
-                message = "No se pudo guardar y verificar el archivo. La tanda sigue en el teléfono. Vuelve a exportarla.";
-            } finally {
-                if (staged != null) staged.delete();
-                reader.close();
-            }
-            String result = message;
-            runOnUiThread(() -> render(result));
-        }).start();
+        } finally {
+            if (staged != null) staged.delete();
+        }
     }
 
     private static byte[] exportDigest(java.io.InputStream stream)
@@ -962,6 +1144,9 @@ public class MainActivity extends Activity {
     }
 
     private void delete(String name) {
-        if (name != null) new File(folder, name).delete();
+        if (name == null) return;
+        File cache = ocrCache(name);
+        new File(folder, name).delete();
+        new android.util.AtomicFile(cache).delete();
     }
 }
