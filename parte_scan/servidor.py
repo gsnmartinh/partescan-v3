@@ -40,6 +40,13 @@ def armar(r, archivo, pagina, pid):
     escrito = r.get("parte_escrito", False) or (not r["placa"] and catalogo.actividad_sin_patente(r["infraccion_texto"]))
     personal = r.get("notificado_personalmente", False)
     avisos = list(r["avisos"])
+    for bloque in r.get("bloques_infraccion", []):
+        _, adicionales = catalogo.resolver(bloque)
+        for item in adicionales:
+            if item["cod"] not in {i["cod"] for i in items}:
+                items.append(dict(item, estado="check", nota="Confirma esta infracción adicional en la imagen: " + bloque))
+    if len(items) > 1:
+        avisos.append("Revisa la imagen y confirma que estén todas las infracciones del parte.")
     if personal:
         avisos.append("Notificado personalmente: revisa los datos del infractor y el orden de nombres y apellidos.")
     if comodin:
@@ -66,6 +73,11 @@ def armar(r, archivo, pagina, pid):
 def armar_carab(r, archivo, pagina, pid):
     """Arma el parte de Carabineros y distingue al denunciado del vehículo empadronado."""
     p = armar(r, archivo, pagina, pid)
+    p["lecturas"] = {}
+    if r.get("placa_rapid"):
+        p["lecturas"]["Placa"] = [[p["placa"], "Tesseract"], [exportar.placa6(r["placa_rapid"]), "RapidOCR"]]
+    if r.get("boleta_rapid"):
+        p["lecturas"]["N° de boleta (folio)"] = [[r["boleta"], "Tesseract"], [r["boleta_rapid"], "RapidOCR"]]
     veh = r["tiene_vehiculo"]
     nombre = r["infractor_nombre"]
     empadronado = r.get("empadronado", False)
@@ -116,8 +128,9 @@ def armar_mtt(r, archivo, pagina, pid):
         items += [i for i in its if i["cod"] not in [x["cod"] for x in items]]
     personal = r.get("notificado_personalmente", False)
     avisos = list(r["avisos"])
-    if personal:
-        avisos.append("Notificado personalmente: revisa los datos del infractor y el orden de nombres y apellidos.")
+    modalidad = r.get("modalidad_mtt", "")
+    if not modalidad:
+        avisos.append("Revisa al pie del parte si fue notificado personalmente o empadronado antes de completar los datos del denunciado.")
     if literal:
         avisos.append("No reconocí la infracción: se ingresará con el código %s y la descripción dirá lo que dice el parte. "
                       "Revísalo." % catalogo.comodin())
@@ -131,33 +144,46 @@ def armar_mtt(r, archivo, pagina, pid):
         avisos.append("No pude leer el N° de la boleta de citación (al pie del parte): escribe sus primeros 6 dígitos como folio.")
     if len(r["infracciones"]) > 1:
         avisos.append("Este parte trae %d infracciones: la descripción de la causa es la primera; ingresa todas." % len(r["infracciones"]))
+        for item in items:
+            item["estado"] = "check"
+            item["nota"] = (item["nota"] + " Confirma este código con la imagen del parte.").strip()
     p.update({
-        "origen": "mtt", "boleta": r["boleta"], "inspector": r["inspector"], "norma": r["norma"],
+        "origen": "mtt", "modalidad_mtt": modalidad, "boleta": r["boleta"], "inspector": r["inspector"], "norma": r["norma"],
+        "identidad_folio": {k: r["infractor_" + k] for k in ("rut", "nombre", "direccion", "comuna")},
         "calidad": r["calidad"], "observaciones": r["observaciones"], "causa": causa, "causa_literal": literal,
         "items": [{"cod": i["cod"], "estado": i["estado"], "nota": i["nota"]} for i in items],
         "avisos": avisos,
-        "cert": {"rut": r["infractor_rut"], "nombre": r["infractor_nombre"], "direccion": r["infractor_direccion"],
-                 "comuna": r["infractor_comuna"], "marca": r["marca"], "modelo": r["modelo"],
+        "cert": {"rut": r["infractor_rut"] if personal else "", "nombre": r["infractor_nombre"] if personal else "",
+                 "direccion": r["infractor_direccion"] if personal else "", "comuna": r["infractor_comuna"] if personal else "",
+                 "marca": r["marca"], "modelo": r["modelo"],
                  "tipo_vehiculo": exportar.tipo_limpio(r["tipo_vehiculo"]), "dv_placa": r["dv_placa"], "anio": r["anio"], "color": ""},
-        "cert_avisos": [],
+        "cert_avisos": ["Falta el certificado del Registro Civil de este parte."] if modalidad == "empadronado" else [],
     })
     return p
 
 
-def aplicar_certificado(p, c, pid_img):
+def aplicar_certificado(p, c, pid_img, *, placa_verificada=""):
     """Une los datos del certificado c (dict de certificado.leer) al parte p."""
     placa, aviso = certificado.conciliar_placa(exportar.placa6(p["placa"]), exportar.placa6(c["placa"]))
-    p["placa"] = exportar.placa6(placa)
     if not p.get("img_cert"):
         import copy
-        p["sin_cert"] = {k: copy.deepcopy(p[k]) for k in ("cert", "cert_avisos", "placa", "marca", "tipo_vehiculo")}
+        p["sin_cert"] = {k: copy.deepcopy(p[k]) for k in ("cert", "cert_avisos", "placa", "marca", "tipo_vehiculo", "lecturas") if k in p}
+        p["sin_cert"].setdefault("lecturas", {})
+    if placa_verificada:
+        placa, aviso = placa_verificada, ""
+    elif p["placa"] and c["placa"] and exportar.placa6(p["placa"]) != exportar.placa6(c["placa"]):
+        lecturas = p.setdefault("lecturas", {})
+        lecturas.setdefault("Placa", [[p["placa"], "Parte"]]).append([exportar.placa6(c["placa"]), "Certificado"])
+    p["placa"] = exportar.placa6(placa)
     c = dict(c, tipo_vehiculo=exportar.tipo_limpio(c["tipo_vehiculo"]))
     p["img_cert"] = pid_img
     persona = {k: p["cert"].get(k, "") for k in ("rut", "nombre", "direccion", "comuna")}
     p["cert"] = {k: c[k] for k in ("rut", "nombre", "direccion", "comuna", "marca", "modelo",
                                    "tipo_vehiculo", "dv_placa", "anio", "color")}
-    if p.get("notificado_personalmente"):
+    if p.get("notificado_personalmente") or (p.get("origen") == "mtt" and p.get("modalidad_mtt") == ""):
         p["cert"].update(persona)
+    if p.get("origen") == "mtt":
+        p["identidad_registro"] = {k: c[k] for k in persona}
     p["cert_avisos"] = list(c["avisos"]) + ([aviso] if aviso else [])
     # el tipo de vehículo y la marca del certificado son más fiables que los del parte
     if c["tipo_vehiculo"]:
@@ -246,6 +272,10 @@ def trabajador():
                             PARTES.append(ultimo)
                     elif tipo == "mtt":
                         r = extractor_mtt.parte(texto, None if movil else motor.leer_celdas(g))
+                        if not r["modalidad_mtt"]:
+                            pie = motor.releer_franja(g if g is not None else motor.preparar(img), 0.65, 1)
+                            r["modalidad_mtt"] = extractor_mtt.modalidad_notificacion(pie)
+                            r["notificado_personalmente"] = r["modalidad_mtt"] == "personal"
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
@@ -253,7 +283,7 @@ def trabajador():
                             ultimo = armar_mtt(r, nombre, n, pid)
                             PARTES.append(ultimo)
                     elif tipo == "carab":
-                        r = motor.leer_carab(g, texto)
+                        r = motor.leer_carab(g, texto, imagen=img)
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
@@ -262,12 +292,22 @@ def trabajador():
                             PARTES.append(ultimo)
                     elif tipo == "certificado":
                         c = motor.leer_certificado(g, texto, imagen=img)
+                        placa_verificada = ""
+                        if ultimo is not None and ultimo["id"] in IMAGENES and not ultimo.get("parte_escrito") and not ultimo["img_cert"]:
+                            a, b = (exportar.placa6(valor) for valor in (ultimo["placa"], c["placa"]))
+                            if a and b and sum(x != y for x, y in zip(a, b)) == 1 and len(a) == len(b):
+                                _, aviso_placa = certificado.conciliar_placa(a, b)
+                                parte_zona = motor.releer_franja(motor.preparar(IMAGENES[ultimo["id"]]), 0.2, 0.8)
+                                cert_zona = motor.releer_franja(g if g is not None else motor.preparar(img), 0, 0.53)
+                                segunda = exportar.placa6(certificado.leer(cert_zona)["placa"])
+                                if aviso_placa and segunda in (a, b) and re.search(r"\b" + r"[ .-]*".join(segunda) + r"\b", parte_zona, re.I):
+                                    placa_verificada = segunda
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img
                             TEXTOS[pid] = texto
                             if ultimo is not None and not ultimo.get("parte_escrito") and ultimo["img_cert"] == 0:
-                                aplicar_certificado(ultimo, c, pid)
+                                aplicar_certificado(ultimo, c, pid, placa_verificada=placa_verificada)
                             else:
                                 ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
                     else:

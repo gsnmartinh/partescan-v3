@@ -142,6 +142,18 @@ def resolver(texto):
     def tres():
         return [crear_item(por_abrev(a)) for a in ("SEGURO", "PERMISO", "REVISION")]
 
+    sin_documentos = re.search(
+        r"\b(?:SIN|NO)\s+PORTAR\s+LA\s+TOTALI\s*DAD\s+DE\s+(?:SUS|LOS)\s+DOCUMENTOS\b", T)
+    if sin_documentos and (T.startswith(sin_documentos[0]) or re.search(r"\b(?:SIN|NO)\s+PORTAR\s+LICENCIA\b", T)):
+        documentos = tres()
+        for item in documentos:
+            item["estado"] = "check"
+            item["nota"] = "Verifica en la imagen: «" + sin_documentos[0] + "»."
+        if re.search(r"\b(?:SIN|NO)\s+PORTAR\s+LICENCIA\b", T):
+            licencia = crear_item(por_abrev("SINL"))
+            return licencia["x"]["t"], [licencia, *documentos]
+        return "CONDUCIR SIN LA TOTALIDAD DE LA DOCUMENTACION", documentos
+
     # «no detenerse ante señal PARE de Carabineros» (código 38): se ingresa junto con las demás infracciones del parte
     # que sí tienen código (estacionar sobre la acera…). Atropello y vehículo abandonado no se ingresan.
     if re.search(r"SENAL\s+PARE\s+(DE\s+)?(LOS\s+)?CARABINEROS|CARABINEROS.{0,40}SENAL\s+PARE|NO DETENERSE ANTE SENAL PARE", T):

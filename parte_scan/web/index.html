@@ -44,6 +44,7 @@ main{display:grid;grid-template-columns:minmax(300px,42%) 1fr;gap:16px;padding:0
 .lab{font-size:13px;color:var(--mut);padding-top:8px}
 .val{width:100%}
 select.val{padding:6px 8px}
+.selector-revision{margin-top:8px}
 .row.big .val{font-size:20px;font-weight:600}
 .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:12px;align-items:center}
 .tag{border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600}.t-ok{background:var(--okb);color:var(--ok)}.t-check{background:var(--ckb);color:var(--ck)}.t-blank{background:var(--blb);color:var(--bl)}
@@ -414,8 +415,12 @@ function campos(p){
   const c=Object.assign({},p.cert||{},(p.infractores&&p.infractores.length>1)?p.infractores[infIdx(p)]:{}), malRut=(p.cert_avisos||[]).some(x=>/RUT/.test(x)&&!/^(Infractor|El infractor)/.test(x))||(p.avisos||[]).some(x=>/RUT leído/.test(x)), sinC=carab&&!p.img_cert&&!c.rut;
   const multi=(p.infractores||[]).length>1;
   const filaInf=multi?[gc('Infractor de esta copia (1, 2)',String(infIdx(p)+1),'check','Infractores múltiples.')]:[];
-  S.push({t:'4 · Datos del denunciado',sub:p.notificado_personalmente?'Fuente de identidad: infractor del parte. El certificado aporta datos del vehículo.':p.img_cert?'Fuente: certificado del Registro Civil.':p.parte_escrito||carab||p.origen==='dom'?'Fuente: parte escaneado.':'',f:[
-    ...filaInf,
+  if(mtt&&p.modalidad_mtt!==undefined){
+    const fuente=p.modalidad_mtt==='personal'?p.identidad_folio:p.modalidad_mtt==='empadronado'&&p.img_cert?p.identidad_registro:null;
+    for(const k of ['rut','nombre','direccion','comuna']) c[k]=fuente?.[k]||'';
+  }
+  S.push({t:'4 · Datos del denunciado',empadronadoControl:carab,modalidadControl:mtt&&p.modalidad_mtt!==undefined,sub:esEmpadronado(p)?'Identificación por tipo de vehículo y patente.':mtt&&p.modalidad_mtt!==undefined?({personal:'Fuente: folio del MTT.',empadronado:'Fuente: certificado del Registro Civil.'}[p.modalidad_mtt]||'Revisa la modalidad al pie del parte.'):p.notificado_personalmente?'Fuente de identidad: infractor del parte. El certificado aporta datos del vehículo.':p.img_cert?'Fuente: certificado del Registro Civil.':p.parte_escrito||carab||p.origen==='dom'?'Fuente: parte escaneado.':'',f:[
+    ...(esEmpadronado(p)?[]:filaInf),
     gc('RUT (certificado)',esEmpadronado(p)?'':c.rut||'',esEmpadronado(p)?'blank':c.rut&&!malRut?'ok':(sinC&&!malRut?'blank':'check'),''),
     gc('Nombre (certificado)',esEmpadronado(p)?nombreEmpadronado(p):/^VEHICULO\b/.test(c.nombre||'')?('VEHICULO '+String(p.ed?.Placa??p.placa??'').trim().toUpperCase()).trim():c.nombre||'',c.nombre?'ok':'check',''),
     gc('Dirección (certificado)',c.direccion||'',c.direccion?'ok':(carab?'blank':'check'),''),
@@ -429,11 +434,23 @@ function campos(p){
   return S;
 }
 function avisoVigente(p,x){
+  if(x.startsWith('Revisa al pie del parte si fue')&&p.modalidad_mtt) return false;
+  if(x.startsWith('Falta el certificado')&&p.origen==='mtt'&&p.modalidad_mtt==='personal') return false;
   const c=p.cert||{}, v=k=>(valorActual(p,k)||'').trim();
   const mapa=[[/la marca del certificado/,'Marca (certificado)'],[/el tipo de vehículo/,'Tipo de vehículo (certificado)'],[/la comuna del certificado/,'Comuna (certificado)'],
               [/la dirección del certificado/,'Dirección (certificado)'],[/el nombre del certificado/,'Nombre (certificado)'],[/el RUT del certificado/,'RUT (certificado)']];
   for(const [re,k] of mapa) if(re.test(x)&&v(k)) return false;
   return true;
+}
+function mostrarFoto(p){
+  if(vista==='c'&&!p.img_cert) vista='p';
+  const img=$('img');
+  img.hidden=false;
+  const src='/api/img/'+(vista==='c'?p.img_cert:p.id);
+  if(img.getAttribute('src')!==src) img.src=src;
+  $('tabP').classList.toggle('on',vista==='p');
+  $('tabC').classList.toggle('on',vista==='c');
+  $('tabC').disabled=!p.img_cert;
 }
 function mostrar(){
   $('drop').hidden=Boolean(P.length);
@@ -442,10 +459,7 @@ function mostrar(){
   $('documento').hidden=!P.length;$('form').hidden=!P.length;
   if(!P.length){$('main').hidden=true;$('img').hidden=true;$('revision').hidden=false;$('main').hidden=!historialTanda.length;return}
   const p=P[sel]; $('main').hidden=false;
-  const img=$('img'); if(vista==='c'&&!p.img_cert) vista='p';
-  document.getElementById("img").hidden=false;
-  const src='/api/img/'+(vista==='c'?p.img_cert:p.id); if(img.getAttribute('src')!==src) img.src=src;
-  $('tabP').classList.toggle('on',vista==='p'); $('tabC').classList.toggle('on',vista==='c'); $('tabC').disabled=!p.img_cert;
+  mostrarFoto(p);
   const S=campos(p), F=$('form'); F.innerHTML='';
   const av=p.avOk?[]:p.avisos.filter(x=>!/N° de parte|folio/i.test(x)).concat(p.cert_avisos||[]).filter(x=>avisoVigente(p,x));
   const rp=rolPrevisto(p);
@@ -458,6 +472,47 @@ function mostrar(){
   F.appendChild(accionesTanda(p));
   S.forEach(s=>{
     const d=document.createElement('div');d.className='sec';d.innerHTML='<h3>'+s.t+'</h3>'+(s.sub?'<small>'+s.sub+'</small>':'');
+    if(s.t.startsWith('4 ·')) d.id='datosDenunciado';
+    if(s.modalidadControl){
+      const modalidad=document.createElement('select');
+      modalidad.className='val selector-revision';
+      modalidad.setAttribute('aria-label','Modalidad de notificación MTT');
+      modalidad.add(new Option('Elegir modalidad de notificación…',''));
+      modalidad.add(new Option('Notificado personalmente','personal'));
+      modalidad.add(new Option('Empadronado','empadronado'));
+      modalidad.value=p.modalidad_mtt;
+      modalidad.onchange=()=>{
+        const camposIdentidad=['RUT','Nombre','Dirección','Comuna'].map(k=>k+' (certificado)');
+        if(camposIdentidad.some(campo=>p.ed&&campo in p.ed)
+            &&!confirm('Cambiar la modalidad reemplazará las correcciones de identificación. ¿Continuar?')){
+          modalidad.value=p.modalidad_mtt;
+          return;
+        }
+        p.modalidad_mtt=modalidad.value;
+        p.notificado_personalmente=modalidad.value==='personal';
+        for(const campo of camposIdentidad){
+          delete p.ed?.[campo];
+          delete p.done?.[campo];
+        }
+        pintarTira();mostrar();
+        autoguardar().catch(()=>toast('No se pudo guardar la sesión automáticamente'));
+      };
+      d.appendChild(modalidad);
+    }
+    if(s.empadronadoControl){
+      const boton=document.createElement('button');
+      boton.type='button';
+      boton.className='selector-revision';
+      const marcado=esEmpadronado(p);
+      boton.textContent=marcado?'✓ Es empadronado':'Es empadronado';
+      boton.setAttribute('aria-pressed',String(marcado));
+      boton.onclick=()=>{
+        p.empadronadoManual=!marcado;
+        pintarTira();mostrar();
+        autoguardar().catch(()=>toast('No se pudo guardar la sesión automáticamente'));
+      };
+      d.appendChild(boton);
+    }
     s.f.forEach(f=>{
       const key=f.k, val=valorActual(p,key);
       const estado=estadoCampo(p,f,val);
@@ -496,6 +551,30 @@ function mostrar(){
         if(e.type==='change') autoguardar().catch(()=>{});
       };
       el.onfocus=()=>{activeKey=key};
+      const lecturas=new Map();
+      for(const [valor,fuente] of p.lecturas?.[key]||[]){
+        if(valor&&!lecturas.has(valor)) lecturas.set(valor,fuente);
+      }
+      if(lecturas.size>1){
+        const elegir=document.createElement('select');
+        elegir.className='val selector-revision';
+        elegir.setAttribute('aria-label','Elegir lectura de '+key);
+        elegir.add(new Option('Elegir lectura…',''));
+        let numero=1;
+        for(const [valor,fuente] of lecturas){
+          elegir.add(new Option('Opción '+numero+++' · '+valor+' ('+fuente+')',valor));
+        }
+        elegir.add(new Option('Otro · escribir manualmente','manual'));
+        elegir.value=p.ed?.[key]?(lecturas.has(val)?val:'manual'):'';
+        elegir.onchange=()=>{
+          if(!elegir.value) return;
+          const manual=elegir.value==='manual';
+          el.value=manual?'':elegir.value;
+          el.dispatchEvent(new Event('change'));
+          if(manual) el.focus();
+        };
+        el.after(elegir);
+      }
       if(key==='Placa'&&!esEmpadronado(p))el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
       r.querySelector('button').onclick=()=>{activeKey=key;copiarCampo(p,key)};
@@ -535,6 +614,7 @@ function formatoRut(valor){
   return m?m[1]+'-'+m[2]:limpio;
 }
 function esEmpadronado(p){
+  if(p.origen==='carab'&&typeof p.empadronadoManual==='boolean') return p.empadronadoManual;
   return p.empadronado||/^PORESCRITO[.:;]*$/i.test((p.cert?.nombre||'').replace(/\s/g,''));
 }
 function nombreEmpadronado(p){
@@ -544,7 +624,7 @@ function nombreEmpadronado(p){
 }
 function valorActual(p,key){
   if(esEmpadronado(p)){
-    if(key==='RUT (certificado)') return '';
+    if(key==='RUT (certificado)') return p.origen==='carab'?'SR':'';
     if(key==='Nombre (certificado)') return nombreEmpadronado(p);
   }
   const formato=key==='RUT (certificado)'?formatoRut:v=>v;
@@ -577,6 +657,7 @@ function V(p,k){
 function estadoCampo(p,f,valor){
   if(!String(valor??'').trim()) return f.st==='blank'?'blank':'check';
   if(p.ok?.[f.k]||f.k in (p.ed||{})) return 'ok';
+  if(new Set((p.lecturas?.[f.k]||[]).map(([valor])=>valor).filter(Boolean)).size>1) return 'check';
   return f.st;
 }
 const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>estadoCampo(p,f,p.ed?.[f.k]??f.v)==='check').length,0);
@@ -674,7 +755,7 @@ function autoguardar(){
   return colaAuto;
 }
 setInterval(()=>{autoguardar().catch(()=>{})},5000);
-function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; pintarTira(); mostrar(); document.getElementById('form').scrollTop=0 }
+function ir(i){ if(i<0||i>=P.length) return; sel=i; activeKey=null; vista='p'; pintarTira(); mostrar(); document.getElementById('form').scrollTop=0 }
 function ingresado(){
   const p=P[sel]; p.fin=true;
   let n=P.findIndex((q,i)=>i>sel&&!q.fin); if(n<0) n=P.findIndex(q=>!q.fin);
@@ -707,7 +788,27 @@ $('zoomMenos').onclick=()=>{zoomVisor=Math.max(.5,zoomVisor-.25);actualizarVisor
 $('girar').onclick=()=>{giroVisor=(giroVisor+90)%360;actualizarVisor()};
 $('ajustar').onclick=()=>{zoomVisor=1;giroVisor=0;actualizarVisor()};
 $('img').onclick=()=>{zoomVisor=zoomVisor===1?1.5:1;actualizarVisor()};
-$('tabP').onclick=()=>{vista='p';mostrar()}; $('tabC').onclick=()=>{vista='c';mostrar()};
+let ultimaZona=null;
+function zonaDocumento(){
+  const form=$('form'), datos=$('datosDenunciado');
+  if(!datos||!P[sel]?.img_cert) return 'p';
+  const caja=form.getBoundingClientRect();
+  const inicio=Math.max(0,caja.top);
+  const alto=Math.max(0,Math.min(window.innerHeight,caja.bottom)-inicio);
+  return datos.getBoundingClientRect().top<=inicio+alto/3?'c':'p';
+}
+function seguirSeccion(){
+  const p=P[sel];
+  if(!p) return;
+  const zona=zonaDocumento();
+  if(ultimaZona?.parte===p&&ultimaZona.zona===zona) return;
+  ultimaZona={parte:p,zona};
+  if(vista!==zona){vista=zona;mostrarFoto(p)}
+}
+$('form').addEventListener('scroll',seguirSeccion,{passive:true});
+window.addEventListener('scroll',seguirSeccion,{passive:true});
+$('tabP').onclick=()=>{vista='p';ultimaZona={parte:P[sel],zona:zonaDocumento()};mostrarFoto(P[sel])};
+$('tabC').onclick=()=>{vista='c';ultimaZona={parte:P[sel],zona:zonaDocumento()};mostrarFoto(P[sel])};
 
 const selOfic=(id,val)=>'<select class="val" id="'+id+'">'+PERFIL.oficinas.map(o=>'<option value="'+esc(o[1])+'"'+(o[1]===val?' selected':'')+'>'+esc(o[0]+' · '+o[1])+'</option>').join('')+'</select>';
 function estadoLista(t){const n=t==='infracciones'?PERFIL.n_infracciones:PERFIL.n_oficinas, p=t==='infracciones'?PERFIL.propia_infracciones:PERFIL.propia_oficinas;

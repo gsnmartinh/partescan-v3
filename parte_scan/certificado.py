@@ -120,7 +120,13 @@ def leer(t):
     rut = ""
     if m:
         rut = re.sub(r"\D", "", m.group(1)) + "-" + m.group(2).upper()
-    if not rut:
+    if not rut and encabezado and len(prop) > 1:
+        fila_run = re.fullmatch(r"([\d., \t]{6,15})\s*[-–]\s*([\dK])", prop[1], re.I)
+        if fila_run:
+            candidato = re.sub(r"\D", "", fila_run[1]) + "-" + fila_run[2].upper()
+            if rut_ok(candidato):
+                rut = candidato
+    if not rut and encabezado:
         m = re.search(r"(?<!\d)(\d{1,2})[ \t]*[.,][ \t]*(\d{3})[ \t]*[.,][ \t]*(\d{3})[ \t]*[-–][ \t]*([\dKk])", zona)
         if m:
             rut = m.group(1) + m.group(2) + m.group(3) + "-" + m.group(4).upper()
@@ -163,7 +169,7 @@ def conciliar_placa(placa_parte, placa_cert):
     a, b = placa_parte or "", placa_cert or ""
     if (re.fullmatch(r"[A-Z]{4}\d{2}", a) and re.fullmatch(r"[A-Z]{4}\d{2}", b)
             and [(x, y) for x, y in zip(a, b) if x != y] == [("F", "E")]):
-        return a, "Revisa la patente: el parte muestra F y el certificado se leyó con E en la misma posición."
+        return a, "Revisa la patente: el parte se leyó como %s y el certificado como %s. Comprueba la F y la E." % (a, b)
     if a == b and a:
         return a, ""
     if a and b and _parecidas(a, b) >= 0.7:

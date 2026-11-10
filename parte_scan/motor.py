@@ -138,6 +138,11 @@ def _releer_zona(imagen, modo):
         return ""
 
 
+def releer_franja(imagen, inicio, fin):
+    ancho, alto = imagen.size
+    return _releer_zona(imagen.crop((0, int(alto * inicio), ancho, int(alto * fin))), 6)
+
+
 def leer_certificado(g, texto, *, imagen=None):
     from . import catalogo, certificado
 
@@ -341,7 +346,7 @@ def cotejar_con_rapidocr(g, r):
         return []
 
 
-def leer_carab(g, texto):
+def leer_carab(g, texto, *, imagen=None):
     """Lee un parte de Carabineros priorizando Tesseract y utilizando validación cruzada con RapidOCR."""
     from . import extractor_carab as EC
     
@@ -352,6 +357,11 @@ def leer_carab(g, texto):
     # Validaciones y respaldos secundarios con RapidOCR
     if g is not None:
         av += cotejar_con_rapidocr(g, r)
+    if not r["fecha_citacion"] and (g is not None or imagen is not None):
+        franja = releer_franja(g if g is not None else preparar(imagen), 0.45, 1)
+        r["fecha_citacion"] = EC.fecha_citacion_recorte(franja)
+    if not r["fecha_citacion"]:
+        av.append("Revisa la fecha en el bloque de citación del parte.")
 
     if not r["n_parte_carab"]:
         av.append("No pude leer el número del parte de Carabineros.")

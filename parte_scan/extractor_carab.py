@@ -66,8 +66,8 @@ def corregir_anio(fecha, hoy=None):
 
 
 def _fecha_num(s):
-    m = re.search(r"(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d{2})", s)
-    return "%02d/%02d/%s" % (int(m.group(1)), int(m.group(2)), m.group(3)) if m else ""
+    m = re.search(r"(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d\s*\d)(?!\d)", s)
+    return "%02d/%02d/%s" % (int(m.group(1)), int(m.group(2)), re.sub(r"\s", "", m.group(3))) if m else ""
 
 
 def _fecha_cabecera(t):
@@ -457,6 +457,15 @@ def problemas(r):
     if r.get("tiene_vehiculo"):
         n += not PLACA_OK.fullmatch(r["placa"] or "")
     return n
+
+
+def fecha_citacion_recorte(texto):
+    fechas = set()
+    for m in re.finditer(r"\b(?:audiencia|comparecer|citaci[oó]n)\b(?=[^\d]{0,45}(\d.{0,31}))", _plano(texto), re.I):
+        fecha = _fecha_num(m[1]) or fecha_de(m[1])
+        if fecha:
+            fechas.add(fecha)
+    return next(iter(fechas)) if len(fechas) == 1 else ""
 
 
 def parte(texto):
