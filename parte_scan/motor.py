@@ -238,7 +238,18 @@ def leer_parte(img, texto=None, g=None, *, solo_texto=False):
             fecha, hora = extractor.momento_infraccion(respaldo.splitlines())
             r["fecha_infraccion"] = r["fecha_infraccion"] or fecha
             r["hora_infraccion"] = r["hora_infraccion"] or hora
-    r["folio_recorte"] = "" if solo_texto else _folio_recorte(g)
+    campos = ["fecha_parte", "fecha_infraccion", "hora_infraccion", "lugar", "infraccion_texto", "fecha_citacion"]
+    if r["tipo_vehiculo"] or r["marca"]:
+        campos.append("placa")
+    if solo_texto and img is not None and any(not r[k] for k in campos):
+        gris = g if g is not None else preparar(img)
+        respaldo = extractor.parte(releer_franja(gris, 0, 1))
+        for campo in campos:
+            if not r[campo] and (campo != "placa" or extractor.placa_ok(respaldo[campo])):
+                r[campo] = respaldo[campo]
+    r["folio_recorte"] = _folio_recorte(g if g is not None else preparar(img)) if (
+        not solo_texto or (img is not None and not (r["n_parte"] or r["n_citacion_adjunta"]))
+    ) else ""
     r["n_parte_final"], av = votar(r["n_parte"], r["folio_recorte"], r["n_citacion_adjunta"])
     r["avisos"] = [a for a in r["avisos"] if "encabezado" not in a] + av
     r["texto_ocr"] = texto
@@ -360,6 +371,18 @@ def leer_carab(g, texto, *, imagen=None):
     # Validaciones y respaldos secundarios con RapidOCR
     if g is not None:
         av += cotejar_con_rapidocr(g, r)
+    elif imagen is not None:
+        campos = ["n_parte_carab", "fecha_parte", "hora_infraccion", "lugar", "infraccion_texto"]
+        if r["tiene_vehiculo"]:
+            campos.append("placa")
+        if any(not r[campo] for campo in campos):
+            gris = preparar(imagen)
+            respaldo = EC.parte(releer_franja(gris, 0, 1))
+            for campo in campos:
+                if not r[campo] and respaldo[campo] and (campo != "placa" or EC.placa_puntaje(respaldo[campo]) > 0):
+                    r[campo] = respaldo[campo]
+                    if campo == "infraccion_texto":
+                        r["bloques_infraccion"] = respaldo["bloques_infraccion"]
     if (not r["fecha_citacion"] or not r["boleta"]) and (g is not None or imagen is not None):
         franja = releer_franja(g if g is not None else preparar(imagen), 0.45, 1)
         fechas = EC.fechas_citacion_recorte(franja) if not r["fecha_citacion"] else []

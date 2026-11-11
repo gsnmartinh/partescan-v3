@@ -903,10 +903,16 @@ public class MainActivity extends Activity {
     }
 
     String readOcr(String name) throws Exception {
+        return readOcr(name, false);
+    }
+
+    private String readOcr(String name, boolean retryShort) throws Exception {
         File cache = ocrCache(name);
+        String previous = "";
         if (cache.isFile()) {
             try {
-                return new String(Files.readAllBytes(cache.toPath()), StandardCharsets.UTF_8);
+                previous = new String(Files.readAllBytes(cache.toPath()), StandardCharsets.UTF_8);
+                if (!retryShort || previous.trim().length() >= 80) return previous;
             } catch (IOException error) {
                 // Si la copia local no se puede leer, se vuelve a reconocer la foto.
             }
@@ -918,10 +924,14 @@ public class MainActivity extends Activity {
             reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
             text = orderedText(Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0))));
             text = rereadMissing(reader, bitmap, text);
+        } catch (Exception error) {
+            if (!retryShort || !cache.isFile()) throw error;
+            return previous;
         } finally {
             bitmap.recycle();
             if (reader != null) reader.close();
         }
+        if (previous.trim().length() > text.trim().length()) text = previous;
         if (new File(folder, name).isFile() && cache.equals(ocrCache(name))) {
             android.util.AtomicFile target = new android.util.AtomicFile(cache);
             FileOutputStream output = null;
@@ -990,6 +1000,7 @@ public class MainActivity extends Activity {
         TextView status = progress("Completando las lecturas pendientes…");
         ocrQueue.execute(() -> {
             int saved = 0;
+            int review = 0;
             try {
                 int size = byBlocks ? PARTS_PER_BLOCK : Math.max(1, parts.size());
                 String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT)
@@ -1005,7 +1016,7 @@ public class MainActivity extends Activity {
                         if (output == null) throw new IOException("No se pudo crear el bloque");
                     }
                     try {
-                        writeOcrBlock(parts.subList(offset, Math.min(offset + size, parts.size())), output, status);
+                        review += writeOcrBlock(parts.subList(offset, Math.min(offset + size, parts.size())), output, status);
                     } catch (Exception error) {
                         if (byBlocks) {
                             try { android.provider.DocumentsContract.deleteDocument(getContentResolver(), output); }
@@ -1015,8 +1026,9 @@ public class MainActivity extends Activity {
                     }
                     saved++;
                 }
-                String message = byBlocks ? saved + " bloques guardados y verificados."
+                String result = byBlocks ? saved + " bloques guardados y verificados."
                         : "Tanda guardada. Lleva el archivo .psocr al computador y ábrelo en ParteScan.";
+                String message = result + (review > 0 ? " Fotos con poco texto legible: " + review + "." : "");
                 runOnUiThread(() -> { if (!isDestroyed()) render(message); });
             } catch (Exception error) {
                 String message = (saved > 0 ? saved + " bloques verificados. " : "")
@@ -1026,18 +1038,21 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void writeOcrBlock(java.util.List<ArrayList<String>> parts, android.net.Uri destination,
+    private int writeOcrBlock(java.util.List<ArrayList<String>> parts, android.net.Uri destination,
                                TextView status) throws Exception {
         File staged = null;
         try {
                 runOnUiThread(() -> status.setText("Completando las lecturas pendientes…"));
                 ArrayList<String> photos = new ArrayList<>();
                 JSONArray manifest = new JSONArray();
+                int review = 0;
                 for (ArrayList<String> group : parts) {
                     for (int i = 0; i < group.size(); i++) {
                         String photo = group.get(i);
                         photos.add(photo);
-                        manifest.put(new JSONObject().put("texto", readOcr(photo)).put("certificado", i > 0));
+                        String text = readOcr(photo, true);
+                        if (text.trim().length() < 80) review++;
+                        manifest.put(new JSONObject().put("texto", text).put("certificado", i > 0));
                     }
                 }
                 runOnUiThread(() -> status.setText("Creando el archivo…"));
@@ -1065,6 +1080,7 @@ public class MainActivity extends Activity {
                         throw new java.io.IOException("La copia guardada no coincide con la exportación local");
                     }
                 }
+                return review;
         } finally {
             if (staged != null) staged.delete();
         }

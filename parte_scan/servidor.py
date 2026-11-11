@@ -249,7 +249,14 @@ def trabajador():
                         tipo = "certificado" if es_cert else motor.tipo_pagina(texto)
                         # El OCR puede reconocer un certificado aunque su marca móvil sea errónea.
                         if tipo == "otra" and not es_cert:
-                            tipo = "parte"
+                            releido = motor.releer_franja(motor.preparar(img), 0, 1)
+                            tipo = motor.tipo_pagina(releido)
+                            if tipo != "otra":
+                                texto = releido
+                            else:
+                                tipo = "parte"
+                                if not texto.strip():
+                                    texto = releido
                         if tipo != "certificado":
                             ultimo = None
                     else:
@@ -280,18 +287,36 @@ def trabajador():
                             PARTES.append(ultimo)
                     elif tipo == "mtt":
                         r = extractor_mtt.parte(texto, None if movil else motor.leer_celdas(g))
-                        if not r["infracciones"] or not r["lugar"] or not r["hora_infraccion"]:
+                        campos = ("infracciones", "infraccion_texto", "norma", "lugar", "hora_infraccion",
+                                  "fecha_parte", "fecha_infraccion", "n_parte", "n_parte_final")
+                        if any(not r[campo] for campo in ("infracciones", "lugar", "hora_infraccion", "fecha_parte", "n_parte")):
                             gris = g if g is not None else motor.preparar(img)
                             respaldo = extractor_mtt.parte(motor.releer_franja(gris, 0, 0.6))
-                            for campo in ("infracciones", "infraccion_texto", "norma", "lugar", "hora_infraccion"):
+                            for campo in campos:
                                 if not r[campo] and respaldo[campo]:
                                     r[campo] = respaldo[campo]
                             if r["infracciones"]:
                                 r["avisos"] = [a for a in r["avisos"] if a != "No pude leer la infracción."]
+                            if r["n_parte"]:
+                                r["avisos"] = [a for a in r["avisos"] if a != "No pude leer el N° de denuncia."]
                         if not r["modalidad_mtt"]:
                             pie = motor.releer_franja(g if g is not None else motor.preparar(img), 0.65, 1)
                             r["modalidad_mtt"] = extractor_mtt.modalidad_notificacion(pie)
                             r["notificado_personalmente"] = r["modalidad_mtt"] == "personal"
+                        faltantes = ["boleta", "placa"]
+                        if r["notificado_personalmente"]:
+                            faltantes.extend(("infractor_rut", "infractor_nombre", "infractor_direccion", "infractor_comuna"))
+                        if movil and any(not r[campo] for campo in faltantes):
+                            celdas = motor.leer_celdas(g if g is not None else motor.preparar(img))
+                            if celdas:
+                                respaldo = extractor_mtt.parte(texto, celdas)
+                                for campo in (*faltantes, "dv_placa"):
+                                    if not r[campo] and respaldo[campo]:
+                                        if campo == "dv_placa" and r["placa"] != respaldo["placa"]:
+                                            continue
+                                        r[campo] = respaldo[campo]
+                                if r["placa"]:
+                                    r["avisos"] = [a for a in r["avisos"] if a != "No pude leer la patente."]
                         with LOCK:
                             pid = len(IMAGENES) + 1
                             IMAGENES[pid] = img

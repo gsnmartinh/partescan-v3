@@ -1,3 +1,0 @@
-pywinauto
-pyinstaller
-sv_ttk

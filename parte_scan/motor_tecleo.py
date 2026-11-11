@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-teclea_contextual.py - Teclea partes en el sistema del Juzgado LEYENDO la pantalla.
+motor_tecleo.py - Teclea partes en el sistema del Juzgado LEYENDO la pantalla.
 
 Cada accion se decide mirando que campo tiene el cursor (por su ID de control, medido en las
 grabaciones) y se verifica despues (lee el valor que quedo). No depende del orden de Tab ni de F9.
@@ -8,10 +8,10 @@ grabaciones) y se verifica despues (lee el valor que quedo). No depende del orde
 Por defecto, tu revisas y aceptas. El modo automatico activa Aceptar y verifica el resultado.
 
 Uso:
-  python teclea_contextual.py --ensayo            (solo muestra que tecleara; no toca el sistema)
-  python teclea_contextual.py                     (teclea todos los partes de Descargas)
-  python teclea_contextual.py archivo.json --desde 3
-  python teclea_contextual.py --solo 2
+  python motor_tecleo.py --ensayo            (solo muestra que tecleara; no toca el sistema)
+  python -m parte_scan.motor_tecleo                     (teclea todos los partes de Descargas)
+  python -m parte_scan.motor_tecleo archivo.json --desde 3
+  python motor_tecleo.py --solo 2
 
 Teclas:  ESC = detener     F9 = pausar / reanudar
          F8 = (solo mientras espera que aceptes un parte) seguir con el siguiente igual

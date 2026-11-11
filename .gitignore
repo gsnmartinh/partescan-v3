@@ -23,7 +23,7 @@ dist/
 *.jks
 *.psocr
 /.release-signing/
-/teclea/prueba.txt
+/ParteScan-*-fotos-recuperadas.zip
 
 # Diagnósticos y grabaciones locales (pueden contener datos personales)
 /herramientas/diagnostico.txt

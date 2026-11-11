@@ -4,12 +4,12 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 import unittest
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'teclea'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 if sys.platform != 'win32':
     ctypes.windll = MagicMock()
     if not hasattr(ctypes, 'WINFUNCTYPE'):
         ctypes.WINFUNCTYPE = ctypes.CFUNCTYPE
-import teclea_contextual as T
+from parte_scan import motor_tecleo as T
 
 class SistemaFalso:
     def __init__(self, fallo=False):

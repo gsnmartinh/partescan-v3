@@ -1,26 +1,31 @@
-# ParteScan + PartesTeclea
+# ParteScan
 
-Herramientas gratuitas para Windows para ingresar partes en el sistema de un Juzgado de Policía Local
-(hecho para el 2° Juzgado de Valdivia; configurable para otros).
+ParteScan ayuda a revisar e ingresar partes en el sistema del Juzgado de Policía Local. **ParteScan para Windows** lee y organiza los documentos. **ParteScan Captura para Android** fotografía los partes y sus certificados y prepara la tanda para llevarla al computador.
 
-| Programa | Para qué sirve |
-|---|---|
-| **ParteScan** (`parte_scan/`) | Lee y permite revisar partes de Carabineros, MTT, Inspección y DOM. Desde la misma ventana teclea los datos revisados en el sistema del Juzgado. |
-| **Herramientas** (`herramientas/`) | Scripts de solo lectura para estudiar el sistema si cambia: grabar un ingreso, ver ventanas y exportar listas «Busca…». |
+Descarga el instalador de Windows y el APK firmado de Android en [Versiones de ParteScan](https://github.com/gsnmartinh/partescan-v3/releases/latest).
 
-## Descargar
-En **Releases**, descarga `ParteScan-Instalador` e instala en la ubicación predeterminada para recibir actualizaciones desde la app. Si usas la edición portátil `ParteScan-Windows`, descomprime toda la carpeta y abre `ParteScan.exe`.
+## Flujo de trabajo
 
-## Otros juzgados
-Los códigos de infracciones y oficinas, las actuarias y otros datos propios de cada juzgado se configuran en un perfil
-(botón **⚙ Juzgado** en ParteScan). Sin configurar, usa los del 2° Juzgado de Valdivia.
+1. En Android, fotografía cada parte y su certificado si corresponde. La app reconoce texto en segundo plano y permite revisar, ampliar o repetir las fotos antes de exportar.
+2. Guarda la tanda como `.psocr`. Puedes dividir una tanda grande en bloques. La app verifica la copia guardada e indica si quedaron fotos con poco texto legible.
+3. En Windows, abre los archivos `.psocr`, PDF o imágenes. ParteScan usa el texto disponible y relee las fotos cuando faltan campos clave.
+4. Revisa los datos junto a la imagen original. Usa **Revisar por campo** para ir a los pendientes. **Buscar en el documento** ofrece lecturas alternativas y **Releer y sugerir códigos** permite confirmar infracciones antes de agregarlas.
+5. Pulsa **Teclear en el sistema** para enviar la tanda al sistema del Juzgado. Al trabajar con ambas ventanas lado a lado, ParteScan muestra el modo compacto. También puedes exportar los datos a JSON y generar el listado de ingresos con los roles asignados.
 
-## Para quien mantiene el proyecto
-- Para publicar una versión, sube una etiqueta `vX.Y.Z` al commit correspondiente. GitHub Actions compila ParteScan y publica el instalador, el ZIP portátil y los archivos de actualización.
-- Pruebas (desde la raíz): `python tests/prueba_perfil.py`,
-  `python tests/prueba_tecleador.py` y `python tests/prueba_actualizador.py`.
-  Ejecutar las tres; la del actualizador usa un servidor local sin internet.
-- Estructura, duplicados conservados y revisión de ramas: [AUDITORIA.md](AUDITORIA.md).
-- `RELEASE_NOTES.md` es el texto de cada Release.
+## Qué reconoce
 
-> El archivo `.json` de tecleo trae RUT, nombres y direcciones: guardarlo solo en carpetas del Juzgado y borrarlo al terminar.
+- Partes municipales, Carabineros, MTT, DOM e informes OS10.
+- Folio, oficina emisora, fechas, hora, lugar, patente e infracciones según el formato del documento.
+- Datos del denunciado desde el parte o el certificado, según la modalidad. En MTT, usa el folio para una notificación personal y el Registro Civil para una denuncia empadronada.
+- Una o varias infracciones por parte. Los datos dudosos y las diferencias entre lecturas quedan disponibles para revisar.
+
+El reconocimiento se hace en el teléfono o en el computador. Las actualizaciones se consultan en GitHub desde cada aplicación.
+
+## Desarrollo
+
+- `parte_scan/` contiene el reconocimiento, la interfaz de Windows y el motor de tecleo.
+- `android/` contiene ParteScan Captura.
+- `tests/` contiene las pruebas de reconocimiento, revisión, tecleo y actualización.
+- `herramientas/` contiene utilidades de desarrollo y diagnóstico.
+
+Para ejecutar Windows desde el código, instala las dependencias de `requirements.txt` y Tesseract con español. Luego ejecuta `python partescan.py`. GitHub Actions compila los paquetes oficiales al publicar una etiqueta de versión.

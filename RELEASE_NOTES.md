@@ -1,3 +1,9 @@
+# ParteScan 5.1.14 · ParteScan Captura 1.1.4
+
+- Windows conserva los datos reconocidos y relee las fotos de una tanda cuando faltan campos clave.
+- Android vuelve a leer fotos con poco texto antes de exportar e indica cuántas quedaron con una lectura corta.
+- El README describe el flujo actual de captura, revisión y tecleo integrado.
+
 # ParteScan 5.1.13
 
 - Agrega el modo compacto en Windows para trabajar con ParteScan y el sistema del Juzgado lado a lado.
