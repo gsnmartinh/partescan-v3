@@ -51,6 +51,12 @@ def _placa(v):
     return m.group(1), m.group(2) or ""
 
 
+def modalidad_notificacion(pie):
+    personal = bool(re.search(r"\bNOTIFICAD[OA]\s+PERSONALMENTE\b", pie, re.I))
+    empadronado = bool(re.search(r"\bEMPADRONAD[OA]\b", pie, re.I))
+    return ("personal" if personal else "empadronado") if personal != empadronado else ""
+
+
 def parte(texto, celdas=None):
     t = re.sub(r"\s+", " ", texto or "")
     av = []
@@ -62,11 +68,12 @@ def parte(texto, celdas=None):
     n_den = m.group(1) if m else ""
     m = re.search(re.escape(perfil.cargar()["comuna"]) + r",?\s*" + FECHA, t, re.I)
     fecha_parte = "%02d/%02d/%s" % (int(m.group(1)), int(m.group(2)), m.group(3)) if m else ""
-    m = re.search(r"d[ií]a\s*" + FECHA + r",?\s*siendo\s+las\s+(\d{1,2}):(\d{2})\s*horas,?\s*en\s+(.+?),?\s*se\s+sorprendi", t, re.I)
+    m = re.search(r"d[ií]a\s*" + FECHA + r"[,.]?\s*siendo\s+las\s+([01]?\d|2[0-3]):([0-5]\d)\s*horas[,.]?", t, re.I)
     if m:
         fecha_inf = "%02d/%02d/%s" % (int(m.group(1)), int(m.group(2)), m.group(3))
         hora = "%d:%s" % (int(m.group(4)), m.group(5))
-        lugar = limpiar(m.group(6)).upper()
+        tramo = re.match(r"\s*en\s+(.+?),?\s*se\s+sorprendi", t[m.end():], re.I)
+        lugar = limpiar(tramo.group(1)).upper() if tramo else ""
     else:
         fecha_inf, hora, lugar = fecha_parte, "", ""
     mi = re.search(r"infracci[oó]n\s*\(?e?s?\)?\s*\)?\s*[:;]\s*(.+?)\s*Disposici", t, re.I)
@@ -75,6 +82,8 @@ def parte(texto, celdas=None):
     disposiciones = _lista(md.group(1)) if md else []
     mo = re.search(r"Observaciones\s*(.+)$", t, re.I)
     obs = limpiar(re.split(r"\s+(?:SERGIO|Divisi[oó]n\s+de)\b", mo.group(1))[0]) if mo else ""
+    pie = t[mo.start():] if mo else "\n".join((texto or "").splitlines()[-12:])
+    modalidad = modalidad_notificacion(pie)
     placa, dv = _placa(c.get("placa", ""))
     rut = c.get("rut", "")
     if rut and not certificado.rut_ok(rut):
@@ -88,6 +97,7 @@ def parte(texto, celdas=None):
     comuna = re.sub(r"^\s*COMUNA\s+(DE\s+)?", "", (c.get("comuna") or "").upper()).strip()
     return {
         "origen": "mtt", "departamento": "MTT", "n_parte": n_den, "n_parte_final": n_den, "n_citacion_adjunta": "",
+        "modalidad_mtt": modalidad, "notificado_personalmente": modalidad == "personal",
         "fecha_parte": fecha_inf or fecha_parte, "fecha_infraccion": fecha_inf, "hora_infraccion": hora,
         "lugar": lugar, "infraccion_texto": infracciones[0] if infracciones else "", "infracciones": infracciones,
         "norma": re.sub(r"N[*?°º]+\??", "N°", re.sub(r"\bART,", "ART.", " / ".join(disposiciones))), "tipo_vehiculo": (c.get("tipo") or "").upper(),

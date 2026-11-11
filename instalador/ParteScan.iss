@@ -10,6 +10,7 @@ AppId={{6B1E5C0A-4D3F-4A8E-9C27-7A5B0D2F9E11}
 AppName=ParteScan
 AppVersion={#Version}
 AppPublisher=2° Juzgado de Policía Local de Valdivia
+SetupIconFile=..\parte_scan\web\brand\partescan.ico
 DefaultDirName={localappdata}\Programs\ParteScan
 DefaultGroupName=ParteScan
 PrivilegesRequired=lowest

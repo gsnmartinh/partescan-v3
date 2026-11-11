@@ -13,13 +13,14 @@ SUG = {"ENTRADA": "ENTRADA", "FISCAL": "FISCAL"}
 
 # Códigos reales del sistema (de la lista completa «Busca Infracciones», codigos_sistema.py).
 CODIGOS = {
+    "24": "24", "504": "504",
     "19": "19", "48": "48", "DOBLE": "17", "ESQUINA": "43", "DISCA": "20", "GRIFO": "492", "PARE": "52",
     "PARAD": "53", "CEDA": "494", "AREA": "499", "PASO": "49", "IZQ": "11", "SENTID": "13", "CONTRA": "15",
     "HABER": "16", "ENTRADA": "483", "SALI": "483", "LV": "60", "BEBER": "300", "EBRIO": "301",
     "SEGURO": "92", "PERMISO": "37", "REVISION": "33", "CELULAR": "54", "ROJA": "91", "RUIDOS": "350",
     "CHOQUE": "500", "COLISION": "57", "ANIMALES": "62", "FACILITAR": "649", "ESPE": "461", "BNUP": "604",
     "LOCAL": "480", "AMBU": "503", "PARAB": "75", "PUER": "632", "LUCES": "58", "PESO": "630",
-    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65", "DOM": "497",
+    "EXCESO": "94", "RECLA": "470", "FISCAL": "610", "CARABI": "38", "MINIS": "65", "DOM": "497", "493": "493", "400": "400",
 }
 # Parecidas pero no idénticas: se proponen con el código, pidiendo confirmar.
 CODIGOS_CONFIRMAR = {"SINL": "66"}
@@ -127,12 +128,34 @@ def actividad_sin_patente(texto):
 def resolver(texto):
     """Devuelve (descripcion_causa, [items]) a partir del texto de la infracción del parte."""
     T = sin_tildes(texto)
+    if re.search(r"\bESTACION\w*\b", T) and re.search(r"LINEA\s+AMARILLA", T) and re.search(r"\bESQUINA\b", T):
+        concepto = por_abrev("ESQUINA")
+        return concepto["t"], [crear_item(concepto)]
+    if T.strip() == "DS.93 SOBRE VIGILANCIA PRIVADA":
+        concepto = {"a": "400", "t": "DS.93 SOBRE VIGILANCIA PRIVADA"}
+        return concepto["t"], [crear_item(concepto)]
+    if (re.search(r"\b(?:BOTAR|ARROJAR|TIRAR)\b.{0,60}\bBASURA\b", T)
+            and re.search(r"\b(?:VIA\s+PUBLICA|B\.?\s*N\.?\s*U\.?\s*P\b|BIEN(?:ES)?\s+NACIONAL(?:ES)?\s+DE\s+USO\s+PUBLICO)", T)):
+        concepto = por_abrev("493")
+        return concepto["t"], [crear_item(concepto)]
     if actividad_sin_patente(T):
         concepto = por_abrev("LOCAL")
         return concepto["t"], [crear_item(concepto)]
 
     def tres():
         return [crear_item(por_abrev(a)) for a in ("SEGURO", "PERMISO", "REVISION")]
+
+    sin_documentos = re.search(
+        r"\b(?:SIN|NO)\s+PORTAR\s+LA\s+TOTALI\s*DAD\s+DE\s+(?:SUS|LOS)\s+DOCUMENTOS\b", T)
+    if sin_documentos and (T.startswith(sin_documentos[0]) or re.search(r"\b(?:SIN|NO)\s+PORTAR\s+LICENCIA\b", T)):
+        documentos = tres()
+        for item in documentos:
+            item["estado"] = "check"
+            item["nota"] = "Verifica en la imagen: «" + sin_documentos[0] + "»."
+        if re.search(r"\b(?:SIN|NO)\s+PORTAR\s+LICENCIA\b", T):
+            licencia = crear_item(por_abrev("SINL"))
+            return "CONDUCIR SIN PORTAR LICENCIA Y SIN LA TOTALIDAD DE LA DOCUMENTACION", [licencia, *documentos]
+        return "CONDUCIR SIN LA TOTALIDAD DE LA DOCUMENTACION", documentos
 
     # «no detenerse ante señal PARE de Carabineros» (código 38): se ingresa junto con las demás infracciones del parte
     # que sí tienen código (estacionar sobre la acera…). Atropello y vehículo abandonado no se ingresan.
@@ -141,6 +164,23 @@ def resolver(texto):
         if re.search(r"ESTACION.{0,60}\b(?:ACERA|PLATABANDA)\b", T):
             its.append(crear_item(por_abrev("48")))
         return its[0]["x"]["t"], its
+    if re.search(r"\b(?:ANIMALES?|PERROS?)\b.{0,90}\bSUELT[OA]S?\b.{0,35}\bVIA PUBLICA\b", T):
+        concepto = por_abrev("ANIMALES")
+        return concepto["t"], [crear_item(concepto)]
+    if re.search(r"NO\s+SOLICITAR\s+CEDULA\s+DE\s+IDENTIDAD.{0,90}EXPENDER\s+BEBIDAS\s+ALCOHOLI\s*CAS|"
+                 r"SOBREPASAR.{0,75}ESPACIO\s+DESTINADO\s+A\s+EXPENDIO\s+DE\s+BEBIDAS\s+ALCOHOLICAS", T):
+        concepto = por_abrev("504")
+        return concepto["t"], [crear_item(concepto)]
+    total = bool(re.search(r"TOTALI\s*DAD\s+DE\s+LA\s+DOCUMENTACION", T))
+    if re.search(r"BOLETA\s+DE\s+CITACION.{0,55}\bVENCIDA\b", T):
+        concepto = por_abrev("24")
+        return concepto["t"], [crear_item(concepto)] + (tres() if total else [])
+    if total and re.search(r"SIN\s+HABER\s+OBTENI\s*DO\s+[LI]ICENCIA|SIN\s+HABER\s+OBTENI\s*DO\s+LICENCIA", T):
+        concepto = por_abrev("HABER")
+        return concepto["t"], [crear_item(concepto)] + [crear_item(por_abrev(a)) for a in ("REVISION", "PERMISO", "SEGURO")]
+    if re.search(r"ESTACION.{0,150}SALIDA\s+DE\s+MALL.{0,45}VISIBILIDAD", T):
+        concepto = por_abrev("ENTRADA")
+        return concepto["t"], [crear_item(concepto)]
     # alcohol en la vía pública: el parte dice «ingerir», «ingringir» (mal escrito), «consumo», «beber», «bebidas alcohólicas»
     # o solo «art. 25 ley 19.925». Es siempre «BEBER ALCOHOL EN LA VIA PUBLICA» (300), salvo que conduzca ebrio.
     if (not re.search(r"CONDUC|MANEJ|EBRI|CONDICION", T)
@@ -217,7 +257,7 @@ def resolver_o_comodin(texto):
         t = sin_tildes(texto)
         if "ESTACION" in t:
             opciones = [a for patron, a in ESPECIFICAS if re.search(patron, t)]
-            if re.search(r"LINEA\s+AMARILLA|(?:LUGAR|SITIO)\s+PROHIBIDO", t):
+            if re.search(r"(?:LUGAR|SITIO)\s+PROHIBIDO", t) or ("ESQUINA" not in opciones and re.search(r"LINEA\s+AMARILLA", t)):
                 opciones.append("19")
             if len(opciones) > 1:
                 codigos = ", ".join(CODIGOS[a] for a in opciones)

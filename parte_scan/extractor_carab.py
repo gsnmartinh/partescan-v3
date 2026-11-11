@@ -36,7 +36,8 @@ def es_carab(texto):
 
 
 def _plano(t):
-    return re.sub(r"\s+", " ", t or "")
+    t = re.sub(r"\bINERACCI[OÓ]N\b", "INFRACCION", t or "", flags=re.I)
+    return re.sub(r"\s+", " ", t)
 
 
 def _hoy():
@@ -65,8 +66,8 @@ def corregir_anio(fecha, hoy=None):
 
 
 def _fecha_num(s):
-    m = re.search(r"(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d{2})", s)
-    return "%02d/%02d/%s" % (int(m.group(1)), int(m.group(2)), m.group(3)) if m else ""
+    m = re.search(r"(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d\s*\d)(?!\d)", s)
+    return "%02d/%02d/%s" % (int(m.group(1)), int(m.group(2)), re.sub(r"\s", "", m.group(3))) if m else ""
 
 
 def _fecha_cabecera(t):
@@ -141,7 +142,7 @@ def _lugar_rotulo(t):
     if not m:
         return ""
     v = m.group(1).strip(" .,;")
-    v = re.sub(r",?\s+(?:de\s+esta\s+\w+|valdivia)\s*$", "", v, flags=re.I)
+    v = re.sub(r",?\s+(?:de\s+esta\s+\w+)\s*$", "", v, flags=re.I)
     v = re.sub(r"\bfrente\s+(?:al|a\s+la|del|el)\s+(?:Nro\.?|N[°º])?\s*[\"“”']?\s*", " ", v, flags=re.I)
     v = re.sub(r"\bintersecci[oó]n(?:\s+con)?\b", " CON ", v, flags=re.I)
     v = re.sub(r"\b(?:Nro\.?|N[°º]|numeraci[oó]n|n[uú]mero)\s*(?=\d)", " ", v, flags=re.I)
@@ -161,13 +162,11 @@ def _lugar(t):
     s = previo[ms[-1].end():]
     if len(s) > 140:
         return _lugar_hasta(t)
-    s = re.split(r",?\s+(?:de\s+esta\b|personal\s+de\b|sorprendi\w*|notific\w*|comuna\s+de|la\s+siguiente)", s, 1, flags=re.I)[0]
+    s = re.split(r",?\s+(?:de\s+esta\b|personal\s+de\b|sorprendi\w*|notific\w*|la\s+siguiente)", s, 1, flags=re.I)[0]
     if not re.search(r"\d|calle|aven|avda|av\.|pasaje|ruta|camino", s, re.I):
         return _lugar_hasta(t) or limpiar(s).upper()[:70]
     s = re.sub(r"\bfrente\s+(?:al|a\s+la|del|el)\s+(?:Nro\.?|N[°º]|numeraci[oó]n|n[uú]mero)?\s*[\"“”']?\s*", " ", s, flags=re.I)
     s = re.sub(r"\b(?:altura\s+del?\s+)?(?:Nro\.?|N[°º]|numeraci[oó]n|n[uú]mero)\s*[\"“”']?\s*(?=\d)", " ", s, flags=re.I)
-    s = re.sub(r"\s+con\s+(?=(?:calle|pasaje|avenida|avda|av\.|pje))", " / ", s, flags=re.I)
-    s = re.sub(r"\besquina\s+(?:con\s+)?", " / ", s, flags=re.I)
     s = re.sub(r"^\W*(?:la\s+)?(?:calles?|\w{0,2}alle)\b\s*", "", s.strip(), flags=re.I)
     s = re.sub(r"^(?:la\s+|el\s+)", "", s, flags=re.I)
     return limpiar(s).upper()[:70]
@@ -187,8 +186,18 @@ def _lugar_hasta(t):
 
 
 def _infraccion(t, secs):
-    v = _sec(secs, "INFRACCION", ultimo=False)
+    # La descripción citada puede contener palabras que también son rótulos,
+    # como LICENCIA o VEHÍCULO. Léela completa antes de consultar las secciones.
+    cita = re.search(r"\b(?:notificaron\s+al\s+infractor|si[gq]uiente\s*(?:in(?:fr|f|er)acci[oó]n\s*)?)"
+                     r"(?:(?:(?:a\s+)?la\s+ley\s+de|al)\s+tr[aá]nsito\s*)?"
+                     r"[.:;\s]*[\"“]\s*([^\"”]{10,450})[\"”]", t, re.I)
+    if not cita:
+        cita = re.search(r'\binfracci[oó]n\s+al\s+tr[aá]nsito\s*:\s*["“]\s*([^"”]{10,450})["”]', t, re.I)
+    if cita:
+        return limpiar(cita.group(1)).upper()
     todas = [s for r, s in secs if r.startswith("INFRACCION") and s]
+    todas = [s for s in todas if not re.fullmatch(
+        r"(?:A\s+LA\s+LEY\s+DE\s+TRANSITO|AL\s+TRANSITO)\W*", s, re.I)]
     v = todas[0] if todas else ""
     if not v:
         m = re.search(r"siguiente\s+infracci[oó]n\W{0,4}\s*[\"“”']?\s*(.{10,450}?)(?=\bINFRACTOR|\bREINCIDENCIA|\bDISP\.?\s*INFR|\bCITACI)",
@@ -292,10 +301,13 @@ def _trozo_nombre(s):
     return _tokens_nombre(bruto)
 
 
+POR_ESCRITO = re.compile(r"^\W*" + r"\s*".join("PORESCRITO") + r"\b", re.I)
+
+
 def _infractor(texto_inf):
     """-> (nombre, rut, direccion, comuna, aviso, rut_leido)"""
     s = re.sub(r"^[\W_]+", "", limpiar(texto_inf))
-    if not s or re.match(r"(?:por\s+escrito|ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
+    if not s or POR_ESCRITO.match(s) or re.match(r"(?:ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
     s = re.split(r"\bD[I1l]SP\.?\s*[I1l]NFR\w*|\bD[I1l]SP[O0]S[I1lÍ]C[I1l][OÓ0]N\s+[I1l]NFR\w*", s, 1, flags=re.I)[0].strip()
     nombre = _trozo_nombre(s)
@@ -343,7 +355,7 @@ def _vehiculo(s):
     mt = re.match(r"(.+?)[,\s]+(?:marca|P\.?\s?P\.?\s?U\.?|patente)\b", s, re.I)
     if mt:
         tipo = limpiar(mt.group(1)).upper()
-        if re.search(r"\d|^(?:PPU|P\.P\.U|PLACA|PATENTE)", tipo):
+        if re.search(r"\d|^(?:PPU|P\.P\.U|PLACA|PATENTE|COLOR|MODELO|AÑO)\b", tipo):
             tipo = ""
     fin = r"(?:,|\bmodelo\b|\ba[ñn]o\b|\bcolor\b|\bP\.?\s?P\.?\s?U\b|\bpatente\b|$)"
     marca = re.search(r"marca\s+[\"“”']?(.+?)[\"“”']?\s*" + fin, s, re.I)
@@ -447,11 +459,25 @@ def problemas(r):
     return n
 
 
+def fechas_citacion_recorte(texto):
+    fechas = set()
+    for m in re.finditer(r"\b(?:audiencia|comparecer|citaci[oó]n)\b(?=[^\d]{0,45}(\d.{0,31}))", _plano(texto), re.I):
+        fecha = _fecha_num(m[1]) or fecha_de(m[1])
+        if fecha:
+            fechas.add(fecha)
+    return sorted(fechas)
+
+
+def fecha_citacion_recorte(texto):
+    fechas = fechas_citacion_recorte(texto)
+    return fechas[0] if len(fechas) == 1 else ""
+
+
 def parte(texto):
     t = _plano(texto)
     av = []
     secs = _secciones(t)
-    m = re.search(r"Parte\s*N\w{0,4}[.\s:*°º]*(\d{2,5})", t, re.I)
+    m = re.search(r"Parte\s*N\w{0,4}[.,\s:*°º]*(\d{2,5})", t, re.I)
     n_parte = (m.group(1).lstrip("0") or m.group(1)) if m else ""
     fecha_parte = _fecha_cabecera(t) or _fecha_texto(t)
     m = re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{1,2})\s*[:.;,]\s*(\d{2})", t, re.I) \
@@ -501,6 +527,11 @@ def parte(texto):
                 x["boleta"] = bol
     tiene_vehiculo = any(r.startswith("VEHICULO") for r, _ in secs)
     v = _vehiculo(_sec(secs, "VEHICULO")) if tiene_vehiculo else _vehiculo("")
+    if tiene_vehiculo and not v["tipo"]:
+        tipo_desplazado = re.search(r"\b(camioneta|autom[oó]vil|motocicleta|camión|furg[oó]n)\s*,?\s+marca\s*$",
+                                    _sec(secs, "INFRACTOR"), re.I)
+        if tipo_desplazado:
+            v["tipo"] = tipo_desplazado[1].upper()
     if not tiene_vehiculo or not (v["placa"] or v["marca"] or v["tipo"]):
         clausula = SM.vehiculo(texto)
         if clausula:
@@ -522,8 +553,9 @@ def parte(texto):
     return {
         "origen": "carab", "departamento": "CARABINEROS", "oficina": _of[0], "oficina_reconocida": _of[1], "n_parte": boleta, "n_parte_final": boleta,
         "n_parte_carab": n_parte, "boleta": boleta, "n_citacion_adjunta": "",
+        "empadronado": bool(POR_ESCRITO.match(_sec(secs, "INFRACTOR"))),
         "fecha_parte": fecha_parte, "anio_leido": anio_leido, "fecha_infraccion": fecha_parte, "hora_infraccion": hora,
-        "lugar": _u(_lugar_final(t)), "infraccion_texto": infr, "bloques_infraccion": bloques_infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
+        "lugar": SM.formato_lugar(_u(_lugar_final(t)), conservar_comuna=str(_of[0]) == "5"), "infraccion_texto": infr, "bloques_infraccion": bloques_infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
         "modelo": v["modelo"], "color": v["color"], "anio": v["anio"], "placa": v["placa"],
         "tiene_vehiculo": tiene_vehiculo,
         "fecha_citacion": fecha_cit, "hora_citacion": "", "articulo": "",

@@ -1,0 +1,268 @@
+package cl.partescan.captura;
+
+import android.app.AlertDialog;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.TextView;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.android.controller.ActivityController;
+import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
+import org.robolectric.shadows.ShadowDialog;
+import org.robolectric.util.ReflectionHelpers;
+import static org.junit.Assert.*;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = 34, qualifiers = "w393dp-h852dp-xxhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+public class NavigationTest {
+    public static class NavigationActivity extends MainActivity {
+        @Override String readOcr(String name) {
+            return "";
+        }
+    }
+    private ActivityController<NavigationActivity> controller;
+    private MainActivity activity;
+
+    @Before public void create() {
+        // Each Robolectric test has a different app data directory; FileProvider caches paths.
+        java.util.Map<?,?> photoRoots = ReflectionHelpers.getStaticField(androidx.core.content.FileProvider.class,"sCache");
+        photoRoots.clear();
+        controller = Robolectric.buildActivity(NavigationActivity.class).setup();
+        activity = controller.get();
+        list("pages").clear(); list("attachments").clear();
+        ReflectionHelpers.setField(activity, "part", null);
+        ReflectionHelpers.setField(activity, "certificate", null);
+        ReflectionHelpers.setField(activity, "completedParts", 0);
+        ReflectionHelpers.setField(activity, "editingIndex", -1);
+        ReflectionHelpers.setField(activity, "undoDelete", null);
+        navigate(0);
+    }
+    @After public void destroy() { controller.pause().stop().destroy(); }
+    private <T> ArrayList<T> list(String field) { return ReflectionHelpers.getField(activity, field); }
+    private View root() { return activity.findViewById(android.R.id.content); }
+    private void navigate(int tab) { ReflectionHelpers.callInstanceMethod(activity, "navigate", ReflectionHelpers.ClassParameter.from(int.class, tab)); }
+    private View byDescription(View view, String description) {
+        if (description.contentEquals(view.getContentDescription() == null ? "" : view.getContentDescription())) return view;
+        if (view instanceof ViewGroup) for (int i=0; i<((ViewGroup)view).getChildCount(); i++) {
+            View found=byDescription(((ViewGroup)view).getChildAt(i), description); if (found!=null) return found;
+        }
+        return null;
+    }
+    private Button button(View view, String text) {
+        if (view instanceof Button && text.contentEquals(((TextView)view).getText())) return (Button)view;
+        if (view instanceof ViewGroup) for (int i=0; i<((ViewGroup)view).getChildCount(); i++) {
+            Button found=button(((ViewGroup)view).getChildAt(i), text); if (found!=null) return found;
+        }
+        return null;
+    }
+    private void clickDescription(String value) { View v=byDescription(root(),value); assertNotNull(value,v); v.performClick(); }
+    private void click(String value) { Button b=button(root(),value); assertNotNull(value,b); assertTrue(b.isEnabled()); b.performClick(); }
+
+    private org.robolectric.shadows.ShadowActivity.IntentForResult startCamera(int request) {
+        ReflectionHelpers.callInstanceMethod(activity,"capture",ReflectionHelpers.ClassParameter.from(int.class,request));
+        org.robolectric.shadows.ShadowActivity.IntentForResult started = org.robolectric.Shadows.shadowOf(activity).getNextStartedActivityForResult();
+        StringBuilder errors = new StringBuilder();
+        for (org.robolectric.shadows.ShadowLog.LogItem item : org.robolectric.shadows.ShadowLog.getLogsForTag("ParteScan")) {
+            errors.append(item.msg).append(' ').append(item.throwable).append('\n');
+        }
+        assertNotNull("Debe abrir la cámara en vez de fallar al preparar la foto: " + errors,started);
+        assertEquals(request,started.requestCode);
+        assertEquals(android.provider.MediaStore.ACTION_IMAGE_CAPTURE,started.intent.getAction());
+        return started;
+    }
+
+    @Test public void cameraReceivesWritablePrivatePhotoWithTemporaryAccess() throws Exception {
+        navigate(1);
+        org.robolectric.shadows.ShadowActivity.IntentForResult started=startCamera(1);
+        android.net.Uri uri=started.intent.getParcelableExtra(android.provider.MediaStore.EXTRA_OUTPUT);
+        assertNotNull(uri); assertEquals("content",uri.getScheme());
+        assertEquals(activity.getPackageName()+".fotos",uri.getAuthority());
+        int permissions=android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION|android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+        assertEquals(permissions,started.intent.getFlags()&permissions);
+        assertNotNull(started.intent.getClipData());
+        assertEquals(uri,started.intent.getClipData().getItemAt(0).getUri());
+        File folder=ReflectionHelpers.getField(activity,"folder");
+        File photo=new File(folder,(String)ReflectionHelpers.getField(activity,"pending"));
+        assertTrue(photo.isFile());
+        byte[] bytes={1,2,3};
+        try(java.io.OutputStream output=activity.getContentResolver().openOutputStream(uri)) { assertNotNull(output); output.write(bytes); }
+        assertArrayEquals(bytes,java.nio.file.Files.readAllBytes(photo.toPath()));
+    }
+
+    @Test public void cancellingNextPhotoPreservesPartAndCertificate() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        startCamera(4);
+        File folder=ReflectionHelpers.getField(activity,"folder");
+        File temporary=new File(folder,(String)ReflectionHelpers.getField(activity,"pending"));
+        activity.onActivityResult(4,android.app.Activity.RESULT_CANCELED,null);
+        assertEquals("first.jpg",ReflectionHelpers.getField(activity,"part"));
+        assertEquals("cert.jpg",ReflectionHelpers.getField(activity,"certificate"));
+        assertNull(ReflectionHelpers.getField(activity,"pending"));
+        assertFalse(temporary.exists());
+        assertTrue(new File(folder,"first.jpg").isFile());
+        assertTrue(new File(folder,"cert.jpg").isFile());
+    }
+
+    @Test public void certificateCameraUsesNewOutputWithoutReplacingExistingPhotos() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        org.robolectric.shadows.ShadowActivity.IntentForResult started=startCamera(2);
+        android.net.Uri output=started.intent.getParcelableExtra(android.provider.MediaStore.EXTRA_OUTPUT);
+        assertNotNull(output);
+        assertEquals("first.jpg",ReflectionHelpers.getField(activity,"part"));
+        assertEquals("cert.jpg",ReflectionHelpers.getField(activity,"certificate"));
+        File folder=ReflectionHelpers.getField(activity,"folder");
+        try(java.io.OutputStream stream=activity.getContentResolver().openOutputStream(output)) { assertNotNull(stream); }
+        assertNotEquals("first.jpg",ReflectionHelpers.getField(activity,"pending"));
+        assertNotEquals("cert.jpg",ReflectionHelpers.getField(activity,"pending"));
+        assertTrue(new File(folder,"first.jpg").isFile());
+        assertTrue(new File(folder,"cert.jpg").isFile());
+    }
+
+    @Test public void photoProviderDoesNotExposeOtherInternalFiles() throws Exception {
+        File other=new File(activity.getFilesDir(),"nota-privada.txt");
+        other.createNewFile();
+        assertThrows(IllegalArgumentException.class,() -> androidx.core.content.FileProvider.getUriForFile(activity,activity.getPackageName()+".fotos",other));
+    }
+
+    @Test public void launcherLoadsAdaptiveAndThemedBrandIcons() throws Exception {
+        android.graphics.drawable.Drawable icon=activity.getApplicationInfo().loadIcon(activity.getPackageManager());
+        assertTrue(icon instanceof android.graphics.drawable.AdaptiveIconDrawable);
+        android.graphics.drawable.AdaptiveIconDrawable adaptive=(android.graphics.drawable.AdaptiveIconDrawable)icon;
+        assertNotNull(adaptive.getBackground()); assertNotNull(adaptive.getForeground());
+        assertNotNull(adaptive.getMonochrome());
+        Bitmap bitmap=Bitmap.createBitmap(256,256,Bitmap.Config.ARGB_8888);
+        icon.setBounds(0,0,256,256); icon.draw(new Canvas(bitmap));
+        File directory=new File("build/test-screenshots"); directory.mkdirs();
+        try(FileOutputStream output=new FileOutputStream(new File(directory,"09-icono-adaptativo.png"))) { bitmap.compress(Bitmap.CompressFormat.PNG,100,output); }
+        bitmap.recycle();
+    }
+
+    private void photo(String name, String title) throws Exception {
+        File folder=ReflectionHelpers.getField(activity,"folder");
+        Bitmap bitmap=Bitmap.createBitmap(300,400,Bitmap.Config.ARGB_8888);
+        Canvas canvas=new Canvas(bitmap); canvas.drawColor(Color.WHITE);
+        Paint paint=new Paint(); paint.setColor(Color.rgb(15,108,189)); paint.setTextSize(18);
+        canvas.drawText(title,20,45,paint);
+        paint.setColor(Color.LTGRAY); paint.setStrokeWidth(2);
+        for(int y=85;y<350;y+=24) canvas.drawLine(20,y,280,y,paint);
+        try(FileOutputStream out=new FileOutputStream(new File(folder,name))) { bitmap.compress(Bitmap.CompressFormat.JPEG,90,out); }
+        bitmap.recycle();
+    }
+    private void seed() throws Exception {
+        photo("first.jpg","PARTE DE PRUEBA"); photo("cert.jpg","CERTIFICADO"); photo("second.jpg","SEGUNDO PARTE");
+        list("pages").add("first.jpg"); list("pages").add("cert.jpg"); list("pages").add("second.jpg");
+        list("attachments").add(1); ReflectionHelpers.setField(activity,"completedParts",2); navigate(0);
+    }
+    private void screenshot(String name) throws Exception {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        float density=activity.getResources().getDisplayMetrics().density;
+        int width=Math.round(activity.getResources().getConfiguration().screenWidthDp*density);
+        int height=Math.round(activity.getResources().getConfiguration().screenHeightDp*density);
+        View root=root(); root.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY)); root.layout(0,0,width,height);
+        root.jumpDrawablesToCurrentState();
+        root.getViewTreeObserver().dispatchOnPreDraw();
+        Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888); root.draw(new Canvas(bitmap));
+        File directory=new File("build/test-screenshots"); directory.mkdirs();
+        try(FileOutputStream output=new FileOutputStream(new File(directory,name+".png"))) { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,output)); }
+        bitmap.recycle();
+    }
+
+    @Test public void emptyBatchHasFocusedActionsAndPersistentNavigation() throws Exception {
+        assertNotNull(button(root(),"Escanear primer parte"));
+        assertNull(button(root(),"Eliminar este parte"));
+        screenshot("01-tanda-vacia");
+        clickDescription("Escanear");
+        assertNotNull(button(root(),"Escanear parte"));
+        assertNull(button(root(),"Agregar certificado"));
+        screenshot("02-escanear");
+        clickDescription("Guardar");
+        assertFalse(button(root(),"Guardar para ParteScan").isEnabled());
+        clickDescription("Tanda");
+        assertTrue(byDescription(root(),"Tanda").isSelected());
+    }
+
+    @Test public void reviewingAndSavingPreservesOrderAndCertificate() throws Exception {
+        seed(); screenshot("03-tanda");
+        clickDescription("Revisar parte 1, con certificado");
+        assertEquals("first.jpg",ReflectionHelpers.getField(activity,"part"));
+        assertEquals("cert.jpg",ReflectionHelpers.getField(activity,"certificate"));
+        screenshot("04-revisar-parte");
+        click("Guardar cambios");
+        assertEquals("first.jpg",list("pages").get(0));
+        assertEquals("cert.jpg",list("pages").get(1));
+        assertEquals("second.jpg",list("pages").get(2));
+        clickDescription("Guardar");
+        assertTrue(button(root(),"Guardar para ParteScan").isEnabled());
+        screenshot("05-guardar");
+    }
+
+    @Test public void deleteAndUndoRestoresThePartAndItsCertificate() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        ReflectionHelpers.callInstanceMethod(activity,"removeCurrent");
+        ((AlertDialog)ShadowDialog.getLatestDialog()).getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(1,((Integer)ReflectionHelpers.getField(activity,"completedParts")).intValue());
+        click("Deshacer eliminación");
+        assertEquals(2,((Integer)ReflectionHelpers.getField(activity,"completedParts")).intValue());
+        assertEquals("first.jpg",list("pages").get(0));
+        assertEquals("cert.jpg",list("pages").get(1));
+        assertEquals(Integer.valueOf(1),list("attachments").get(0));
+    }
+
+    @Test public void recreationKeepsThePartBeingReviewed() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        controller.recreate(); activity=controller.get();
+        assertEquals("first.jpg",ReflectionHelpers.getField(activity,"part"));
+        assertEquals("cert.jpg",ReflectionHelpers.getField(activity,"certificate"));
+        assertNotNull(button(root(),"Guardar cambios"));
+        clickDescription("Tanda");
+        assertEquals(3,list("pages").size());
+    }
+
+    @Test public void systemBackReturnsToBatchWithoutLosingTheReviewedPart() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        android.window.OnBackInvokedCallback back = ReflectionHelpers.getField(activity,"systemBackCallback");
+        assertNotNull(back);
+        ReflectionHelpers.setField(activity,"busy",true);
+        back.onBackInvoked();
+        assertTrue(byDescription(root(),"Escanear").isSelected());
+        ReflectionHelpers.setField(activity,"busy",false);
+        back.onBackInvoked();
+        assertTrue(byDescription(root(),"Tanda").isSelected());
+        assertEquals("first.jpg",list("pages").get(0));
+        assertEquals("cert.jpg",list("pages").get(1));
+        assertFalse(activity.isFinishing());
+        clickDescription("Guardar"); back.onBackInvoked();
+        assertTrue(byDescription(root(),"Tanda").isSelected());
+    }
+
+    @Test @Config(qualifiers="w320dp-h640dp-mdpi") public void smallScreenKeepsNavigationAndMainActionVisible() throws Exception {
+        seed(); clickDescription("Revisar parte 1, con certificado");
+        screenshot("06-pantalla-pequena");
+        View nav=byDescription(root(),"Tanda"); int[] position=new int[2]; nav.getLocationOnScreen(position);
+        assertTrue(position[1]+nav.getHeight()<=root().getHeight());
+        Button primary=button(root(),"Guardar cambios"); primary.getLocationOnScreen(position);
+        assertTrue(position[1]+primary.getHeight()<=root().getHeight());
+    }
+
+    @Test @Config(qualifiers="w393dp-h852dp-night-xxhdpi") public void darkThemeUsesSameNavigation() throws Exception {
+        seed(); screenshot("07-tanda-oscura");
+        clickDescription("Guardar"); screenshot("08-guardar-oscuro");
+        FluentStyle style=ReflectionHelpers.getField(activity,"fluent"); assertTrue(style.dark);
+        assertTrue(byDescription(root(),"Guardar").isSelected());
+    }
+}

@@ -16,7 +16,14 @@ dist/
 /salida/
 /ParteScan-Windows-*.zip
 /PartesTeclea-Windows-*.zip
-/teclea/prueba.txt
+/android/.gradle/
+/android/build/
+/android/local.properties
+*.keystore
+*.jks
+*.psocr
+/.release-signing/
+/ParteScan-*-fotos-recuperadas.zip
 
 # Diagnósticos y grabaciones locales (pueden contener datos personales)
 /herramientas/diagnostico.txt

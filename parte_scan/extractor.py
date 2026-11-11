@@ -1,21 +1,43 @@
 """Lee el texto OCR de un parte (modelo 1) línea por línea y devuelve campos + avisos."""
 import re
+from .semantica import formato_lugar
 from . import perfil
 
 MESES = {m: i + 1 for i, m in enumerate(
     "ENERO FEBRERO MARZO ABRIL MAYO JUNIO JULIO AGOSTO SEPTIEMBRE OCTUBRE NOVIEMBRE DICIEMBRE".split())}
-RE_FECHA = re.compile(r"(\d{1,2})\s*DE\s*(" + "|".join(MESES) + r")\s*(?:DEL?\.?\s*)?(\d{4})", re.I)
-RE_HORA = re.compile(r"(?<!\d)(\d{1,2}):(\d{2})(?!\d)")
+RE_FECHA = re.compile(r"(\d{1,2})\s*DE\s*(" + "|".join(MESES) + r"|CTUBRE)\s*(?:DEL?\.?\s*)?(\d{4})", re.I)
+RE_HORA = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*:\s*([0-5]\d)(?!\d)")
+RE_HORA_IMPRESA = re.compile(r"(?:\ba\s*las\s+|(?=\d{1,2}\s*[.,]\s*\d{2}\s*(?:hrs?|horas?)\b))"
+                             r"(?<!\d)([01]?\d|2[0-3])\s*[.,]\s*([0-5]\d)(?!\d)", re.I)
 
 
 def fecha_de(linea):
     m = RE_FECHA.search(linea)
-    return "%02d/%02d/%s" % (int(m.group(1)), MESES[m.group(2).upper()], m.group(3)) if m else ""
+    if not m:
+        return ""
+    mes = m.group(2).upper()
+    return "%02d/%02d/%s" % (int(m.group(1)), MESES["OCTUBRE" if mes == "CTUBRE" else mes], m.group(3))
 
 
 def hora_de(linea):
     h = RE_HORA.findall(linea)
     return "%d:%s" % (int(h[-1][0]), h[-1][1]) if h else ""
+
+
+def momento_infraccion(lineas):
+    i, linea = primera(lineas, r"\bDoy\s+cuenta\b")
+    if i < 0:
+        return "", ""
+    # El OCR móvil puede colocar la fecha y hora inmediatamente antes del rótulo.
+    fecha, hora = fecha_de(linea), hora_de(linea)
+    for candidata in (linea, *lineas[i + 1:i + 3], *reversed(lineas[max(0, i - 2):i])):
+        if candidata != linea and re.search(r"audiencia|citaci[oó]n|juzgado|^\s*\w+\s*,", candidata, re.I):
+            continue
+        if candidata == linea or re.match(r"^\W*(?:\d{1,2}\s+DE\b|(?:a\s*las\s+)?\d{1,2}\s*[:.,])", candidata, re.I):
+            impresa = RE_HORA_IMPRESA.search(candidata)
+            hora = hora or hora_de(candidata) or ("%d:%s" % (int(impresa[1]), impresa[2]) if impresa else "")
+            fecha = fecha or fecha_de(candidata)
+    return fecha, hora
 
 
 def numero(linea, despues=None):
@@ -52,6 +74,33 @@ def placa_ok(p):
     return bool(re.fullmatch(r"[A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3}", p))
 
 
+def completar_lineas_movil(t):
+    """Recupera valores vecinos cuando el OCR separa rótulo y contenido."""
+    lineas = [l.strip() for l in t.splitlines() if l.strip()]
+    for i, linea in enumerate(lineas):
+        anteriores = lineas[max(0, i - 2):i]
+        siguientes = lineas[i + 1:i + 3]
+        if re.search(r"audiencia", linea, re.I) and not fecha_de(linea):
+            valor = next((v for v in anteriores + siguientes if fecha_de(v)), "")
+            lineas[i] += " " + valor
+        if re.fullmatch(r"en\s+la\s+calle", linea, re.I):
+            valor = next((v for v in anteriores + siguientes
+                          if re.search(r"se\s+sorprendi", v, re.I)
+                          and not re.match(r"se\s+sorprendi", v, re.I)), "")
+            lineas[i] += " " + valor
+        if re.fullmatch(r"Infractor", linea, re.I):
+            valor = next((v for v in anteriores + siguientes
+                          if re.search(r"\bC\.[I1l]\.", v, re.I)
+                          and re.search(r"\d{3}", v)), "")
+            lineas[i] += " " + valor
+        if re.fullmatch(r"Domiciliad[oa]\s+en\s+calle", linea, re.I):
+            valor = next((v for v in anteriores + siguientes
+                          if re.fullmatch(r"[A-ZÁÉÍÓÚÑ .]+\s+\d+[A-Z]?", v, re.I)
+                          and not re.search(r"DENUNCIO|CITACION", v, re.I)), "")
+            lineas[i] += " " + valor
+    return "\n".join(lineas)
+
+
 def parte(t):
     L = [l.strip() for l in t.splitlines() if l.strip()]
     o, av = {}, []
@@ -72,22 +121,29 @@ def parte(t):
     if o["n_parte"] and o["n_citacion_adjunta"] and o["n_parte"] != o["n_citacion_adjunta"]:
         av.append("El N° del encabezado (%s) no coincide con el de la citación adjunta (%s)." % (o["n_parte"], o["n_citacion_adjunta"]))
 
-    for l in L:
-        if re.match(r"\W*" + re.escape(perfil.cargar()["comuna"]) + r"\W", l, re.I) and fecha_de(l):
-            o["fecha_parte"] = fecha_de(l)
+    comuna = re.escape(perfil.cargar()["comuna"])
+    for i, l in enumerate(L):
+        if not re.match(r"\W*" + comuna + r"\b", l, re.I):
+            continue
+        fecha = fecha_de(l)
+        if not fecha and re.fullmatch(r"\W*" + comuna + r"\W*", l, re.I):
+            vecinas = L[i + 1:i + 2] + L[max(0, i - 1):i]
+            fechas = {fecha_de(v) for v in vecinas if RE_FECHA.fullmatch(v.strip(" .|"))}
+            if len(fechas) == 1:
+                fecha = fechas.pop()
+        if fecha:
+            o["fecha_parte"] = fecha
             break
     else:
         o["fecha_parte"] = ""
-    _, l = primera(L, r"Doy cuenta")
-    o["fecha_infraccion"] = fecha_de(l)
-    o["hora_infraccion"] = hora_de(l)
+    o["fecha_infraccion"], o["hora_infraccion"] = momento_infraccion(L)
 
     _, l = primera(L, r"en\s*la\s*calle")
     m = re.search(r"calle\s+(.+?)\s+se\s+sorprendi", l, re.I) or re.search(r"calle\s+(.+)$", l, re.I)
     lugar = m.group(1) if m else ""
     lugar = re.sub(r"\b(FRTE|FTE)\.?\s*", "", lugar, flags=re.I)
     lugar = re.sub(r"\bN\W{0,2}(?=\d)", "", lugar)
-    o["lugar"] = limpiar(lugar).upper()
+    o["lugar"] = formato_lugar(limpiar(lugar))
 
     # el OCR a veces lee "intracción", "inftacción", etc.
     PAT_INF = r"^\W*[il1]n\w{0,4}cci[oó0]n"
@@ -139,6 +195,9 @@ def parte(t):
     rut = re.search(r"\b\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK]\b", infractor, re.I)
     nombre = infractor[:rut.start()] if rut else infractor
     nombre = re.sub(r"\s+C\s*\.?\s*[IL1]\s*\.?\s*$", "", nombre, flags=re.I)
+    o["notificado_personalmente"] = bool(re.search(
+        r"(?:CITACI[OÓÔ]N\s+(?:ENTREGADA\s+PERSONALMENTE|EN\s+FORMA\s+PERSONAL)|"
+        r"NOTIFICAD[OA]\s+PERSONALMENTE)", "\n".join(L), re.I))
     o["persona"] = {
         "nombre": limpiar(re.sub(r"^\W*Infractor\b", "", nombre, flags=re.I)),
         "rut": re.sub(r"\s+", "", rut.group()) if rut else "",
@@ -147,9 +206,46 @@ def parte(t):
     return o
 
 
+def es_os10(texto):
+    return bool(re.search(r"OFICINA\s+(?:DE\s+)?SEGURIDAD\s+PRIVADA|\bOS\s*10\b", texto, re.I)
+                and re.search(r"INFORME\s+DE\s+INFRACCI[OÓ]N", texto, re.I))
+
+
+def parte_os10(texto):
+    t = re.sub(r"\s+", " ", texto)
+    r = parte(texto)
+    folio = re.search(r"\bNRO\.?\s*[:°º]?\s*(\d+)", t, re.I)
+    empresa = re.search(r"\bempresa\s+(.+?)\s*[,;]?\s*R\.?\s*U\.?\s*T\.?\s*[:;]?\s*(?:N[°ºo]?\s*)?"
+                        r"(\d[\d. ]{5,14}\s*-\s*[\dK])\b", t, re.I)
+    direccion = re.search(r"domicilio\s+comercial\s+(?:en\s+)?(?:calle\s+)?(.+?),?\s+"
+                          r"(?:de\s+la\s+)?comuna\s+de\s+(.+?)(?:,|\s+en\s+espera|\s+la\s+siguiente)", t, re.I)
+    persona = {"nombre": limpiar(empresa.group(1)) if empresa else "",
+               "rut": re.sub(r"[.\s]", "", empresa.group(2)).upper() if empresa else "",
+               "direccion": limpiar(direccion.group(1)) if direccion else "",
+               "comuna": limpiar(direccion.group(2)) if direccion else ""}
+    r.update(departamento="Oficina Seguridad Privada", parte_escrito=True,
+             n_parte_final=folio.group(1) if folio else "", persona=persona,
+             infraccion_texto="DS.93 SOBRE VIGILANCIA PRIVADA",
+             placa="", marca="", tipo_vehiculo="", avisos=[])
+    if not empresa:
+        r["avisos"].append("Revisa la razón social y el RUT de la empresa denunciada en el informe OS10.")
+    return r
+
+
 def es_dom(texto):
     return bool(re.search(r"direcci[oó]n\s+de\s+obras\s+municipales", texto, re.I)
                 and re.search(r"^\W*citaci[oó]n\s+N", texto, re.I | re.M))
+
+
+def fecha_documento(cabecera):
+    fechas = set()
+    lineas = cabecera.splitlines()
+    for i, linea in enumerate(lineas):
+        if re.match(r"^\W*(?:VALDIVIA|CORRAL|FECHA\s*:)", linea, re.I):
+            fecha = fecha_de(linea) or (fecha_de(lineas[i + 1]) if i + 1 < len(lineas) else "")
+            if fecha:
+                fechas.add(fecha)
+    return next(iter(fechas)) if len(fechas) == 1 else ""
 
 
 def parte_dom(texto):
@@ -170,7 +266,7 @@ def parte_dom(texto):
     return {
         "departamento": "Dirección de Obras Municipales", "n_parte_final": folio.group() if folio else "",
         "fecha_parte": fecha_de(fecha), "fecha_infraccion": fecha_de(hecho),
-        "hora_infraccion": hora_de(hecho), "lugar": limpiar(re.sub(r"^.*?notificado\s+en\s+calle\s+", "", lugar, flags=re.I)),
+        "hora_infraccion": hora_de(hecho), "lugar": formato_lugar(limpiar(re.sub(r"^.*?notificado\s+en\s+calle\s+", "", lugar, flags=re.I))),
         "infraccion_texto": infraccion, "fecha_citacion": fecha_de(citacion), "hora_citacion": hora_de(citacion),
         "articulo": articulo.group(1).rstrip(".") if articulo else "", "avisos": [],
         "placa": "", "marca": "", "tipo_vehiculo": "",

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ParteScan · revisión e ingreso">
+<defs>
+<linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3595EF"/><stop offset=".55" stop-color="#0F6CBD"/><stop offset="1" stop-color="#2343A6"/></linearGradient>
+<linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#E8F4FF"/></linearGradient>
+<linearGradient id="badge" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0A82CF"/><stop offset="1" stop-color="#1643A0"/></linearGradient>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#tile)"/>
+<path d="M160 156L286 140Q304 138 306 156L332 358Q334 376 316 378L184 394Q166 396 164 378L142 178Q140 160 160 156Z" fill="#FFFFFF" opacity="0.25"/><path d="M184 132H280L336 188V356Q336 376 316 376H184Q164 376 164 356V152Q164 132 184 132Z" fill="url(#paper)"/><path d="M280 132V172Q280 188 296 188H336Z" fill="#CDEBFA"/><path d="M200 224H300" fill="none" stroke="#0F6CBD" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><path d="M200 256H282" fill="none" stroke="#0F6CBD" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><path d="M200 288H246" fill="none" stroke="#0F6CBD" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/><path d="M404 344A60 60 0 1 1 284 344A60 60 0 1 1 404 344Z" fill="url(#badge)"/><path d="M316 344L336 364L374 326" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

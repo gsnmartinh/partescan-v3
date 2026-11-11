@@ -8,7 +8,7 @@ on:
         required: false
         default: ""      # botón "Run workflow"
   push:
-    branches: [main, master, fix/activar-aceptar-y-refrescar-datos]
+    branches: [main, master, fix/activar-aceptar-y-refrescar-datos, codex/release-v5.0.0]
     tags: ["v*"]          # al crear una versión (v1.0.0, v1.1.0…) se publica una Release con el zip
 
 concurrency:
@@ -19,6 +19,40 @@ permissions:
   contents: write      # necesario para adjuntar el zip a la Release
 
 jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Probar Android y los iconos adaptativos
+        run: gradle -p android testDebugUnitTest lintDebug
+      - name: Compilar APK con firma estable
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/partescan-release.p12"
+          trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          gradle -p android assembleRelease
+      - name: Preparar APK instalable
+        run: |
+          apk_version=$(awk -F"'" '/versionName/{print $2}' android/build.gradle)
+          apk_name="ParteScan-Captura-$apk_version.apk"
+          cp android/build/outputs/apk/release/*.apk "$apk_name"
+          sha256sum "$apk_name" > "$apk_name.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ParteScan-Captura
+          path: ParteScan-Captura-*.apk*
+          if-no-files-found: error
   build:
     runs-on: windows-latest
     steps:
@@ -36,6 +70,9 @@ jobs:
 
       - name: Pruebas del tecleo desde ParteScan
         run: python tests/prueba_tecleador.py
+
+      - name: Probar la edición de tandas y los tipos de vehículo
+        run: python tests/prueba_edicion_tanda.py
 
       - name: Probar la actualización automática
         run: |
@@ -62,6 +99,7 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ github.event.inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'dev' }}"
+          if ($v -eq 'dev') { $v = python -c "from parte_scan.version import VERSION; print(VERSION)" }
           Set-Content -Path parte_scan\version.py -Encoding utf8 -Value "VERSION = `"$v`""
           Get-Content parte_scan\version.py
 
@@ -69,6 +107,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --name ParteScan --windowed `
+            --icon "parte_scan\web\brand\partescan.ico" `
             --add-data "build\tesseract;tesseract" `
             --add-data "parte_scan\web;parte_scan\web" `
             --add-data "parte_scan\catalogo.json;parte_scan" `
@@ -90,6 +129,11 @@ jobs:
           $t = Invoke-WebRequest -Uri http://127.0.0.1:8765/api/tecleo/estado -UseBasicParsing
           Write-Host $t.Content
           if ($t.Content -notmatch '"disponible":\s*true') { throw "El tecleo no quedo disponible dentro del programa" }
+          $logo = Invoke-WebRequest -Uri http://127.0.0.1:8765/brand/partescan.svg -UseBasicParsing
+          $svg = if ($logo.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($logo.Content) } else { [string]$logo.Content }
+          if ($svg -notmatch '<svg') { throw "No se incluyó el logo de ParteScan" }
+          $icono = Invoke-WebRequest -Uri http://127.0.0.1:8765/favicon.ico -UseBasicParsing
+          if ($icono.RawContentLength -lt 100) { throw "No se incluyó el icono de ParteScan" }
           Stop-Process -Id $p.Id -Force
 
       - name: Crear el instalador (Setup.exe)
@@ -97,6 +141,7 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           $v = "${{ github.event.inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || 'dev' }}"
+          if ($v -eq 'dev') { $v = python -c "from parte_scan.version import VERSION; print(VERSION)" }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DVersion=$v" instalador\ParteScan.iss
           # huella SHA-256: el programa la comprueba antes de ejecutar una actualización descargada
           Get-ChildItem salida\*.exe | ForEach-Object {
@@ -117,6 +162,27 @@ jobs:
           retention-days: 14        # los compilados viejos se borran solos a los 14 días
           path: dist/ParteScan
 
+  release:
+    needs: [android, build]
+    if: ${{ github.event.inputs.version != '' || startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ParteScan-Windows
+          path: dist/ParteScan
+      - uses: actions/download-artifact@v4
+        with:
+          name: ParteScan-Instalador
+          path: salida
+      - uses: actions/download-artifact@v4
+        with:
+          name: ParteScan-Captura
+          path: apk
       - name: Publicar en la Release (solo al crear una versión)
         if: ${{ github.event.inputs.version != '' || startsWith(github.ref, 'refs/tags/v') }}
         shell: pwsh
@@ -125,8 +191,9 @@ jobs:
         run: |
           $tag = "${{ github.event.inputs.version || github.ref_name }}"
           Compress-Archive -Path "dist\ParteScan" -DestinationPath "ParteScan-Windows-$tag.zip"
+          Compress-Archive -Path @("assets\branding\*", "parte_scan\web\brand\*") -DestinationPath "ParteScan-Logos-$tag.zip"
           python herramientas/empaquetar_actualizacion.py dist/ParteScan build/actualizacion $tag
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh release create $tag --title "ParteScan $tag" --target ${{ github.sha }} --notes-file RELEASE_NOTES.md 2>$null
-          $assets = @("ParteScan-Windows-$tag.zip") + (Get-ChildItem salida\*).FullName + (Get-ChildItem build/actualizacion/*).FullName
+          $assets = @("ParteScan-Windows-$tag.zip", "ParteScan-Logos-$tag.zip") + (Get-ChildItem salida\*).FullName + (Get-ChildItem build/actualizacion/*).FullName + (Get-ChildItem apk/*).FullName
           gh release upload $tag @assets --clobber

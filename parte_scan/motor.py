@@ -123,11 +123,71 @@ def votar(*lecturas):
 
 def es_formulario_inspeccion(texto):
     """Reconoce el formulario municipal por sus campos, aunque cambie el encabezado."""
-    return all(re.search(campo, texto, re.I) for campo in (
-        r"\binspector\s+denunciante\b",
+    return (all(re.search(campo, texto, re.I) for campo in (
         r"\bdisposici[oó]n\s+infringida\b",
-        r"\bel\s+infractor\s+qued[oó]\s+citado\b",
-    ))
+        r"\b(?:e[lr]\s*)?infractor\s+qued[oó]\s+citado\b",
+    )) and bool(re.search(r"\binspector\s+denunciante\b", texto, re.I)
+                or re.search(r"\b(?:inspecci[oó]n\s+general|seguridad\s+ciudadana)\b",
+                             texto[:400], re.I)))
+
+
+def _releer_zona(imagen, modo):
+    try:
+        return pytesseract.image_to_string(imagen, lang="spa", config=f"--psm {modo}")
+    except (pytesseract.TesseractNotFoundError, pytesseract.TesseractError):
+        return ""
+
+
+def releer_franja(imagen, inicio, fin):
+    ancho, alto = imagen.size
+    return _releer_zona(imagen.crop((0, int(alto * inicio), ancho, int(alto * fin))), 6)
+
+
+def leer_certificado(g, texto, *, imagen=None):
+    from . import catalogo, certificado
+
+    datos = certificado.leer(texto)
+    campos = ("nombre", "rut", "direccion", "comuna", "placa")
+
+    def valido(campo, valor):
+        if campo == "rut":
+            return certificado.rut_ok(valor)
+        if campo == "comuna":
+            return bool(valor) and catalogo.comuna_en_sistema(valor)
+        if campo == "placa":
+            return extractor.placa_ok(valor) and not re.fullmatch(r"(?=[A-Z]{4}\d{2}$)[A-Z]*[AEIOU][A-Z]*\d{2}", valor)
+        return bool(valor)
+
+    faltan = [k for k in campos if not valido(k, datos[k])]
+    if faltan:
+        if g is None:
+            g = preparar(imagen)
+        ancho, alto = g.size
+        etiquetas = {"nombre": "nombre", "rut": "rut", "direccion": "dirección", "comuna": "comuna", "placa": "placa"}
+        for k, limites in (("placa", (0, 0.53)), ("rut", (0.25, 0.85))):
+            if k not in faltan:
+                continue
+            zona = g.crop((0, int(alto * limites[0]), ancho, int(alto * limites[1])))
+            recorte = _releer_zona(zona, 6)
+            otros = certificado.leer(recorte)
+            if valido(k, otros[k]):
+                datos[k] = otros[k]
+                if k == "placa":
+                    datos["dv_placa"] = otros["dv_placa"]
+                datos["avisos"] = [a for a in datos["avisos"] if etiquetas[k] not in a.lower()]
+                faltan.remove(k)
+    if faltan:
+        # La segmentación por columnas recupera líneas que el modo de bloque mezcla u omite.
+        alternativo = _releer_zona(g, 4)
+        if re.search(r"\bPROPIETARIO\b", alternativo, re.I):
+            otros = certificado.leer(alternativo)
+            for k in faltan:
+                if valido(k, otros[k]):
+                    datos[k] = otros[k]
+                    if k == "placa":
+                        datos["dv_placa"] = otros["dv_placa"]
+                    datos["avisos"] = [a for a in datos["avisos"] if etiquetas[k] not in a.lower()]
+    return datos
 
 
 def tipo_pagina(texto):
@@ -135,6 +195,8 @@ def tipo_pagina(texto):
     from . import certificado, extractor_carab, extractor_mtt
     if certificado.es_certificado(texto):
         return "certificado"
+    if extractor.es_os10(texto):
+        return "parte"
     if extractor.es_dom(texto):
         return "dom"
     if es_formulario_inspeccion(texto):
@@ -148,15 +210,46 @@ def tipo_pagina(texto):
     return "otra"
 
 
-def leer_parte(img, texto=None, g=None):
+def leer_parte(img, texto=None, g=None, *, solo_texto=False):
     """Imagen PIL (gris) -> dict con los campos leídos usando Tesseract como base."""
-    g = g or preparar(img)
+    if not solo_texto:
+        g = g or preparar(img)
     texto = texto if texto is not None else texto_pagina(g)
+    if extractor.es_os10(texto):
+        from . import perfil
+        r = extractor.parte_os10(texto)
+        if not r["fecha_parte"] and img is not None:
+            cabecera = releer_franja(g if g is not None else preparar(img), 0, 0.32)
+            r["fecha_parte"] = extractor.fecha_documento(cabecera)
+        r["oficina"] = perfil.oficinas().get("33", "33")
+        r["texto_ocr"] = texto
+        return r
+    if solo_texto:
+        texto = extractor.completar_lineas_movil(texto)
     r = extractor.parte(texto)
     if es_formulario_inspeccion(texto):
         from . import perfil
         r["oficina"] = perfil.oficinas().get("32", "32")
-    r["folio_recorte"] = _folio_recorte(g)
+        if not r["fecha_infraccion"] or not r["hora_infraccion"]:
+            gris = g if g is not None else preparar(img)
+            ancho, alto = gris.size
+            zona = gris.crop((0, int(alto * 0.18), ancho, int(alto * 0.48)))
+            respaldo = _releer_zona(zona, 6)
+            fecha, hora = extractor.momento_infraccion(respaldo.splitlines())
+            r["fecha_infraccion"] = r["fecha_infraccion"] or fecha
+            r["hora_infraccion"] = r["hora_infraccion"] or hora
+    campos = ["fecha_parte", "fecha_infraccion", "hora_infraccion", "lugar", "infraccion_texto", "fecha_citacion"]
+    if r["tipo_vehiculo"] or r["marca"]:
+        campos.append("placa")
+    if solo_texto and img is not None and any(not r[k] for k in campos):
+        gris = g if g is not None else preparar(img)
+        respaldo = extractor.parte(releer_franja(gris, 0, 1))
+        for campo in campos:
+            if not r[campo] and (campo != "placa" or extractor.placa_ok(respaldo[campo])):
+                r[campo] = respaldo[campo]
+    r["folio_recorte"] = _folio_recorte(g if g is not None else preparar(img)) if (
+        not solo_texto or (img is not None and not (r["n_parte"] or r["n_citacion_adjunta"]))
+    ) else ""
     r["n_parte_final"], av = votar(r["n_parte"], r["folio_recorte"], r["n_citacion_adjunta"])
     r["avisos"] = [a for a in r["avisos"] if "encabezado" not in a] + av
     r["texto_ocr"] = texto
@@ -267,7 +360,7 @@ def cotejar_con_rapidocr(g, r):
         return []
 
 
-def leer_carab(g, texto):
+def leer_carab(g, texto, *, imagen=None):
     """Lee un parte de Carabineros priorizando Tesseract y utilizando validación cruzada con RapidOCR."""
     from . import extractor_carab as EC
     
@@ -276,7 +369,32 @@ def leer_carab(g, texto):
     av = []
 
     # Validaciones y respaldos secundarios con RapidOCR
-    av += cotejar_con_rapidocr(g, r)
+    if g is not None:
+        av += cotejar_con_rapidocr(g, r)
+    elif imagen is not None:
+        campos = ["n_parte_carab", "fecha_parte", "hora_infraccion", "lugar", "infraccion_texto"]
+        if r["tiene_vehiculo"]:
+            campos.append("placa")
+        if any(not r[campo] for campo in campos):
+            gris = preparar(imagen)
+            respaldo = EC.parte(releer_franja(gris, 0, 1))
+            for campo in campos:
+                if not r[campo] and respaldo[campo] and (campo != "placa" or EC.placa_puntaje(respaldo[campo]) > 0):
+                    r[campo] = respaldo[campo]
+                    if campo == "infraccion_texto":
+                        r["bloques_infraccion"] = respaldo["bloques_infraccion"]
+    if (not r["fecha_citacion"] or not r["boleta"]) and (g is not None or imagen is not None):
+        franja = releer_franja(g if g is not None else preparar(imagen), 0.45, 1)
+        fechas = EC.fechas_citacion_recorte(franja) if not r["fecha_citacion"] else []
+        if len(fechas) == 1:
+            r["fecha_citacion"] = fechas[0]
+        elif fechas:
+            r["fechas_citacion"] = fechas
+        if not r["boleta"]:
+            r["boleta"] = EC._boleta_texto(franja)
+            r["n_parte_final"] = r["boleta"]
+    if not r["fecha_citacion"]:
+        av.append("Revisa la fecha en el bloque de citación del parte.")
 
     if not r["n_parte_carab"]:
         av.append("No pude leer el número del parte de Carabineros.")

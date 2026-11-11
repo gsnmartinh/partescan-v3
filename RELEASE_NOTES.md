@@ -1,10 +1,112 @@
-**ParteScan v4.0.0** lee los partes escaneados con OCR local y los teclea en el sistema del Juzgado desde una sola ventana.
+# ParteScan 5.1.14 · ParteScan Captura 1.1.4
+
+- Windows conserva los datos reconocidos y relee las fotos de una tanda cuando faltan campos clave.
+- Android vuelve a leer fotos con poco texto antes de exportar e indica cuántas quedaron con una lectura corta.
+- El README describe el flujo actual de captura, revisión y tecleo integrado.
+
+# ParteScan 5.1.13
+
+- Agrega el modo compacto en Windows para trabajar con ParteScan y el sistema del Juzgado lado a lado.
+- En ventanas estrechas, permite elegir el parte desde un desplegable, alternar entre datos y documentos y mantener visible el boton de tecleo.
+
+# ParteScan 5.1.12
+
+- Teclea SR en los partes empadronados que lo usan y elimina el aviso de RUT no reconocible.
+- Completa y acepta la ficha nueva del Juzgado cuando el RUT es valido, fue confirmado en ParteScan y estan disponibles el nombre, la direccion y la comuna.
+
+# ParteScan 5.1.11
+
+- Relee campos con OCR local y muestra alternativas con su fuente y, cuando es posible, el recorte donde aparecen.
+- Abre una ventana para releer la descripción de la causa y seleccionar los códigos de infracción que quieres agregar.
+- Filtra los pendientes por campo y cuenta las correcciones localmente por tipo de parte.
+- Conserva CON o ESQUINA en el lugar de los hechos y omite VALDIVIA al final, salvo en partes de Tenencia Corral.
+
+En Windows, vuelve a abrir ParteScan y pulsa **Actualizar a v5.1.11**.
+
+# ParteScan 5.1.1 · ParteScan Captura 1.1.0
+
+- Carga las tandas grandes por bloques y avisa si el archivo está dañado o la transferencia quedó incompleta.
+- Reconoce «POR ESCRITO» con letras juntas o separadas. En partes empadronados, forma el nombre con el tipo de vehículo y la patente y deja vacío el RUT.
+- Mejora la extracción de folios e infracciones de Carabineros e incorpora las correcciones de códigos verificadas con la tanda.
+
+En Windows, cierra y abre ParteScan y pulsa **Actualizar a v5.1.1**.
+
+## Novedades de 5.1.0
+
+- Windows reconoce los informes OS10 con oficina 33 e infracción 400 y extrae los datos de la empresa denunciada.
+- Mejora la lectura del rótulo de infracción en los partes de Carabineros.
+- Listado impreso compacto con boleta u oficio, ROL, oficina e infracción.
+- Barra de edición de la tanda con botones y selector alineados.
+- Android permite ampliar y recorrer las fotos con dos dedos y ajustar con doble toque.
+- Android busca nuevas versiones al abrir y ofrece descargarlas. La instalación se confirma en el teléfono. Instala este APK una vez para activar esa función.
+
+
+ParteScan 5.0.1 corrige la apertura de tandas .psocr con fotos de más de 40 megapíxeles. Reduce las imágenes durante la decodificación y conserva el texto OCR del teléfono.
+
+Los usuarios con ParteScan instalado pueden cerrar y abrir la aplicación y pulsar **Actualizar a v5.0.1**.
+
+Las dos aplicaciones estrenan una identidad visual complementaria:
+
+- **Windows:** documento azul con marca de revisión, en el programa, el instalador, los accesos directos y la cabecera.
+- **Android:** documento turquesa con marco de escaneo, con iconos adaptativos y versión monocroma para iconos temáticos.
+
+## ParteScan 5.0
+
+Consolida el diseño Fluent 2, el tecleo integrado, la revisión junto a las imágenes, la eliminación y reordenación con deshacer, la reasignación de certificados y la normalización de tipos de vehículo. Conserva las sesiones y las actualizaciones diferenciales.
+
+## ParteScan Captura 1.0
+
+Consolida la navegación entre **Tanda**, **Escanear** y **Guardar**, la revisión de partes y certificados, la repetición y giro de fotos, la eliminación con deshacer, la apertura de tandas .psocr y la recuperación local. Incluye la apertura de cámara corregida, la exportación a .psocr y PDF y la navegación Atrás de Android reciente.
+
+## Descargas
+
+- **Windows:** `ParteScan-Instalador-v5.0.0.exe` o el ZIP portátil.
+- **Android:** `ParteScan-Captura-1.0.0.apk`.
+- **Logos:** originales SVG, exportaciones PNG e icono ICO en `ParteScan-Logos-v5.0.0.zip`.
+
+El APK conserva la firma de las versiones oficiales 0.9 y 0.10: se instala como actualización. Se conservan los identificadores de las aplicaciones y los formatos de archivos y sesiones.
+
+## Historial de versiones
+
+**ParteScan v4.1.0**
+
+- Consolida el nuevo diseño de revisión y las mejoras de reconocimiento usadas en el trabajo diario.
+- Permite eliminar partes, cambiar su orden y deshacer esos cambios conservando las correcciones y las imágenes.
+- Permite asociar una hoja reconocida como parte a su verdadero parte como certificado, o reasignar un certificado existente.
+- Reconoce certificados en tandas móviles aunque se hayan marcado como partes al escanear.
+- Ajusta los tipos de vehículo a la lista del sistema y marca para revisión los valores desconocidos.
+- Conserva el tecleo integrado, el guardado de sesiones y las actualizaciones diferenciales.
+
+**ParteScan Captura Android 0.9**
+
+- Revisión de todos los partes capturados, con imágenes ampliables y posibilidad de repetir las fotografías.
+- Eliminación de partes con opción de deshacer.
+- Apertura de tandas .psocr guardadas para seguir modificándolas.
+- Recuperación local de la tanda al volver a abrir la aplicación.
+- Conserva el diseño nuevo, la orientación de las fotos y la exportación a .psocr o PDF.
+
+El APK 0.9 usa una firma estable para las próximas actualizaciones. Si Android rechaza la instalación sobre una versión de prueba anterior, guarda primero la tanda como .psocr, desinstala esa versión e instala el APK nuevo. Después puedes volver a abrir la tanda guardada.
+
+**ParteScan v4.0.5** corrige el bloqueo de la aceptación automática. ParteScan verifica el botón Aceptar y su foco antes de activarlo.
+
+**ParteScan v4.0.4** unifica la revisión y el guardado de los campos compartidos entre formularios. Las versiones se distribuyen como una sola aplicación con el tecleo integrado.
+
+**Novedades de v4.0.3**
+
+- Reintenta la lectura cuando falta la comuna y reconoce más variantes de la patente en los certificados del Registro Civil.
+- Mejora la detección de los formularios municipales que corresponden a la oficina 32.
+- Asigna el código 493 a botar basura en la vía pública o en un bien nacional de uso público.
+- Pide revisar el original si falta el número del parte de Carabineros, aunque la boleta sea legible.
 
 **Instalación (recomendada):** descarga `ParteScan-Instalador-…exe` en *Assets*, ejecútalo y sigue el asistente. No pide permisos de administrador y crea el acceso directo.
 Si Windows muestra «Windows protegió su PC»: *Más información → Ejecutar de todas formas* (el programa no está firmado).
 También hay un `.zip` portátil (se descomprime completo y se abre `ParteScan.exe`).
 
-**Actualizaciones diferenciales.** Instala v4.0.0 en la ubicación predeterminada. Cuando haya una versión compatible, el botón **Actualizar ParteScan** descarga los archivos modificados, verifica sus huellas y reinicia la aplicación. El perfil y las sesiones se conservan.
+**Actualizaciones diferenciales.** Si tienes v4.0.0 o posterior instalada en la ubicación predeterminada, abre ParteScan y pulsa **Actualizar a v4.0.5**. La aplicación descarga los archivos modificados, verifica sus huellas y reinicia. El perfil y las sesiones se conservan.
+
+**Novedades de v4.0.2.** Formato de RUT sin puntos y con guion antes del dígito verificador. El botón de actualización queda junto al título.
+
+**Novedades de v4.0.1.** Mejora la lectura de nombre, RUT, domicilio y comuna en certificados del Registro Civil. Cuando un campo falta o falla la validación, vuelve a leer el certificado con otro modo de OCR.
 
 **Novedades de v4.0.0**
 

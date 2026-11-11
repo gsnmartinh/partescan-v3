@@ -12,7 +12,7 @@ import traceback
 from . import perfil
 
 LOCK = threading.RLock()
-LISTA = []          # partes en el formato del motor, con _uid (posición en ParteScan), _estado y _aviso
+LISTA = []          # partes en el formato del motor, con _uid (identificador estable en ParteScan), _estado y _aviso
 LOG = []            # líneas que va escribiendo el motor
 HILO = None
 _T = None
@@ -77,7 +77,7 @@ def _ajustes_velocidad(T):
 
 # ------------------------------------------------------------------ datos
 def cargar(registros):
-    """Recibe los partes de ParteScan (cada uno con 'uid' = posición en el lote). Conserva el avance de los que ya
+    """Recibe los partes de ParteScan (cada uno con 'uid' = identificador estable en el lote). Conserva el avance de los que ya
     estaban: así se puede corregir un dato y volver a enviar sin perder lo ingresado."""
     T, motivo = motor()
     if T is None:

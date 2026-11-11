@@ -4,12 +4,12 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 import unittest
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'teclea'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 if sys.platform != 'win32':
     ctypes.windll = MagicMock()
     if not hasattr(ctypes, 'WINFUNCTYPE'):
         ctypes.WINFUNCTYPE = ctypes.CFUNCTYPE
-import teclea_contextual as T
+from parte_scan import motor_tecleo as T
 
 class SistemaFalso:
     def __init__(self, fallo=False):
@@ -64,7 +64,6 @@ class PruebasBoton(unittest.TestCase):
         sis.ids={40:40}
         sis.asegurar_primer_plano=MagicMock()
         sis.chequear_avisos=MagicMock()
-        sis.tecla=MagicMock()
         api=MagicMock()
         api.IsWindow.return_value=True
         api.IsWindowEnabled.return_value=habilitado
@@ -73,14 +72,15 @@ class PruebasBoton(unittest.TestCase):
              patch.object(T,'rect',return_value=(1,1,80,30)), \
              patch.object(T,'clase',return_value='ThunderRT6CommandButton'), \
              patch.object(T,'leer',return_value=texto), patch.object(T,'dar_foco') as enfocar, \
-             patch.object(T,'pausa'), patch.object(T,'foco_actual',return_value=foco):
+             patch.object(T,'pausa'), patch.object(T,'foco_actual',return_value=foco), \
+             patch.object(T,'send_keys') as enviar:
             try:
                 sis.aceptar()
             except T.Detener:
-                sis.tecla.assert_not_called()
+                enviar.assert_not_called()
                 raise
         enfocar.assert_called_once_with(40)
-        sis.tecla.assert_called_once_with('{SPACE}')
+        enviar.assert_called_once_with('{SPACE}', pause=T.PAUSA_TECLA)
         api.PostMessageW.assert_not_called()
     def test_enfocar_y_activar_una_vez(self): self.activar()
     def test_foco_incorrecto_no_activa(self):

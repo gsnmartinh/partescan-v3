@@ -25,6 +25,8 @@ def es_certificado(t):
 
 
 RUIDO_FINAL = re.compile(r"(?:\s+[|!\\/\[\]\u2018\u2019'`´‘’:;,.\-_]+|\s+[IilLjJ1](?![\w/-]))+\s*$")
+ENCABEZADO_PROPIETARIO = re.compile(r"\bPROPIE\s*TARIO\b", re.I)
+ROTULO_PROPIETARIO = re.compile(r"^(?:Nombre|Domicilio|Direcci[oó]n|Comuna|R\.?\s*U\.?\s*[NT]\.?)(?=\W|$)", re.I)
 
 
 def _sin_ruido(v):
@@ -35,13 +37,15 @@ def _sin_ruido(v):
 def _valor(t, etiqueta):
     # el OCR a veces lee los dos puntos como "?", "*", "—", "1", "g"...
     m = re.search(etiqueta + r"\W{0,4}(?:[:;?*1!|]|\b[gGjJ]\b)\s*(.+)", t, re.I)
+    if not m:
+        m = re.search(r"(?im)^[ \t]*" + etiqueta + r"[ \t]+([^\r\n]+)", t)
     return _sin_ruido(_limpiar(m.group(1))) if m else ""
 
 
 def _propietario(t):
     """Líneas de «DATOS DEL PROPIETARIO» sin su rótulo: [nombre, rut, domicilio, comuna, ...]. Sirve cuando el OCR
     estropea el rótulo («Nombre», «Comuna»...) y la búsqueda por rótulo falla."""
-    m = re.search(r"PROPIETARIO", t, re.I)
+    m = ENCABEZADO_PROPIETARIO.search(t)
     if not m:
         return []
     out = []
@@ -56,10 +60,35 @@ def _propietario(t):
     return out
 
 
+def _dato_propietario(zona, etiqueta):
+    m = re.search(r"^[^\w\r\n]*(?:" + etiqueta + r")\b[ \t:;?*|!]*([^\r\n]+)", zona, re.I | re.M)
+    return _sin_ruido(_limpiar(m.group(1))) if m else ""
+
 def leer(t):
+    # El OCR móvil a veces deja el valor justo antes de su rótulo.
+    lineas = t.splitlines()
+    inicio = next((i + 1 for i, l in enumerate(lineas) if ENCABEZADO_PROPIETARIO.search(l)), len(lineas))
+    for i in range(max(1, inicio), len(lineas) - 1):
+        rotulo = lineas[i].strip(" \t:;?*|!")
+        previo = lineas[i - 1].strip()
+        siguiente = lineas[i + 1].strip()
+        proximo_rotulo = lineas[i + 2].strip(" \t:;?*|!") if i + 2 < len(lineas) else ""
+        if (re.fullmatch(r"Nombre|Domicilio|Direcci[oó]n|Comuna", rotulo, re.I)
+                and previo and not ROTULO_PROPIETARIO.match(previo)
+                and not ENCABEZADO_PROPIETARIO.search(previo)
+                and (ROTULO_PROPIETARIO.match(siguiente)
+                     or re.match(r"Fec\.|Repertorio\b", siguiente, re.I)
+                     or re.fullmatch(r"Nombre|Domicilio|Direcci[oó]n|Comuna", proximo_rotulo, re.I))):
+            lineas[i] = rotulo + ": " + previo
+            lineas[i - 1] = ""
+    t = "\n".join(lineas)
+    # Algunos OCR separan el rótulo y el valor en dos líneas.
+    etiquetas = r"(?:Inscripci[oó]n|Tipo\s+Veh\S{1,3}culo|Marca|Modelo|Color|Nombre|R\.?\s*U\.?\s*N\.?|Domicilio|Comuna)"
+    t = re.sub(r"(?im)^([ \t]*" + etiquetas + r"[ \t:;?*|!]*)\r?\n[ \t]*(?=\S)", r"\1 ", t)
     o, av = {}, []
     # Inscripción: PLACA.NN-D  (el dígito final es el verificador de la placa)
-    m = re.search(r"Inscripci\S{1,3}n\s*[:;1l|]?\s*([A-Z]{2,5})[\s.\-]*(\d{1,4})\s*[-–]\s*([0-9K])", t, re.I)
+    m = re.search(r"\bInscripci[oó]n[ \t]*(?:[:;15l|$\-á][ \t]*)?"
+                  r"([A-Z]{2,5})[ \t.\-]*(\d{1,4})[ \t]*[-–][ \t]*([0-9K])\b", t, re.I)
     o["placa"] = (m.group(1) + m.group(2)).upper() if m else ""
     o["dv_placa"] = m.group(3).upper() if m else ""
     tipo = _valor(t, r"Tipo\s+Veh\S{1,3}culo")
@@ -67,6 +96,10 @@ def leer(t):
     m = re.search(r"A\S{1,2}o\s*[:;?]?\s*((?:19|20)\d{2})", tipo, re.I)
     if m:
         o["anio"] = m.group(1)
+    if not re.search(r"[A-Za-zÁÉÍÓÚÑ]", tipo):
+        siguiente = re.search(r"(?im)^Tipo\s+Veh\S{1,3}culo[^\r\n]*\r?\n([^\r\n]+)", t)
+        if siguiente:
+            tipo = siguiente.group(1)
     tipo = re.sub(r"\s*A\S{1,2}o\b.*$", "", tipo, flags=re.I)
     o["tipo_vehiculo"] = re.sub(r"[^A-ZÁÉÍÓÚÑ ]", "", tipo.upper()).strip()
     if not o["anio"]:
@@ -76,17 +109,25 @@ def leer(t):
     o["modelo"] = _valor(t, r"Modelo").upper()
     o["color"] = _valor(t, r"Color").upper()
     prop = _propietario(t)
-    o["nombre"] = _valor(t, r"Nombre").upper()
+    encabezado = ENCABEZADO_PROPIETARIO.search(t)
+    zona = t[encabezado.end():].partition("\n")[2] if encabezado else t
+    zona = re.split(r"^\W*(?:Fec\.?\s*adq|Repertorio|FECHA)", zona, maxsplit=1, flags=re.I | re.M)[0]
+    o["nombre"] = _dato_propietario(zona, r"Nombre").upper()
     if not o["nombre"] and prop:
         o["nombre"] = prop[0].upper()
     # RUN: tolera coma por punto, espacios y letras confundidas
-    m = re.search(r"R\.?\s*U\.?\s*N\.?\s*[:;]\s*([\d.,\s]{6,12})\s*[-–]\s*([\dKk])", t)
+    m = re.search(r"R\.?[ \t]*U\.?[ \t]*[NT]\.?[ \t:;?*|!]*([\d., \t]{6,15})[ \t]*[-–]+[ \t]*([\dK])\b", zona, re.I)
     rut = ""
     if m:
         rut = re.sub(r"\D", "", m.group(1)) + "-" + m.group(2).upper()
-    if not rut:
-        zona = t[re.search(r"PROPIETARIO", t, re.I).start():] if re.search(r"PROPIETARIO", t, re.I) else t
-        m = re.search(r"(?<!\d)(\d{1,2})\s*[.,]\s*(\d{3})\s*[.,]\s*(\d{3})\s*[-–]\s*([\dKk])", zona)
+    if not rut and encabezado and len(prop) > 1:
+        fila_run = re.fullmatch(r"([\d., \t]{6,15})\s*[-–]\s*([\dK])", prop[1], re.I)
+        if fila_run:
+            candidato = re.sub(r"\D", "", fila_run[1]) + "-" + fila_run[2].upper()
+            if rut_ok(candidato):
+                rut = candidato
+    if not rut and encabezado:
+        m = re.search(r"(?<!\d)(\d{1,2})[ \t]*[.,][ \t]*(\d{3})[ \t]*[.,][ \t]*(\d{3})[ \t]*[-–][ \t]*([\dKk])", zona)
         if m:
             rut = m.group(1) + m.group(2) + m.group(3) + "-" + m.group(4).upper()
     o["rut"] = rut
@@ -94,7 +135,7 @@ def leer(t):
         av.append("No pude leer el RUT del certificado.")
     elif not rut_ok(rut):
         av.append("El RUT del certificado (%s) no cumple el dígito verificador: revísalo." % rut)
-    dom = _valor(t, r"Domicilio")
+    dom = _dato_propietario(zona, r"Domicilio|Direcci[oó]n")
     if not dom and len(prop) > 2:
         dom = prop[2]
     o["direccion"] = _sin_ruido(_limpiar(re.sub(r"\s\.\s", " ", dom))).upper().strip(" ,")
@@ -103,7 +144,7 @@ def leer(t):
         return catalogo.comuna_oficial(re.sub(r"[^A-ZÁÉÍÓÚÑ ]", "", v.upper()).strip())
     def _en_lista(c):
         return bool(c) and catalogo.comuna_en_sistema(c)
-    com = _com(_valor(t, r"Comuna"))
+    com = _com(_dato_propietario(zona, r"Comuna"))
     if not _en_lista(com):          # rótulo ilegible o valor raro: se prueba la línea que sigue al domicilio
         for cand in prop[3:4] + prop[2:3]:
             if _en_lista(_com(cand)):
@@ -126,6 +167,9 @@ def conciliar_placa(placa_parte, placa_cert):
     """Devuelve (placa_elegida, aviso). La placa del certificado manda si cumple formato."""
     fmt = re.compile(r"[A-Z]{4}\d{2}|[A-Z]{2}\d{4}|[A-Z]{3}\d{2}|[A-Z]{3}\d{3}|[A-Z]{2}\d{3}")
     a, b = placa_parte or "", placa_cert or ""
+    if (re.fullmatch(r"[A-Z]{4}\d{2}", a) and re.fullmatch(r"[A-Z]{4}\d{2}", b)
+            and [(x, y) for x, y in zip(a, b) if x != y] == [("F", "E")]):
+        return a, "Revisa la patente: el parte se leyó como %s y el certificado como %s. Comprueba la F y la E." % (a, b)
     if a == b and a:
         return a, ""
     if a and b and _parecidas(a, b) >= 0.7:
@@ -135,4 +179,7 @@ def conciliar_placa(placa_parte, placa_cert):
         return elegida, "La placa del parte (%s) y la del certificado (%s) se leyeron distinto: comprueba cuál es." % (a, b)
     if a and b:
         return a, "La placa del parte (%s) NO coincide con la del certificado (%s): ¿el certificado es de otro parte?" % (a, b)
-    return a or b, ""
+    elegida = a or b
+    if re.fullmatch(r"[A-Z]{4}\d{2}", elegida) and "E" in elegida[:4]:
+        return elegida, "Revisa la patente: el OCR puede confundir la letra E con F."
+    return elegida, ""
