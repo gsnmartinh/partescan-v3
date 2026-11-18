@@ -39,6 +39,30 @@ def parte(pid):
                 ok={}, done={}, fin=False, avisos=[], folio=str(pid))
 
 class Edicion(unittest.TestCase):
+    def test_page_failure_preserves_retry_and_continues(self):
+        from unittest.mock import MagicMock
+        queue = MagicMock()
+        queue.get.side_effect = [("prueba.pdf", "prueba.pdf"), KeyboardInterrupt()]
+        queue.empty.return_value = True
+        images = [Image.new('RGB', (10, 10)), Image.new('RGB', (10, 10))]
+        servidor.FALLOS_LECTURA.clear()
+        servidor.ESTADO['pendientes'] = 1
+        with patch.object(servidor, 'COLA', queue), \
+             patch.object(servidor.motor, 'paginas', return_value=images), \
+             patch.object(servidor.motor, 'preparar', side_effect=lambda image: image), \
+             patch.object(servidor.motor, 'texto_pagina', return_value='texto'), \
+             patch.object(servidor.motor, 'tipo_pagina', return_value='parte'), \
+             patch.object(servidor.motor, 'leer_parte', side_effect=[ValueError('fallo simulado'), {}]), \
+             patch.object(servidor, 'armar', return_value=parte(99)):
+            with self.assertRaises(KeyboardInterrupt):
+                servidor.trabajador()
+        self.assertEqual(servidor.PARTES[-1]['id'], 99)
+        failure = next(iter(servidor.FALLOS_LECTURA.values()))
+        self.assertEqual(failure['pagina'], 1)
+        self.assertIs(failure['hoja'][0], images[0])
+        self.assertEqual(servidor.ESTADO['pendientes'], 0)
+        servidor.FALLOS_LECTURA.clear()
+
     @classmethod
     def setUpClass(cls):
         cls.http = servidor.ThreadingHTTPServer(('127.0.0.1', 0), servidor.H)

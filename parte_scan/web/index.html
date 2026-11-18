@@ -328,6 +328,19 @@ async function sondear(){
     const r=await (await fetch('/api/estado')).json();
     if(editandoTanda||revision!==revisionTanda) return;
     pend=r.pendientes; err=r.error;
+    if(pend&&r.pagina) err=r.pagina+(err?' · '+err:'');
+    let informe=$('informeLectura');
+    if(!informe){informe=document.createElement('details');informe.id='informeLectura';$('estado').after(informe)}
+    informe.replaceChildren();
+    informe.hidden=!(r.fallos||[]).length;
+    const resumen=document.createElement('summary');resumen.textContent=(r.fallos||[]).length+' páginas con error';informe.append(resumen);
+    for(const fallo of r.fallos||[]){const linea=document.createElement('p');linea.textContent=fallo.nombre+' · página '+fallo.pagina+' · '+fallo.error;informe.append(linea)}
+    const reintentar=document.createElement('button');reintentar.textContent='Reintentar páginas con error';reintentar.disabled=Boolean(pend);
+    reintentar.onclick=async()=>{
+      reintentar.disabled=true;
+      try{const respuesta=await fetch('/api/reintentar-lectura',{method:'POST',headers:{'X-ParteScan-Buscar':'1'}});if(!respuesta.ok) throw new Error('No se pudo reintentar');await sondear()}
+      catch(error){toast(error.message);reintentar.disabled=false}
+    };informe.append(reintentar);
     let cambio=false;
     P.forEach((q,i)=>{const n=r.partes[i]; if(n&&n.img_cert!==q.img_cert){
       ['img_cert','cert','cert_avisos','placa','marca','tipo_vehiculo'].forEach(k=>{q[k]=n[k]}); cambio=true; }});
@@ -373,10 +386,15 @@ function buscarInfr(v){
   return INFR.find(z=>String(z[0])===code)||INFR.find(z=>(z[0]+' · '+z[1])===v)||INFR.find(z=>String(z[1]).toLowerCase()===v.toLowerCase())||null;
 }
 function sincronizarDescripcion(p){
-  if('Descripción de la causa' in (p.ed||{})) return;
   const nombres=infrVigentes(p).map(codigo=>buscarInfr(codigo)?.[1]);
   if(nombres.every(Boolean)){
-    p.causa=nombres.join(' / ');
+    const descripcion=nombres.join(' / ');
+    if('Descripción de la causa' in (p.ed||{})){
+      if(p.ed['Descripción de la causa']===descripcion) return;
+      if(!confirm('Cambiaste las infracciones. ¿Actualizar la descripción con los códigos seleccionados? Cancelar conserva tu texto.')) return;
+      delete p.ed['Descripción de la causa'];
+    }
+    p.causa=descripcion;
     p.causa_literal=false;
   }
 }
@@ -585,6 +603,12 @@ function contarCorreccion(p,key){
   camposTipo[key]=(camposTipo[key]||0)+1;
   try{localStorage.setItem(CLAVE_CORRECCIONES,JSON.stringify(datos))}catch{}
 }
+function registrarCambio(p,key,antes,despues){
+  if(antes===despues) return;
+  p.historial_correcciones=p.historial_correcciones||[];
+  p.historial_correcciones.push({campo:key,antes,despues,fecha:new Date().toISOString()});
+  p.historial_correcciones=p.historial_correcciones.slice(-500);
+}
 function campoPendiente(p,key){
   if(p.fin) return false;
   if(esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)','Comuna (certificado)'].includes(key)) return false;
@@ -620,6 +644,13 @@ $('resumenCorrecciones').onclick=()=>{
   }
   if(!lista.childElementCount) lista.textContent='Todavía no hay correcciones registradas.';
   pintarMemoria(lista);
+  const cambios=P.flatMap(p=>(p.historial_correcciones||[]).map(c=>({...c,parte:p.n_parte||p.id})));
+  if(cambios.length){
+    const titulo=document.createElement('h3');titulo.textContent='Historial de esta tanda';lista.append(titulo);
+    for(const c of cambios.slice(-100).reverse()){
+      const linea=document.createElement('p');linea.textContent=c.parte+' · '+c.campo+' · '+c.antes+' → '+c.despues;lista.append(linea);
+    }
+  }
   $('dlgCorrecciones').showModal();
 };
 async function revisarInfracciones(p){
@@ -677,6 +708,7 @@ async function revisarInfracciones(p){
     cuerpo.textContent=error.message||'No se pudo releer la descripción.';
   }
 }
+let colaBusquedas=Promise.resolve();
 function agregarBusqueda(p,key,el){
   const boton=document.createElement('button'), panel=document.createElement('div');
   boton.textContent='Buscar en el documento';
@@ -685,21 +717,31 @@ function agregarBusqueda(p,key,el){
   el.after(boton,panel);
   boton.onclick=async()=>{
     boton.disabled=true;
-    panel.textContent='Volviendo a leer…';
+    let cancelada=false;
+    const cancelar=document.createElement('button');cancelar.textContent='Cancelar búsqueda';
+    cancelar.onclick=()=>{cancelada=true;panel.textContent='Búsqueda cancelada';};
+    panel.replaceChildren('Búsqueda en cola…',cancelar);
     let resultados=[], mensaje='No encontré otra lectura. Puedes escribir el dato.';
     try{
       const consulta=new URLSearchParams({id:p.id,campo:campoBusqueda(key)});
       if(p.origen==='mtt') consulta.set('modalidad',p.modalidad_mtt||'');
-      const respuesta=await fetch('/api/buscar-campo?'+consulta,{method:'POST',headers:{'X-ParteScan-Buscar':'1'}});
-      const datos=await respuesta.json();
-      if(!respuesta.ok) throw new Error(datos.error);
+      const tarea=colaBusquedas.catch(()=>{}).then(async()=>{
+        if(cancelada) return {resultados:[]};
+        panel.replaceChildren('Volviendo a leer…',cancelar);
+        const respuesta=await fetch('/api/buscar-campo?'+consulta,{method:'POST',headers:{'X-ParteScan-Buscar':'1'}});
+        const datos=await respuesta.json();
+        if(!respuesta.ok) throw new Error(datos.error);
+        return datos;
+      });
+      colaBusquedas=tarea;
+      const datos=await tarea;
       resultados=datos.resultados;
     }catch(error){
       mensaje=error.message||'No se pudo buscar el dato.';
     }finally{
       boton.disabled=false;
     }
-    if(!el.isConnected) return;
+    if(cancelada||!el.isConnected) return;
     const elegir=document.createElement('select'), aplicar=document.createElement('button');
     const evidencia=document.createElement('div');
     elegir.className='val';
@@ -814,7 +856,7 @@ function mostrar(){
         (val&&!opciones.some(o=>o[0]===val)?'<option selected value="'+esc(val)+'">'+esc(val)+' · valor leído</option>':'')+
         opciones.map(o=>'<option value="'+esc(o[0])+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select>':
         '<input class="val" aria-label="'+esc(key)+'"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+esc(val)+'" placeholder="(en blanco)">';
-      r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+estado+'">'+(estado==='ok'&&p.ok?.[key]?'Confirmado':LAB[estado])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+((estado==='check'&&String(val).trim())?'<button class="cf">✓ Confirmar</button>':'')+'</div>';
+      r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+estado+'">'+(p.ok?.[key]?'Revisado':key in (p.ed||{})?'Modificado · revisar':estado==='ok'?'Detectado':LAB[estado])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+'<button class="cf"'+(estado!=='check'?' hidden':'')+'>✓ Revisar</button>'+'</div>';
       const el=r.querySelector('.val');
       el.style.textTransform='uppercase';
       if(key==='Lugar'||key==='Dirección (certificado)'){
@@ -891,13 +933,13 @@ function mostrar(){
             }
           }
         }
-        if(e.type==='change'&&campoBusqueda(key)){
+        if(e.type==='change'){
           const nuevo=el.value.trim().toUpperCase();
-          if(nuevo!==valorGuardado){contarCorreccion(p,key);valorGuardado=nuevo}
+          if(nuevo!==valorGuardado){registrarCambio(p,key,valorGuardado,nuevo);contarCorreccion(p,key);valorGuardado=nuevo}
         }
         p.ed[key]=e.target.value;
         p.ok=p.ok||{};
-        p.ok[key]=Boolean(el.value.trim());
+        p.ok[key]=false;
         if(infraccionCorregida){
           sincronizarDescripcion(p);
           refrescarConScroll();
@@ -906,7 +948,7 @@ function mostrar(){
         }
         const actual=estadoCampo(p,f,el.value), tag=r.querySelector('.tag');
         tag.className='tag t-'+actual;
-        tag.textContent=actual==='ok'&&p.ok[key]?'Confirmado':LAB[actual];
+        tag.textContent=p.ok[key]?'Revisado':(key in (p.ed||{})?'Modificado · revisar':LAB[actual]);
         const confirmar=r.querySelector('.cf');
         if(confirmar) confirmar.hidden=actual!=='check'||!el.value.trim();
         pintarTira();
@@ -942,7 +984,7 @@ function mostrar(){
       if(key==='Placa'&&!esEmpadronado(p))el.addEventListener('input',()=>{document.querySelectorAll('.row').forEach(rw=>{const lb=rw.querySelector('.lab');
         if(lb&&lb.textContent==='Nombre (certificado)'){const i=rw.querySelector('.val');if(i&&/^VEHICULO\b/.test(i.value.trim())){i.value=('VEHICULO '+el.value.trim().toUpperCase()).trim();p.ed['Nombre (certificado)'] = i.value;}}})});
       r.lastElementChild.firstElementChild.onclick=()=>{activeKey=key;copiarCampo(p,key)};
-      const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; p.ok[key]=true; pintarTira(); mostrar() };
+      const bcf=r.querySelector('.cf'); if(bcf) bcf.onclick=()=>{ p.ok=p.ok||{}; if(!formatoCampoValido(key,el.value)){toast('Revisa el formato del dato.');return} p.ok[key]=true; pintarTira(); mostrar() };
       if(key==='Nombre (certificado)' && p.notificado_personalmente){
         const ordenar=document.createElement('button');
         ordenar.textContent='Apellidos al inicio…';
@@ -1022,11 +1064,32 @@ function V(p,k){
   if(!esEmpadronado(p)&&k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}
+function formatoCampoValido(key,valor){
+  const texto=String(valor).trim().toUpperCase();
+  if(/fecha/i.test(key)){
+    const m=texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if(!m) return false;
+    const fecha=new Date(+m[3],+m[2]-1,+m[1]);
+    return fecha.getFullYear()===+m[3]&&fecha.getMonth()===+m[2]-1&&fecha.getDate()===+m[1];
+  }
+  if(/^Hora/.test(key)) return /^([01]\d|2[0-3]):[0-5]\d$/.test(texto);
+  if(key==='RUT (certificado)'&&texto!=='SR'){
+    const m=texto.match(/^(\d{1,8})-([0-9K])$/);
+    if(!m) return false;
+    let suma=0,factor=2;
+    for(const digito of [...m[1]].reverse()){suma+=Number(digito)*factor;factor=factor===7?2:factor+1}
+    const dv=11-suma%11;
+    return m[2]===(dv===11?'0':dv===10?'K':String(dv));
+  }
+  return true;
+}
 function estadoCampo(p,f,valor){
   if(p.origen==='carab'&&esEmpadronado(p)&&f.k==='Dirección (certificado)'&&!String(valor??'').trim()) return 'blank';
   if(!String(valor??'').trim()) return f.st==='blank'?'blank':'check';
   if(/^Infracción \d+ · código$/.test(f.k)&&f.k in (p.ed||{})&&!buscarInfr(valor)) return 'check';
-  if(p.ok?.[f.k]||f.k in (p.ed||{})) return 'ok';
+  if(!formatoCampoValido(f.k,valor)) return 'check';
+  if(p.ok?.[f.k]) return 'ok';
+  if(f.k in (p.ed||{})) return 'check';
   if(new Set((p.lecturas?.[f.k]||[]).map(([valor])=>valor).filter(Boolean)).size>1) return 'check';
   return f.st;
 }

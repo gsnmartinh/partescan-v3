@@ -133,8 +133,8 @@ def es_formulario_inspeccion(texto):
 
 def _releer_zona(imagen, modo):
     try:
-        return pytesseract.image_to_string(imagen, lang="spa", config=f"--psm {modo}")
-    except (pytesseract.TesseractNotFoundError, pytesseract.TesseractError):
+        return pytesseract.image_to_string(imagen, lang="spa", config=f"--psm {modo}", timeout=20)
+    except (pytesseract.TesseractNotFoundError, pytesseract.TesseractError, RuntimeError):
         return ""
 
 

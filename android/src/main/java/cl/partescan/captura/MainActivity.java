@@ -654,6 +654,13 @@ public class MainActivity extends Activity {
         actions.setPadding(fluent.dp(12), 0, 0, 0);
         text(actions, "Toca la foto para ampliarla.", 12);
         button(actions, "Repetir foto", true, () -> capture(captureMode));
+        button(actions, "Reintentar lectura", true, () -> {
+            if (queuedOcr.contains(ocrCache(name))) return;
+            if (ocrCache(name).delete() || !ocrCache(name).exists()) {
+                queueOcr(name);
+                updateOcrStatus();
+            }
+        });
         photoRow.addView(actions, new LinearLayout.LayoutParams(0, -2, 1));
         body.addView(photoRow);
     }
@@ -875,6 +882,41 @@ public class MainActivity extends Activity {
         } catch (IOException error) { return 0; }
     }
 
+    private String qualityNotice(String name) {
+        try {
+            File file = new File(ocrCache(name).getPath() + ".quality");
+            return file.isFile() ? new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8) : "";
+        } catch (IOException error) { return ""; }
+    }
+
+    private void inspectPhoto(String name) throws IOException {
+        Bitmap sample = decode(name, 360);
+        String warning;
+        try {
+            int width = sample.getWidth(), height = sample.getHeight();
+            int dark = 0, bright = 0, count = 0;
+            long edges = 0;
+            for (int y = 1; y < height; y += 2) {
+                for (int x = 1; x < width; x += 2) {
+                    int pixel = sample.getPixel(x, y);
+                    int light = (android.graphics.Color.red(pixel) + android.graphics.Color.green(pixel)
+                            + android.graphics.Color.blue(pixel)) / 3;
+                    int previous = sample.getPixel(x - 1, y);
+                    int other = (android.graphics.Color.red(previous) + android.graphics.Color.green(previous)
+                            + android.graphics.Color.blue(previous)) / 3;
+                    edges += Math.abs(light - other);
+                    if (light < 55) dark++;
+                    if (light > 250) bright++;
+                    count++;
+                }
+            }
+            warning = count == 0 ? "" : dark > count * 0.6 ? "Foto oscura: revisa la iluminación."
+                    : edges < count * 2L ? "Poco detalle: revisa el enfoque y el encuadre."
+                    : bright > count * 0.85 ? "Foto muy clara: revisa reflejos y texto borrado." : "";
+        } finally { sample.recycle(); }
+        Files.write(new File(ocrCache(name).getPath() + ".quality").toPath(), warning.getBytes(StandardCharsets.UTF_8));
+    }
+
     private void updateOcrStatus() {
         ArrayList<String> photos = new ArrayList<>(pages);
         if (part != null) photos.add(part);
@@ -896,8 +938,19 @@ public class MainActivity extends Activity {
             for (String name : names) {
                 if (cachedOcrState(name) == 1) needsReview = true;
             }
-            notice.setText(needsReview ? "Revisar foto · poco texto legible" : "");
-            notice.setVisibility(needsReview ? View.VISIBLE : View.GONE);
+            String quality = "";
+            for (String name : names) if (!qualityNotice(name).isEmpty()) quality = qualityNotice(name);
+            notice.setText((needsReview ? "Revisar foto · poco texto legible. " : "") + quality);
+            notice.setVisibility(needsReview || !quality.isEmpty() ? View.VISIBLE : View.GONE);
+            notice.setOnClickListener(view -> {
+                String[] choices = names.toArray(new String[0]);
+                String[] labels = new String[choices.length];
+                for (int i = 0; i < choices.length; i++) labels[i] = "Foto " + (i + 1)
+                        + (cachedOcrState(choices[i]) == 1 ? " · poco texto" : "");
+                new AlertDialog.Builder(this).setTitle("Revisar fotos").setItems(labels,
+                        (dialog, which) -> showPhoto(choices[which], labels[which]))
+                        .setNegativeButton("Cerrar", null).show();
+            });
         });
     }
 
@@ -907,6 +960,7 @@ public class MainActivity extends Activity {
         if (cache.isFile() || !queuedOcr.add(cache)) return;
         ocrQueue.execute(() -> {
             try {
+                try { inspectPhoto(name); } catch (IOException ignored) { }
                 if (new File(folder, name).isFile() && cache.equals(ocrCache(name))) readOcr(name);
             } catch (Exception error) {
                 // Al exportar se reintentan las páginas que quedaron pendientes.
@@ -939,7 +993,23 @@ public class MainActivity extends Activity {
         String text;
         try {
             reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            text = orderedText(Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0))));
+            Text recognized = Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0)));
+            text = orderedText(recognized);
+            boolean nearEdge = false;
+            for (Text.TextBlock block : recognized.getTextBlocks()) {
+                for (Text.Line line : block.getLines()) {
+                    android.graphics.Rect box = line.getBoundingBox();
+                    if (box != null && (box.left < 3 || box.top < 3
+                            || box.right > bitmap.getWidth() - 3 || box.bottom > bitmap.getHeight() - 3)) {
+                        nearEdge = true;
+                    }
+                }
+            }
+            if (nearEdge) {
+                String warning = qualityNotice(name) + " Texto junto al borde: revisa que la hoja esté completa.";
+                try { Files.write(new File(ocrCache(name).getPath() + ".quality").toPath(),
+                        warning.getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
+            }
             text = rereadMissing(reader, bitmap, text);
         } catch (Exception error) {
             if (!retryShort || !cache.isFile()) throw error;

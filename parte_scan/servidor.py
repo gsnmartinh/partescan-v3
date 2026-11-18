@@ -15,7 +15,9 @@ PARTES = []          # resultados, en orden
 TEXTOS = {}          # id de imagen -> OCR original
 IMAGENES = {}        # id -> imagen PIL
 COLA = queue.Queue()
-ESTADO = {"pendientes": 0, "error": ""}
+ESTADO = {"pendientes": 0, "error": "", "pagina": ""}
+FALLOS_LECTURA = {}
+SIGUIENTE_FALLO = 0
 LOCK = threading.Lock()
 LOCK_BUSQUEDA = threading.Lock()
 TMP = tempfile.mkdtemp(prefix="partescan_")
@@ -227,6 +229,7 @@ def paginas_ocr_movil(ruta):
 
 
 def trabajador():
+    global SIGUIENTE_FALLO
     while True:
         primero = COLA.get()
         lote_actual = [primero]
@@ -236,123 +239,135 @@ def trabajador():
         # Ordenar estrictamente por nombre de archivo usando orden natural
         lote_actual.sort(key=lambda x: orden_natural(x[1]))
         
-        for ruta, nombre in lote_actual:
+        for trabajo in lote_actual:
+            ruta, nombre = trabajo[:2]
+            reintento = trabajo[2] if len(trabajo) > 2 else None
             try:
-                ultimo = None          # último parte leído del archivo, para pegarle su certificado
-                movil = ruta.lower().endswith(".psocr")
-                hojas = paginas_ocr_movil(ruta) if movil else (
+                ultimo = reintento["ultimo"] if reintento else None
+                movil = bool(reintento) or ruta.lower().endswith(".psocr")
+                hojas = [reintento["hoja"]] if reintento else paginas_ocr_movil(ruta) if movil else (
                     (img, None, False) for img in motor.paginas(ruta)
                 )
-                for n, (img, texto, es_cert) in enumerate(hojas, 1):
-                    if movil:
-                        g = None
-                        tipo = "certificado" if es_cert else motor.tipo_pagina(texto)
-                        # El OCR puede reconocer un certificado aunque su marca móvil sea errónea.
-                        if tipo == "otra" and not es_cert:
-                            releido = motor.releer_franja(motor.preparar(img), 0, 1)
-                            tipo = motor.tipo_pagina(releido)
-                            if tipo != "otra":
-                                texto = releido
-                            else:
-                                tipo = "parte"
-                                if not texto.strip():
+                for n, (img, texto, es_cert) in enumerate(hojas, reintento["pagina"] if reintento else 1):
+                    ESTADO["pagina"] = f"{nombre} · página {n}"
+                    try:
+                        if movil:
+                            g = None
+                            tipo = "certificado" if es_cert else motor.tipo_pagina(texto)
+                            # El OCR puede reconocer un certificado aunque su marca móvil sea errónea.
+                            if tipo == "otra" and not es_cert:
+                                releido = motor.releer_franja(motor.preparar(img), 0, 1)
+                                tipo = motor.tipo_pagina(releido)
+                                if tipo != "otra":
                                     texto = releido
-                        if tipo != "certificado":
-                            ultimo = None
-                    else:
-                        g = motor.preparar(img)
-                        texto = motor.texto_pagina(g)
-                        tipo = motor.tipo_pagina(texto)
-                    if tipo == "parte":
-                        r = motor.leer_parte(img, texto, g, solo_texto=movil)
-                        with LOCK:
-                            pid = len(IMAGENES) + 1
-                            IMAGENES[pid] = img
-                            TEXTOS[pid] = texto
-                            ultimo = armar(r, nombre, n, pid)
-                            PARTES.append(ultimo)
-                    elif tipo == "dom":
-                        r = motor.extractor.parte_dom(texto)
-                        if not r["fecha_parte"]:
-                            cabecera = motor.releer_franja(g if g is not None else motor.preparar(img), 0, 0.32)
-                            r["fecha_parte"] = motor.extractor.fecha_documento(cabecera)
-                        r["oficina"] = perfil.oficinas().get("31", "31")
-                        with LOCK:
-                            pid = len(IMAGENES) + 1
-                            IMAGENES[pid] = img
-                            TEXTOS[pid] = texto
-                            ultimo = armar(r, nombre, n, pid)
-                            ultimo.update(origen="dom", tiene_vehiculo=False, cert_avisos=[])
-                            ultimo["cert"].update(r["persona"], comuna=perfil.cargar()["comuna"])
-                            PARTES.append(ultimo)
-                    elif tipo == "mtt":
-                        r = extractor_mtt.parte(texto, None if movil else motor.leer_celdas(g))
-                        campos = ("infracciones", "infraccion_texto", "norma", "lugar", "hora_infraccion",
-                                  "fecha_parte", "fecha_infraccion", "n_parte", "n_parte_final")
-                        if any(not r[campo] for campo in ("infracciones", "lugar", "hora_infraccion", "fecha_parte", "n_parte")):
-                            gris = g if g is not None else motor.preparar(img)
-                            respaldo = extractor_mtt.parte(motor.releer_franja(gris, 0, 0.6))
-                            for campo in campos:
-                                if not r[campo] and respaldo[campo]:
-                                    r[campo] = respaldo[campo]
-                            if r["infracciones"]:
-                                r["avisos"] = [a for a in r["avisos"] if a != "No pude leer la infracción."]
-                            if r["n_parte"]:
-                                r["avisos"] = [a for a in r["avisos"] if a != "No pude leer el N° de denuncia."]
-                        if not r["modalidad_mtt"]:
-                            pie = motor.releer_franja(g if g is not None else motor.preparar(img), 0.65, 1)
-                            r["modalidad_mtt"] = extractor_mtt.modalidad_notificacion(pie)
-                            r["notificado_personalmente"] = r["modalidad_mtt"] == "personal"
-                        faltantes = ["boleta", "placa"]
-                        if r["notificado_personalmente"]:
-                            faltantes.extend(("infractor_rut", "infractor_nombre", "infractor_direccion", "infractor_comuna"))
-                        if movil and any(not r[campo] for campo in faltantes):
-                            celdas = motor.leer_celdas(g if g is not None else motor.preparar(img))
-                            if celdas:
-                                respaldo = extractor_mtt.parte(texto, celdas)
-                                for campo in (*faltantes, "dv_placa"):
+                                else:
+                                    tipo = "parte"
+                                    if not texto.strip():
+                                        texto = releido
+                            if tipo != "certificado":
+                                ultimo = None
+                        else:
+                            g = motor.preparar(img)
+                            texto = motor.texto_pagina(g)
+                            tipo = motor.tipo_pagina(texto)
+                        if tipo == "parte":
+                            r = motor.leer_parte(img, texto, g, solo_texto=movil)
+                            with LOCK:
+                                pid = len(IMAGENES) + 1
+                                IMAGENES[pid] = img
+                                TEXTOS[pid] = texto
+                                ultimo = armar(r, nombre, n, pid)
+                                PARTES.append(ultimo)
+                        elif tipo == "dom":
+                            r = motor.extractor.parte_dom(texto)
+                            if not r["fecha_parte"]:
+                                cabecera = motor.releer_franja(g if g is not None else motor.preparar(img), 0, 0.32)
+                                r["fecha_parte"] = motor.extractor.fecha_documento(cabecera)
+                            r["oficina"] = perfil.oficinas().get("31", "31")
+                            with LOCK:
+                                pid = len(IMAGENES) + 1
+                                IMAGENES[pid] = img
+                                TEXTOS[pid] = texto
+                                ultimo = armar(r, nombre, n, pid)
+                                ultimo.update(origen="dom", tiene_vehiculo=False, cert_avisos=[])
+                                ultimo["cert"].update(r["persona"], comuna=perfil.cargar()["comuna"])
+                                PARTES.append(ultimo)
+                        elif tipo == "mtt":
+                            r = extractor_mtt.parte(texto, None if movil else motor.leer_celdas(g))
+                            campos = ("infracciones", "infraccion_texto", "norma", "lugar", "hora_infraccion",
+                                      "fecha_parte", "fecha_infraccion", "n_parte", "n_parte_final")
+                            if any(not r[campo] for campo in ("infracciones", "lugar", "hora_infraccion", "fecha_parte", "n_parte")):
+                                gris = g if g is not None else motor.preparar(img)
+                                respaldo = extractor_mtt.parte(motor.releer_franja(gris, 0, 0.6))
+                                for campo in campos:
                                     if not r[campo] and respaldo[campo]:
-                                        if campo == "dv_placa" and r["placa"] != respaldo["placa"]:
-                                            continue
                                         r[campo] = respaldo[campo]
-                                if r["placa"]:
-                                    r["avisos"] = [a for a in r["avisos"] if a != "No pude leer la patente."]
+                                if r["infracciones"]:
+                                    r["avisos"] = [a for a in r["avisos"] if a != "No pude leer la infracción."]
+                                if r["n_parte"]:
+                                    r["avisos"] = [a for a in r["avisos"] if a != "No pude leer el N° de denuncia."]
+                            if not r["modalidad_mtt"]:
+                                pie = motor.releer_franja(g if g is not None else motor.preparar(img), 0.65, 1)
+                                r["modalidad_mtt"] = extractor_mtt.modalidad_notificacion(pie)
+                                r["notificado_personalmente"] = r["modalidad_mtt"] == "personal"
+                            faltantes = ["boleta", "placa"]
+                            if r["notificado_personalmente"]:
+                                faltantes.extend(("infractor_rut", "infractor_nombre", "infractor_direccion", "infractor_comuna"))
+                            if movil and any(not r[campo] for campo in faltantes):
+                                celdas = motor.leer_celdas(g if g is not None else motor.preparar(img))
+                                if celdas:
+                                    respaldo = extractor_mtt.parte(texto, celdas)
+                                    for campo in (*faltantes, "dv_placa"):
+                                        if not r[campo] and respaldo[campo]:
+                                            if campo == "dv_placa" and r["placa"] != respaldo["placa"]:
+                                                continue
+                                            r[campo] = respaldo[campo]
+                                    if r["placa"]:
+                                        r["avisos"] = [a for a in r["avisos"] if a != "No pude leer la patente."]
+                            with LOCK:
+                                pid = len(IMAGENES) + 1
+                                IMAGENES[pid] = img
+                                TEXTOS[pid] = texto
+                                ultimo = armar_mtt(r, nombre, n, pid)
+                                PARTES.append(ultimo)
+                        elif tipo == "carab":
+                            r = motor.leer_carab(g, texto, imagen=img)
+                            with LOCK:
+                                pid = len(IMAGENES) + 1
+                                IMAGENES[pid] = img
+                                TEXTOS[pid] = texto
+                                ultimo = armar_carab(r, nombre, n, pid)
+                                PARTES.append(ultimo)
+                        elif tipo == "certificado":
+                            c = motor.leer_certificado(g, texto, imagen=img)
+                            placa_verificada = ""
+                            if ultimo is not None and ultimo["id"] in IMAGENES and not ultimo.get("parte_escrito") and not ultimo["img_cert"]:
+                                a, b = (exportar.placa6(valor) for valor in (ultimo["placa"], c["placa"]))
+                                if a and b and sum(x != y for x, y in zip(a, b)) == 1 and len(a) == len(b):
+                                    _, aviso_placa = certificado.conciliar_placa(a, b)
+                                    parte_zona = motor.releer_franja(motor.preparar(IMAGENES[ultimo["id"]]), 0.2, 0.8)
+                                    cert_zona = motor.releer_franja(g if g is not None else motor.preparar(img), 0, 0.53)
+                                    segunda = exportar.placa6(certificado.leer(cert_zona)["placa"])
+                                    if aviso_placa and segunda in (a, b) and re.search(r"\b" + r"[ .-]*".join(segunda) + r"\b", parte_zona, re.I):
+                                        placa_verificada = segunda
+                            with LOCK:
+                                pid = len(IMAGENES) + 1
+                                IMAGENES[pid] = img
+                                TEXTOS[pid] = texto
+                                if ultimo is not None and not ultimo.get("parte_escrito") and ultimo["img_cert"] == 0:
+                                    aplicar_certificado(ultimo, c, pid, placa_verificada=placa_verificada)
+                                else:
+                                    ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
+                        else:
+                            ESTADO["error"] = "«%s» pág. %d: hoja que no es un parte ni un certificado; la ignoré." % (nombre, n)
+                    except Exception as error:
+                        traceback.print_exc()
                         with LOCK:
-                            pid = len(IMAGENES) + 1
-                            IMAGENES[pid] = img
-                            TEXTOS[pid] = texto
-                            ultimo = armar_mtt(r, nombre, n, pid)
-                            PARTES.append(ultimo)
-                    elif tipo == "carab":
-                        r = motor.leer_carab(g, texto, imagen=img)
-                        with LOCK:
-                            pid = len(IMAGENES) + 1
-                            IMAGENES[pid] = img
-                            TEXTOS[pid] = texto
-                            ultimo = armar_carab(r, nombre, n, pid)
-                            PARTES.append(ultimo)
-                    elif tipo == "certificado":
-                        c = motor.leer_certificado(g, texto, imagen=img)
-                        placa_verificada = ""
-                        if ultimo is not None and ultimo["id"] in IMAGENES and not ultimo.get("parte_escrito") and not ultimo["img_cert"]:
-                            a, b = (exportar.placa6(valor) for valor in (ultimo["placa"], c["placa"]))
-                            if a and b and sum(x != y for x, y in zip(a, b)) == 1 and len(a) == len(b):
-                                _, aviso_placa = certificado.conciliar_placa(a, b)
-                                parte_zona = motor.releer_franja(motor.preparar(IMAGENES[ultimo["id"]]), 0.2, 0.8)
-                                cert_zona = motor.releer_franja(g if g is not None else motor.preparar(img), 0, 0.53)
-                                segunda = exportar.placa6(certificado.leer(cert_zona)["placa"])
-                                if aviso_placa and segunda in (a, b) and re.search(r"\b" + r"[ .-]*".join(segunda) + r"\b", parte_zona, re.I):
-                                    placa_verificada = segunda
-                        with LOCK:
-                            pid = len(IMAGENES) + 1
-                            IMAGENES[pid] = img
-                            TEXTOS[pid] = texto
-                            if ultimo is not None and not ultimo.get("parte_escrito") and ultimo["img_cert"] == 0:
-                                aplicar_certificado(ultimo, c, pid, placa_verificada=placa_verificada)
-                            else:
-                                ESTADO["error"] = "«%s» pág. %d: certificado sin parte (o repetido); lo ignoré." % (nombre, n)
-                    else:
-                        ESTADO["error"] = "«%s» pág. %d: hoja que no es un parte ni un certificado; la ignoré." % (nombre, n)
+                            SIGUIENTE_FALLO += 1
+                            FALLOS_LECTURA[SIGUIENTE_FALLO] = {
+                                "nombre": nombre, "pagina": n, "error": str(error),
+                                "hoja": (img, texto or "", es_cert), "ultimo": ultimo}
+                        ESTADO["error"] = f"{nombre} página {n}: {error}"
             except zipfile.BadZipFile:
                 ESTADO["error"] = f"«{nombre}» está dañado o incompleto. Vuelve a exportar la tanda desde el teléfono."
             except Exception as e:  # no detener el programa por un archivo malo
@@ -361,8 +376,11 @@ def trabajador():
             finally:
                 with LOCK:
                     ESTADO["pendientes"] -= 1
+                    if not ESTADO["pendientes"]:
+                        ESTADO["pagina"] = ""
                 try:
-                    os.remove(ruta)
+                    if ruta:
+                        os.remove(ruta)
                 except OSError:
                     pass
 
@@ -424,7 +442,8 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/api/estado":
             with LOCK:
                 return self._send(200, {"pendientes": ESTADO["pendientes"], "error": ESTADO["error"],
-                                        "partes": PARTES})
+                                        "partes": PARTES, "pagina": ESTADO["pagina"],
+                                        "fallos": [{"id": k, "nombre": v["nombre"], "pagina": v["pagina"], "error": v["error"]} for k, v in FALLOS_LECTURA.items()]})
         if u.path == "/api/sesion/ultima":
             return self._send(200, info_sesion_auto())
         if u.path == "/api/actualizacion":
@@ -494,6 +513,16 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {"resultados": busqueda.buscar(campo, origen, fuentes)})
             finally:
                 LOCK_BUSQUEDA.release()
+        if u.path == "/api/reintentar-lectura":
+            if self.headers.get("X-ParteScan-Buscar") != "1":
+                return self._send(403, {"error": "Solicitud no válida"})
+            with LOCK:
+                ids = list(FALLOS_LECTURA)
+                for ident in ids:
+                    fallo = FALLOS_LECTURA.pop(ident)
+                    ESTADO["pendientes"] += 1
+                    COLA.put((None, fallo["nombre"], fallo))
+            return self._send(200, {"ok": True})
         if u.path == "/api/actualizacion":
             if self.headers.get("X-ParteScan-Actualizar") != "1":
                 return self._send(403, {"error": "Solicitud de actualización no válida."})
@@ -626,6 +655,7 @@ class H(BaseHTTPRequestHandler):
                 PARTES.clear()
                 IMAGENES.clear()
                 TEXTOS.clear()
+                FALLOS_LECTURA.clear()
             return self._send(200, {"ok": True})
         if u.path.startswith("/api/perfil"):
             n = int(self.headers.get("Content-Length", 0))
@@ -749,6 +779,7 @@ def cargar_sesion(datos):
                 imgs[int(m.group(1))] = im
     with LOCK:
         PARTES.clear()
+        FALLOS_LECTURA.clear()
         IMAGENES.clear()
         IMAGENES.update(imgs)
         TEXTOS.clear()
