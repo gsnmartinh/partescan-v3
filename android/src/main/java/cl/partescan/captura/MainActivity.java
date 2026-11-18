@@ -863,24 +863,41 @@ public class MainActivity extends Activity {
         return new File(folder, name + "." + photo.lastModified() + "." + photo.length() + ".v2.ocr");
     }
 
+    static boolean shortOcr(String text) {
+        return text.trim().length() < 80;
+    }
+
+    private int cachedOcrState(String name) {
+        File cache = ocrCache(name);
+        if (!cache.isFile()) return 0;
+        try {
+            return shortOcr(new String(Files.readAllBytes(cache.toPath()), StandardCharsets.UTF_8)) ? 1 : 2;
+        } catch (IOException error) { return 0; }
+    }
+
     private void updateOcrStatus() {
         ArrayList<String> photos = new ArrayList<>(pages);
         if (part != null) photos.add(part);
         if (certificate != null) photos.add(certificate);
-        int read = 0;
-        for (String photo : photos) if (ocrCache(photo).isFile()) read++;
+        int read = 0, review = 0;
+        for (String photo : photos) {
+            int state = cachedOcrState(photo);
+            if (state > 0) read++;
+            if (state == 1) review++;
+        }
         if (ocrStatus != null) {
             ocrStatus.setVisibility(photos.isEmpty() ? View.GONE : View.VISIBLE);
-            ocrStatus.setText(read + " de " + photos.size() + " páginas leídas");
+            ocrStatus.setText(read + " de " + photos.size() + " páginas procesadas"
+                    + " · " + review + " con poco texto para revisar"
+                    + (read < photos.size() ? " · " + (photos.size() - read) + " pendientes" : ""));
         }
         photoNotices.forEach((notice, names) -> {
-            boolean review = false;
+            boolean needsReview = false;
             for (String name : names) {
-                File cache = ocrCache(name);
-                if (cache.isFile() && cache.length() < 80) review = true;
+                if (cachedOcrState(name) == 1) needsReview = true;
             }
-            notice.setText(review ? "Revisar foto · poco texto legible" : "");
-            notice.setVisibility(review ? View.VISIBLE : View.GONE);
+            notice.setText(needsReview ? "Revisar foto · poco texto legible" : "");
+            notice.setVisibility(needsReview ? View.VISIBLE : View.GONE);
         });
     }
 
@@ -912,7 +929,7 @@ public class MainActivity extends Activity {
         if (cache.isFile()) {
             try {
                 previous = new String(Files.readAllBytes(cache.toPath()), StandardCharsets.UTF_8);
-                if (!retryShort || previous.trim().length() >= 80) return previous;
+                if (!retryShort || !shortOcr(previous)) return previous;
             } catch (IOException error) {
                 // Si la copia local no se puede leer, se vuelve a reconocer la foto.
             }
@@ -1027,7 +1044,7 @@ public class MainActivity extends Activity {
                     saved++;
                 }
                 String result = byBlocks ? saved + " bloques guardados y verificados."
-                        : "Tanda guardada. Lleva el archivo .psocr al computador y ábrelo en ParteScan.";
+                        : "Tanda guardada y verificada. Lleva el archivo .psocr al computador y ábrelo en ParteScan.";
                 String message = result + (review > 0 ? " Fotos con poco texto legible: " + review + "." : "");
                 runOnUiThread(() -> { if (!isDestroyed()) render(message); });
             } catch (Exception error) {
@@ -1046,12 +1063,16 @@ public class MainActivity extends Activity {
                 ArrayList<String> photos = new ArrayList<>();
                 JSONArray manifest = new JSONArray();
                 int review = 0;
+                int totalPhotos = 0;
+                for (ArrayList<String> group : parts) totalPhotos += group.size();
                 for (ArrayList<String> group : parts) {
                     for (int i = 0; i < group.size(); i++) {
                         String photo = group.get(i);
                         photos.add(photo);
+                        final String progress = "Completando lecturas: " + photos.size() + "/" + totalPhotos;
+                        runOnUiThread(() -> status.setText(progress));
                         String text = readOcr(photo, true);
-                        if (text.trim().length() < 80) review++;
+                        if (shortOcr(text)) review++;
                         manifest.put(new JSONObject().put("texto", text).put("certificado", i > 0));
                     }
                 }

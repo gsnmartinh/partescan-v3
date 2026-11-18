@@ -29,6 +29,11 @@ import static org.junit.Assert.*;
 @Config(sdk = 34, qualifiers = "w393dp-h852dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class NavigationTest {
+    @Test public void shortOcrCountsCharactersNotUtf8Bytes() {
+        assertTrue(MainActivity.shortOcr("á".repeat(50)));
+        assertTrue(MainActivity.shortOcr("   "));
+        assertFalse(MainActivity.shortOcr("A".repeat(80)));
+    }
     public static class NavigationActivity extends MainActivity {
         @Override String readOcr(String name) {
             return "";

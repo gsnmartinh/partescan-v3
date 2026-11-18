@@ -1,3 +1,11 @@
+# ParteScan 5.1.15 · ParteScan Captura 1.1.5
+
+- Escritorio normaliza las variantes de O’Higgins como OHIGGINS, sin apóstrofo, al mostrar, copiar y preparar el tecleo.
+- Permite recordar correcciones de calles y direcciones en este equipo y ofrecerlas como sugerencias ante coincidencias exactas del texto y contexto. No modifica automáticamente otros partes.
+- Correcciones locales permite consultar, desactivar y olvidar las reglas guardadas.
+- Android distingue las páginas procesadas, pendientes y con poco texto para revisar. El aviso usa caracteres, no bytes, de forma consistente con la exportación.
+- Al guardar, Android muestra el avance de las lecturas pendientes y confirma que la copia fue verificada.
+
 # ParteScan 5.1.14 · ParteScan Captura 1.1.4
 
 - Windows conserva los datos reconocidos y relee las fotos de una tanda cuando faltan campos clave.

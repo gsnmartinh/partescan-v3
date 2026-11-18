@@ -531,6 +531,50 @@ function campoBusqueda(key){
   return CAMPOS_BUSQUEDA.get(key)||(/^Infracción \d+ · fecha$/.test(key)?'fecha_infraccion':'');
 }
 const CLAVE_CORRECCIONES='partescan-correcciones-v1';
+const CLAVE_MEMORIA='partescan-memoria-calles-v1';
+function normalizarDireccion(texto){
+  return String(texto??'').replace(/\b[O0]\s*['’‘´`ʼ]?\s*HIGGINS\b/gi,'OHIGGINS');
+}
+function textoMemoria(v){return normalizarDireccion(v).trim().replace(/\s+/g,' ').toUpperCase()}
+function contextoMemoria(p,key){
+  return JSON.stringify([p.origen||'',textoMemoria(valorActual(p,'Oficina emisora')),key,
+    textoMemoria(valorActual(p,'Comuna (certificado)'))]);
+}
+function leerMemoria(){
+  try{const v=JSON.parse(localStorage.getItem(CLAVE_MEMORIA));return Array.isArray(v)?v.filter(x=>x&&typeof x.antes==='string'&&typeof x.despues==='string'):[]}catch{return []}
+}
+function guardarMemoria(datos){
+  try{localStorage.setItem(CLAVE_MEMORIA,JSON.stringify(datos));return true}catch{toast('No se pudo guardar la memoria local.');return false}
+}
+function recordarCalle(p,key,antes,despues){
+  if(!['Lugar','Dirección (certificado)'].includes(key)) return false;
+  antes=textoMemoria(antes);despues=textoMemoria(despues);
+  if(!antes||!despues||antes===despues) return false;
+  const contexto=contextoMemoria(p,key),datos=leerMemoria();
+  const regla=datos.find(x=>x.contexto===contexto&&x.antes===antes&&x.despues===despues);
+  if(regla){regla.activa=true;regla.veces=(regla.veces||1)+1}
+  else datos.push({contexto,campo:key,antes,despues,activa:true,veces:1});
+  return guardarMemoria(datos.slice(-500));
+}
+function sugerenciasMemoria(p,key,valor){
+  const contexto=contextoMemoria(p,key),antes=textoMemoria(valor);
+  return leerMemoria().filter(x=>x.activa&&x.contexto===contexto&&x.antes===antes);
+}
+function pintarMemoria(lista){
+  const titulo=document.createElement('h3');titulo.textContent='Memoria de calles';lista.append(titulo);
+  const nota=document.createElement('p');nota.textContent='Solo en este equipo. Las coincidencias exactas se ofrecen como sugerencias; nunca se aplican solas. Incluyen la numeración y el contexto del parte.';lista.append(nota);
+  const datos=leerMemoria();
+  datos.forEach((regla,i)=>{
+    const fila=document.createElement('p'),texto=document.createElement('span');
+    texto.textContent=regla.campo+': '+regla.antes+' → '+regla.despues+' · '+regla.veces+' registro(s) ';
+    const activar=document.createElement('button'),borrar=document.createElement('button');
+    activar.textContent=regla.activa?'Desactivar':'Activar';borrar.textContent='Olvidar';
+    activar.onclick=()=>{datos[i].activa=!datos[i].activa;if(guardarMemoria(datos)) $('resumenCorrecciones').onclick()};
+    borrar.onclick=()=>{datos.splice(i,1);if(guardarMemoria(datos)) $('resumenCorrecciones').onclick()};
+    fila.append(texto,activar,borrar);lista.append(fila);
+  });
+  if(!datos.length){const vacio=document.createElement('p');vacio.textContent='Corrige una calle y pulsa «Recordar corrección» para empezar.';lista.append(vacio)}
+}
 function leerCorrecciones(){
   try{return JSON.parse(localStorage.getItem(CLAVE_CORRECCIONES))||{}}catch{return {}}
 }
@@ -575,6 +619,7 @@ $('resumenCorrecciones').onclick=()=>{
     lista.append(titulo,items);
   }
   if(!lista.childElementCount) lista.textContent='Todavía no hay correcciones registradas.';
+  pintarMemoria(lista);
   $('dlgCorrecciones').showModal();
 };
 async function revisarInfracciones(p){
@@ -773,6 +818,20 @@ function mostrar(){
       const el=r.querySelector('.val');
       el.style.textTransform='uppercase';
       if(key==='Lugar'||key==='Dirección (certificado)'){
+        el.value=normalizarDireccion(el.value);
+        const original=el.value, memoria=document.createElement('div');memoria.className='meta';
+        const actualizarMemoria=()=>{
+          memoria.replaceChildren();
+          for(const regla of sugerenciasMemoria(p,key,el.value)){
+            const usar=document.createElement('button');usar.type='button';usar.textContent='Recordado: '+regla.despues;
+            usar.onclick=()=>{el.value=regla.despues;el.dispatchEvent(new Event('change'))};memoria.append(usar);
+          }
+          if(textoMemoria(original)&&textoMemoria(el.value)&&textoMemoria(original)!==textoMemoria(el.value)){
+            const recordar=document.createElement('button');recordar.type='button';recordar.textContent='Recordar corrección';
+            recordar.onclick=()=>{if(recordarCalle(p,key,original,el.value)){recordar.disabled=true;toast('Corrección guardada en este equipo.')}};memoria.append(recordar);
+          }
+        };
+        el.after(memoria);el.addEventListener('change',actualizarMemoria);actualizarMemoria();
         const lista=document.createElement('div');
         lista.className='meta';
         lista.setAttribute('aria-label','Sugerencias del callejero de Valdivia');
@@ -822,6 +881,7 @@ function mostrar(){
       el.oninput=el.onchange=e=>{
         let infraccionCorregida=false;
         if(e.type==='change'){
+          if(key==='Lugar'||key==='Dirección (certificado)') el.value=normalizarDireccion(el.value);
           if(key==='RUT (certificado)') el.value=formatoRut(el.value);
           if(esInf){
             const hit=buscarInfr(el.value);
@@ -940,7 +1000,7 @@ function valorActual(p,key){
   return '';
 }
 function copiarCampo(p,key){
-  const v=valorActual(p,key); copiar(v); p.done[key]=true; toast('Copiado: '+key);
+  const v=V(p,key); copiar(v); p.done[key]=true; toast('Copiado: '+key);
   document.querySelectorAll('.row').forEach(r=>{const l=r.querySelector('.lab').textContent;r.classList.toggle('done',!!p.done[l]);r.classList.toggle('act',l===key)});
 }
 function siguienteCampo(p){
@@ -958,6 +1018,7 @@ document.addEventListener('keydown',e=>{
 function carab0(p){return p.origen==='carab'}
 function V(p,k){
   const v=valorActual(p,k);
+  if(k==='Lugar'||k==='Dirección (certificado)') return normalizarDireccion(v);
   if(!esEmpadronado(p)&&k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}

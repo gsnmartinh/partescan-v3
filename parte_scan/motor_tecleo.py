@@ -359,6 +359,11 @@ def esc_keys(t):
     return "".join("{" + c + "}" if c in "+^%~(){}" else c for c in t)
 
 
+def normalizar_direccion(s):
+    """Forma admitida por el Juzgado, sin alterar otras calles ni números."""
+    return re.sub(r"\b[O0]\s*['’‘´`ʼ]?\s*HIGGINS\b", "OHIGGINS", limpiar(s), flags=re.I)
+
+
 def norm(s, modo="texto"):
     s = str(s or "")
     if modo == "digitos":
@@ -404,12 +409,12 @@ def partes_desde_lista(lista):
             "fecha_parte": g("fecha_parte"),
             "fecha_citacion": g("fecha_citacion"),
             "descripcion": limpiar(g("descripcion")),
-            "lugar": limpiar(g("lugar")),
+            "lugar": normalizar_direccion(g("lugar")),
             "hora": g("hora"),
             "rut": g("rut"),
             "rut_confirmado": g("rut_confirmado") is True,
             "nombre": limpiar(g("nombre")),
-            "direccion": limpiar(g("direccion")),
+            "direccion": normalizar_direccion(g("direccion")),
             "comuna": comuna_sistema(g("comuna")),
             "placa": g("placa"),
             "tipo_vehiculo": limpiar(g("tipo_vehiculo")),
