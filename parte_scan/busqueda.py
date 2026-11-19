@@ -124,13 +124,18 @@ def buscar(campo, origen, fuentes):
             if campo == "fecha_parte":
                 inicio, fin = 0, 0.32
             elif campo in {"fecha_infraccion", "hora_infraccion"}:
-                inicio, fin = (0.18, 0.48) if origen == "inspeccion" else (0, 0.64)
+                inicio, fin = (0.18, 0.48) if origen in {"insp", "inspeccion"} else (0, 0.64)
             else:
                 inicio, fin = 0, 1
-            lectura = motor.releer_franja(gris, inicio, fin)
+            patron = r"Doy\s+cuenta" if campo in {"fecha_infraccion", "hora_infraccion"} else (
+                r"DATOS\s+DEL\s+PROPIETARIO" if es_certificado and campo in IDENTIDAD else "")
+            zona = motor.zona_por_etiqueta(gris, patron, .4 if es_certificado else .12) if patron else None
+            if zona is None:
+                zona = gris.crop((0, int(gris.height * inicio), gris.width, int(gris.height * fin)))
+            lectura = motor._releer_zona(zona, 6)
             valor = extraer(lectura, campo, origen, es_certificado)
             if valor:
-                recorte = gris.crop((0, int(gris.height * inicio), gris.width, int(gris.height * fin)))
+                recorte = zona.copy()
                 recorte, preciso = recorte_del_valor(recorte, valor, campo)
                 recorte.thumbnail((1200, 1200))
                 salida = io.BytesIO()

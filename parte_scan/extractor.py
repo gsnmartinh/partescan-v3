@@ -1,5 +1,6 @@
 """Lee el texto OCR de un parte (modelo 1) línea por línea y devuelve campos + avisos."""
 import re
+import datetime
 from .semantica import formato_lugar
 from . import perfil
 
@@ -16,12 +17,15 @@ def fecha_de(linea):
     if not m:
         return ""
     mes = m.group(2).upper()
-    return "%02d/%02d/%s" % (int(m.group(1)), MESES["OCTUBRE" if mes == "CTUBRE" else mes], m.group(3))
+    try:
+        return datetime.date(int(m.group(3)), MESES["OCTUBRE" if mes == "CTUBRE" else mes], int(m.group(1))).strftime("%d/%m/%Y")
+    except ValueError:
+        return ""
 
 
 def hora_de(linea):
     h = RE_HORA.findall(linea)
-    return "%d:%s" % (int(h[-1][0]), h[-1][1]) if h else ""
+    return "%02d:%s" % (int(h[-1][0]), h[-1][1]) if h else ""
 
 
 def momento_infraccion(lineas):
@@ -35,7 +39,7 @@ def momento_infraccion(lineas):
             continue
         if candidata == linea or re.match(r"^\W*(?:\d{1,2}\s+DE\b|(?:a\s*las\s+)?\d{1,2}\s*[:.,])", candidata, re.I):
             impresa = RE_HORA_IMPRESA.search(candidata)
-            hora = hora or hora_de(candidata) or ("%d:%s" % (int(impresa[1]), impresa[2]) if impresa else "")
+            hora = hora or hora_de(candidata) or ("%02d:%s" % (int(impresa[1]), impresa[2]) if impresa else "")
             fecha = fecha or fecha_de(candidata)
     return fecha, hora
 

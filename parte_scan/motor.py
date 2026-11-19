@@ -5,7 +5,7 @@ from collections import Counter
 import pytesseract
 from PIL import Image
 
-from . import extractor, tablas, ocr2
+from . import extractor, tablas, ocr2, lectura
 
 
 def _base():
@@ -34,14 +34,13 @@ def paginas(ruta, dpi=200):
     ext = os.path.splitext(ruta)[1].lower()
     if ext == ".pdf":
         import pypdfium2 as pdfium
-        out = []
         doc = pdfium.PdfDocument(ruta)
         try:
             for i in range(len(doc)):
-                out.append(doc[i].render(scale=dpi / 72).to_pil().convert("L"))
+                yield doc[i].render(scale=dpi / 72).to_pil().convert("L")
         finally:
             doc.close()
-        return out
+        return
     if ext in EXTS_IMG:
         im = Image.open(ruta)
         try:
@@ -49,8 +48,8 @@ def paginas(ruta, dpi=200):
             im = ImageOps.exif_transpose(im)
         except Exception:
             pass
-        return [im.convert("L")]
-    return []
+        yield im.convert("L")
+    return
 
 
 def preparar(img):
@@ -58,22 +57,23 @@ def preparar(img):
     if g.width > 2600:  # fotos grandes: bajar a un tamaño razonable
         f = 2600 / g.width
         g = g.resize((2600, int(g.height * f)), Image.BICUBIC)
+    g.info.update(img.info)
     return g
 
 
 def texto_pagina(g):
     """OCR principal con Tesseract; si no entrega suficiente texto, utiliza RapidOCR como respaldo."""
     big = g.resize((int(g.width * 1.4), int(g.height * 1.4)), Image.BICUBIC)
-    txt_tess = pytesseract.image_to_string(big, lang="spa", config="--psm 6")
+    txt_tess = _releer_zona(big, 6)
     
     # Si Tesseract lee bien y trae suficiente contenido, lo devolvemos como principal
-    if txt_tess and len(txt_tess.strip()) > 15:
+    if lectura.puntaje(txt_tess) >= 12:
         return txt_tess
 
     # Respaldo secundario con RapidOCR si Tesseract falla o queda muy pobre
     if ocr2.disponible():
         txt_rapid = ocr2.leer(g)
-        if txt_rapid and len(txt_rapid.strip()) > 15:
+        if lectura.puntaje(txt_rapid) > lectura.puntaje(txt_tess):
             return txt_rapid
 
     return txt_tess
@@ -83,7 +83,7 @@ def _folio_recorte(g):
     """Lee el N° de parte recortando el encabezado usando Tesseract."""
     W = g.width
     top = g.crop((0, 0, W, int(g.height * 0.30)))
-    d = pytesseract.image_to_data(top, lang="spa", config="--psm 6", output_type=pytesseract.Output.DICT)
+    d = pytesseract.image_to_data(top, lang="spa", config="--psm 6", output_type=pytesseract.Output.DICT, timeout=20)
     
     def _lineas(dt):
         L = {}
@@ -102,7 +102,7 @@ def _folio_recorte(g):
             crop = g.crop((xr, max(0, yt - 10), min(W, xr + int(0.32 * W)), yb + 10))
             crop = crop.resize((crop.width * 2, crop.height * 2), Image.BICUBIC)
             t = pytesseract.image_to_string(crop, lang="spa",
-                                            config="--psm 7 -c tessedit_char_whitelist=0123456789")
+                                            config="--psm 7 -c tessedit_char_whitelist=0123456789", timeout=20)
             r = [x for x in re.findall(r"\d+", t) if len(x) >= 5]
             return r[0] if r else ""
     return ""
@@ -138,6 +138,37 @@ def _releer_zona(imagen, modo):
         return ""
 
 
+
+def zona_por_etiqueta(imagen, patron, margen=.12):
+    if not imagen.info.get("ocr_lineas"):
+        try:
+            datos = pytesseract.image_to_data(imagen, lang="spa", config="--psm 6",
+                                             output_type=pytesseract.Output.DICT, timeout=20)
+            grupos = {}
+            for i, palabra in enumerate(datos["text"]):
+                if palabra.strip():
+                    clave = tuple(datos[k][i] for k in ("block_num", "par_num", "line_num"))
+                    grupos.setdefault(clave, []).append(i)
+            lineas = []
+            for indices in grupos.values():
+                caja = [min(datos["left"][i] for i in indices) / imagen.width,
+                        min(datos["top"][i] for i in indices) / imagen.height,
+                        max(datos["left"][i] + datos["width"][i] for i in indices) / imagen.width,
+                        max(datos["top"][i] + datos["height"][i] for i in indices) / imagen.height]
+                lineas.append({"texto": " ".join(datos["text"][i] for i in indices), "caja": caja})
+            imagen.info["ocr_lineas"] = lectura.lineas_espaciales(lineas)
+        except (pytesseract.TesseractNotFoundError, pytesseract.TesseractError, RuntimeError):
+            pass
+    return lectura.zona_etiqueta(imagen, patron, margen)
+
+
+def texto_respaldo(imagen):
+    from PIL import ImageOps
+    variantes = [_releer_zona(imagen, 6), _releer_zona(ImageOps.autocontrast(imagen), 4)]
+    if ocr2.disponible():
+        variantes.append(ocr2.leer(imagen))
+    return max(variantes, key=lectura.puntaje)
+
 def releer_franja(imagen, inicio, fin):
     ancho, alto = imagen.size
     return _releer_zona(imagen.crop((0, int(alto * inicio), ancho, int(alto * fin))), 6)
@@ -156,7 +187,7 @@ def leer_certificado(g, texto, *, imagen=None):
             return bool(valor) and catalogo.comuna_en_sistema(valor)
         if campo == "placa":
             return extractor.placa_ok(valor) and not re.fullmatch(r"(?=[A-Z]{4}\d{2}$)[A-Z]*[AEIOU][A-Z]*\d{2}", valor)
-        return bool(valor)
+        return lectura.valido(campo, valor)
 
     faltan = [k for k in campos if not valido(k, datos[k])]
     if faltan:
@@ -178,7 +209,8 @@ def leer_certificado(g, texto, *, imagen=None):
                 faltan.remove(k)
     if faltan:
         # La segmentación por columnas recupera líneas que el modo de bloque mezcla u omite.
-        alternativo = _releer_zona(g, 4)
+        zona = zona_por_etiqueta(g, r"DATOS\s+DEL\s+PROPIETARIO", .4) or g
+        alternativo = _releer_zona(zona, 4)
         if re.search(r"\bPROPIETARIO\b", alternativo, re.I):
             otros = certificado.leer(alternativo)
             for k in faltan:
@@ -230,22 +262,32 @@ def leer_parte(img, texto=None, g=None, *, solo_texto=False):
     if es_formulario_inspeccion(texto):
         from . import perfil
         r["oficina"] = perfil.oficinas().get("32", "32")
-        if not r["fecha_infraccion"] or not r["hora_infraccion"]:
+        if not lectura.valido("fecha", r["fecha_infraccion"]) or not lectura.valido("hora", r["hora_infraccion"]):
             gris = g if g is not None else preparar(img)
             ancho, alto = gris.size
-            zona = gris.crop((0, int(alto * 0.18), ancho, int(alto * 0.48)))
+            zona = zona_por_etiqueta(gris, r"Doy\s+cuenta") or gris.crop((0, int(alto * 0.18), ancho, int(alto * 0.48)))
             respaldo = _releer_zona(zona, 6)
             fecha, hora = extractor.momento_infraccion(respaldo.splitlines())
-            r["fecha_infraccion"] = r["fecha_infraccion"] or fecha
-            r["hora_infraccion"] = r["hora_infraccion"] or hora
+            r["fecha_infraccion"] = r["fecha_infraccion"] if lectura.valido("fecha", r["fecha_infraccion"]) else fecha
+            r["hora_infraccion"] = r["hora_infraccion"] if lectura.valido("hora", r["hora_infraccion"]) else hora
     campos = ["fecha_parte", "fecha_infraccion", "hora_infraccion", "lugar", "infraccion_texto", "fecha_citacion"]
     if r["tipo_vehiculo"] or r["marca"]:
         campos.append("placa")
-    if solo_texto and img is not None and any(not r[k] for k in campos):
+    if img is not None and any(not lectura.valido(k, r[k]) for k in campos):
         gris = g if g is not None else preparar(img)
-        respaldo = extractor.parte(releer_franja(gris, 0, 1))
+        respaldo = extractor.parte(texto_respaldo(gris))
+        if ocr2.disponible():
+            segundo = extractor.parte(ocr2.leer(gris))
+            for campo in campos:
+                if not lectura.valido(campo, respaldo[campo]) and lectura.valido(campo, segundo[campo]):
+                    respaldo[campo] = segundo[campo]
+                elif (lectura.valido(campo, respaldo[campo]) and lectura.valido(campo, segundo[campo])
+                      and respaldo[campo] != segundo[campo]):
+                    r["avisos"].append("Segunda lectura de %s: alternativas %s / %s. Revisa la imagen." %
+                                       (campo, respaldo[campo], segundo[campo]))
+                    respaldo[campo] = ""
         for campo in campos:
-            if not r[campo] and (campo != "placa" or extractor.placa_ok(respaldo[campo])):
+            if not lectura.valido(campo, r[campo]) and lectura.valido(campo, respaldo[campo]):
                 r[campo] = respaldo[campo]
     r["folio_recorte"] = _folio_recorte(g if g is not None else preparar(img)) if (
         not solo_texto or (img is not None and not (r["n_parte"] or r["n_citacion_adjunta"]))
@@ -268,7 +310,7 @@ def _cfg(psm=7, lista=None):
 
 
 def _leer(c, cfg, lang="spa", punto=False):
-    v = re.sub(r"\s+", " ", pytesseract.image_to_string(c, lang=lang, config=cfg)).strip(" |_-—,;:'\"")
+    v = re.sub(r"\s+", " ", pytesseract.image_to_string(c, lang=lang, config=cfg, timeout=20)).strip(" |_-—,;:'\"")
     return v if punto else v.strip(".")
 
 
@@ -375,11 +417,11 @@ def leer_carab(g, texto, *, imagen=None):
         campos = ["n_parte_carab", "fecha_parte", "hora_infraccion", "lugar", "infraccion_texto"]
         if r["tiene_vehiculo"]:
             campos.append("placa")
-        if any(not r[campo] for campo in campos):
+        if any(not lectura.valido(campo, r[campo]) for campo in campos):
             gris = preparar(imagen)
-            respaldo = EC.parte(releer_franja(gris, 0, 1))
+            respaldo = EC.parte(texto_respaldo(gris))
             for campo in campos:
-                if not r[campo] and respaldo[campo] and (campo != "placa" or EC.placa_puntaje(respaldo[campo]) > 0):
+                if not lectura.valido(campo, r[campo]) and lectura.valido(campo, respaldo[campo]):
                     r[campo] = respaldo[campo]
                     if campo == "infraccion_texto":
                         r["bloques_infraccion"] = respaldo["bloques_infraccion"]

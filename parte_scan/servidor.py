@@ -203,7 +203,7 @@ def paginas_ocr_movil(ruta):
     from PIL import Image, ImageOps
 
     with zipfile.ZipFile(ruta) as paquete:
-        if paquete.getinfo("ocr.json").file_size > 2_000_000:
+        if paquete.getinfo("ocr.json").file_size > 32_000_000:
             raise ValueError("El manifiesto OCR es demasiado grande.")
         hojas = json.loads(paquete.read("ocr.json"))
         if not isinstance(hojas, list) or not 1 <= len(hojas) <= 500:
@@ -225,7 +225,16 @@ def paginas_ocr_movil(ruta):
                 # El texto OCR del teléfono ya está en el manifiesto.
                 foto.draft("RGB", (2600, 2600))
                 foto.thumbnail((2600, 2600), Image.Resampling.LANCZOS)
-                yield ImageOps.exif_transpose(foto).convert("RGB"), hoja["texto"], hoja["certificado"]
+                from . import lectura
+                imagen = ImageOps.exif_transpose(foto).convert("RGB")
+                lineas = lectura.lineas_espaciales(hoja.get("lineas"))
+                imagen.info["ocr_lineas"] = lineas
+                texto = hoja["texto"]
+                if lineas:
+                    espacial = lectura.ordenar_lineas(lineas)
+                    if lectura.puntaje(espacial) >= lectura.puntaje(texto):
+                        texto = espacial
+                yield imagen, texto, hoja["certificado"]
 
 
 def trabajador():

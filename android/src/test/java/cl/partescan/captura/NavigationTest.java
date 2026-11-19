@@ -29,6 +29,11 @@ import static org.junit.Assert.*;
 @Config(sdk = 34, qualifiers = "w393dp-h852dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class NavigationTest {
+    @Test public void readingScoreDoesNotRewardRepeatedNoise() {
+        assertTrue(MainActivity.readingScore("DATOS DEL PROPIETARIO NOMBRE MARIA PEREZ DOMICILIO CALLE UNO")
+                > MainActivity.readingScore("RUIDO ".repeat(500)));
+    }
+
     @Test public void shortOcrCountsCharactersNotUtf8Bytes() {
         assertTrue(MainActivity.shortOcr("á".repeat(50)));
         assertTrue(MainActivity.shortOcr("   "));

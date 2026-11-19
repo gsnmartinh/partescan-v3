@@ -978,13 +978,25 @@ public class MainActivity extends Activity {
         return readOcr(name, false);
     }
 
+    static int readingScore(String text) {
+        String value = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toUpperCase(java.util.Locale.ROOT);
+        int score = 0;
+        for (String label : new String[]{"PROPIETARIO", "DOMICILIO", "INFRACCION", "DENUNC", "CITACION", "INFRACTOR", "DOY CUENTA"}) {
+            if (value.contains(label)) score += 4;
+        }
+        java.util.Set<String> words = new java.util.HashSet<>(java.util.Arrays.asList(value.split("[^A-Z]+")));
+        score += Math.min(40, words.size());
+        return score;
+    }
+
     private String readOcr(String name, boolean retryShort) throws Exception {
         File cache = ocrCache(name);
         String previous = "";
         if (cache.isFile()) {
             try {
                 previous = new String(Files.readAllBytes(cache.toPath()), StandardCharsets.UTF_8);
-                if (!retryShort || !shortOcr(previous)) return previous;
+                if (!retryShort || (!shortOcr(previous) && readingScore(previous) >= 44)) return previous;
             } catch (IOException error) {
                 // Si la copia local no se puede leer, se vuelve a reconocer la foto.
             }
@@ -992,10 +1004,23 @@ public class MainActivity extends Activity {
         Bitmap bitmap = decode(name, 3000);
         TextRecognizer reader = null;
         String text;
+        JSONArray lines = new JSONArray();
         try {
             reader = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
             Text recognized = Tasks.await(reader.process(InputImage.fromBitmap(bitmap, 0)));
             text = orderedText(recognized);
+            for (Text.TextBlock block : recognized.getTextBlocks()) {
+                for (Text.Line line : block.getLines()) {
+                    Rect bounds = line.getBoundingBox();
+                    if (bounds == null || lines.length() >= 2000) continue;
+                    JSONArray box = new JSONArray();
+                    box.put(Math.max(0, Math.min(1, (double) bounds.left / bitmap.getWidth())));
+                    box.put(Math.max(0, Math.min(1, (double) bounds.top / bitmap.getHeight())));
+                    box.put(Math.max(0, Math.min(1, (double) bounds.right / bitmap.getWidth())));
+                    box.put(Math.max(0, Math.min(1, (double) bounds.bottom / bitmap.getHeight())));
+                    lines.put(new JSONObject().put("texto", line.getText()).put("caja", box));
+                }
+            }
             boolean nearEdge = false;
             for (Text.TextBlock block : recognized.getTextBlocks()) {
                 for (Text.Line line : block.getLines()) {
@@ -1019,7 +1044,7 @@ public class MainActivity extends Activity {
             bitmap.recycle();
             if (reader != null) reader.close();
         }
-        if (previous.trim().length() > text.trim().length()) text = previous;
+        if (readingScore(previous) > readingScore(text)) return previous;
         if (new File(folder, name).isFile() && cache.equals(ocrCache(name))) {
             android.util.AtomicFile target = new android.util.AtomicFile(cache);
             FileOutputStream output = null;
@@ -1027,6 +1052,14 @@ public class MainActivity extends Activity {
                 output = target.startWrite();
                 output.write(text.getBytes(StandardCharsets.UTF_8));
                 target.finishWrite(output);
+                android.util.AtomicFile geometry = new android.util.AtomicFile(new File(cache.getPath() + ".lines"));
+                FileOutputStream geometryOutput = null;
+                try {
+                    geometryOutput = geometry.startWrite();
+                    JSONObject payload = new JSONObject().put("texto", text).put("lineas", lines);
+                    geometryOutput.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+                    geometry.finishWrite(geometryOutput);
+                } catch (Exception error) { geometry.failWrite(geometryOutput); }
             } catch (IOException error) {
                 target.failWrite(output);
             }
@@ -1144,7 +1177,15 @@ public class MainActivity extends Activity {
                         runOnUiThread(() -> status.setText(progress));
                         String text = readOcr(photo, true);
                         if (shortOcr(text)) review++;
-                        manifest.put(new JSONObject().put("texto", text).put("certificado", i > 0));
+                        JSONObject page = new JSONObject().put("texto", text).put("certificado", i > 0);
+                        File geometry = new File(ocrCache(photo).getPath() + ".lines");
+                        if (geometry.isFile()) {
+                            try {
+                                JSONObject stored = new JSONObject(new String(Files.readAllBytes(geometry.toPath()), StandardCharsets.UTF_8));
+                                if (text.equals(stored.optString("texto"))) page.put("lineas", stored.getJSONArray("lineas"));
+                            } catch (Exception ignored) { }
+                        }
+                        manifest.put(page);
                     }
                 }
                 runOnUiThread(() -> status.setText("Creando el archivo…"));

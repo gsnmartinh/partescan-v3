@@ -68,6 +68,9 @@ jobs:
       - name: Pruebas del perfil y del reconocimiento
         run: python tests/prueba_perfil.py
 
+      - name: Probar datos sospechosos y coordenadas del OCR móvil
+        run: python tests/prueba_lectura_espacial.py
+
       - name: Pruebas del tecleo desde ParteScan
         run: python tests/prueba_tecleador.py
 

@@ -25,12 +25,16 @@ def disponible():
 
 def leer(g):
     """Texto de la hoja (una línea por cuadro de texto, de arriba hacia abajo). '' si el motor no está o falla."""
+    if "rapid_texto" in g.info:
+        return g.info["rapid_texto"]
     if not disponible():
         return ""
     try:
         import numpy as np
         with _LOCK:
             res, _ = _MOTOR(np.array(g.convert("RGB")))
-        return "\n".join(r[1] for r in (res or []))
+        texto = "\n".join(r[1] for r in (res or []))
+        g.info["rapid_texto"] = texto
+        return texto
     except Exception:
         return ""
