@@ -1,3 +1,13 @@
+# ParteScan 5.1.16 · ParteScan Captura 1.1.6
+
+- Escritorio distingue los datos detectados, modificados y revisados, y valida fechas, horas y el dígito verificador del RUT.
+- Al cambiar infracciones permite actualizar la descripción con los códigos seleccionados.
+- Guarda el historial de correcciones de la tanda y permite consultar los valores anteriores y nuevos.
+- Las búsquedas por campo se procesan en cola. Cancelar descarta el resultado de una lectura que ya comenzó.
+- Conserva las páginas que fallaron durante el reconocimiento para reintentarlas y continúa leyendo las demás.
+- Android permite reintentar el OCR desde cada foto y abrir las fotos señaladas para revisión.
+- Incorpora avisos orientativos de poca iluminación, exceso de luz, poco detalle y texto junto al borde. Conviene comprobar el encuadre y la legibilidad en la imagen ampliada.
+
 # ParteScan 5.1.15 · ParteScan Captura 1.1.5
 
 - Escritorio normaliza las variantes de O’Higgins como OHIGGINS, sin apóstrofo, al mostrar, copiar y preparar el tecleo.
