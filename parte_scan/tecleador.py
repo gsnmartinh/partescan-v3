@@ -90,6 +90,9 @@ def cargar(registros):
         for p, r in zip(nuevos, registros):
             uid = r.get("uid")
             ant = previos.get(uid)
+            if ant and any(str(ant.get(k, "")) != str(p.get(k, ""))
+                           for k in ("n_parte", "fecha_parte", "oficina", "boleta")):
+                ant = None
             p["_uid"] = uid
             if r.get("ingresado"):
                 p["_estado"] = "ingresado"

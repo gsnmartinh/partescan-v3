@@ -805,6 +805,13 @@ class Sistema:
         self.asegurar_primer_plano()
         revisar_teclas()
         self.chequear_avisos()
+        actual = re.sub(r"\D", "", self.leer_id(11))
+        if not self.rol_usado or actual != self.rol_usado:
+            raise Detener("El Rol de la causa cambio antes de Aceptar. Revisa el formulario.")
+        for ident, clave in ((14, "n_parte"), (10, "fecha_parte")):
+            esperado = self.p.get(clave, "")
+            if esperado and not igual(self.leer_id(ident), esperado):
+                raise Detener("La causa en pantalla no coincide con el parte preparado (%s)." % clave)
         h = self.ids.get(40)
         if (not h or not user32.IsWindow(h) or not user32.IsWindowEnabled(h)
                 or not user32.IsWindowVisible(h) or rect(h)[0] <= -900
@@ -839,8 +846,7 @@ class Sistema:
                 avisado = True
             if borde(VK_F8) or SALTAR.is_set():
                 SALTAR.clear()
-                print("Continuando sin esperar.")
-                return
+                raise Detener("Se omitio la espera. El ingreso queda sin confirmar: revisa la causa en el sistema.")
             time.sleep(0.25)
 
     # ---- estado de la pantalla ----
@@ -950,6 +956,15 @@ class Sistema:
         todos = [h for h in hijos(panel) if clase(h) in ("ThunderRT6TextBox", "ThunderRT6ComboBox")
                  and user32.IsWindowVisible(h) and rect(h)[0] > -900]
         por_id = {user32.GetDlgCtrlID(h): h for h in todos}
+        if (all(i in por_id for i in (17, 24, 30, 29))
+                and not all(i in por_id and user32.IsWindowEnabled(por_id[i]) for i in (22, 25, 23))):
+            comuna = rect(por_id[17])
+            candidatos = [h for h in todos if clase(h) == "ThunderRT6TextBox"
+                          and user32.IsWindowEnabled(h) and rect(h)[1] < comuna[1]
+                          and rect(h)[2] - rect(h)[0] >= 300
+                          and re.sub(r"\D", "", leer(h)) != re.sub(r"\D", "", self.p["rut"])]
+            if len(candidatos) == 1:
+                return [candidatos[0], None, None, por_id[17], por_id[24], por_id[30], por_id[29]]
         orden = (22, 25, 23, 17, 24, 30, 29)
         if all(i in por_id for i in orden):
             r = {i: rect(por_id[i]) for i in orden}
@@ -972,14 +987,14 @@ class Sistema:
                      and rect(h)[0] > -900)
         pausa(0.5)
         hs = self._campos_ficha(panel)
-        pat, mat, nom = split_nombre(self.p["nombre"])
+        pat, mat, nom = (self.p["nombre"], "", "") if hs[1] is None else split_nombre(self.p["nombre"])
         calle, num, resto = split_direccion(self.p["direccion"])
         # orden: paterno, materno, nombres | comuna | calle, numero | aclaracion
         plan = [(hs[0], pat, "Apellido paterno"), (hs[1], mat, "Apellido materno"),
                 (hs[2], nom, "Nombres"), (hs[3], comuna_sistema(self.p["comuna"]), "Comuna"),
                 (hs[4], calle, "Calle"), (hs[5], num, "Numero"), (hs[6], resto, "Aclaracion de direccion")]
         for h, valor, etiqueta in plan:
-            if not valor:
+            if not valor or h is None:
                 continue
             if etiqueta == "Comuna" and igual(leer(h), valor):
                 continue
@@ -1535,6 +1550,7 @@ def procesar_lote(sis, partes, indices, on_estado=None, aceptar_auto=False):
                 pausa(1)
             print(" " * 40, end="\r")
             avisar(i, "tecleando")
+            sis.rol_usado = ""
             sis.teclear_parte(p)
         except Detener as e:
             avisar(i, "interrumpido", str(e))
@@ -1557,11 +1573,12 @@ def procesar_lote(sis, partes, indices, on_estado=None, aceptar_auto=False):
             avisar(i, "interrumpido", str(e))
             raise
         ahora = re.sub(r"\D", "", sis.leer_id(11))
-        # Al aceptar, el sistema pasa al Rol siguiente; si el Rol no cambio, el parte se cancelo.
-        if sis.rol_usado and ahora and ahora == sis.rol_usado:
-            avisar(i, "cancelado")
-        else:
-            avisar(i, "ingresado", sis.rol_usado if ahora else "")
+        # Solo se admite la transición inmediata del rol observado en esta causa.
+        if not sis.rol_usado or not ahora or int(ahora) != int(sis.rol_usado) + 1:
+            detalle = "No se pudo confirmar el ingreso: Rol observado %s, Rol posterior %s. Revisa la causa en el sistema." % (sis.rol_usado or "vacío", ahora or "vacío")
+            avisar(i, "interrumpido", detalle)
+            raise Detener(detalle)
+        avisar(i, "ingresado", sis.rol_usado)
     print("\nTerminado.")
 
 

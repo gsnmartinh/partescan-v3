@@ -382,7 +382,7 @@ function bakeEdits(p){
 function refrescarConScroll(){const y=window.scrollY; pintarTira(); mostrar(); window.scrollTo(0,y)}
 function buscarInfr(v){
   v=(v||'').trim(); if(!v) return null;
-  const code=v.split(' · ')[0].trim();
+  const code=(v.match(/^(\d+)\s*(?:[·:—–-]|$)/)||[])[1]||v.split(' · ')[0].trim();
   return INFR.find(z=>String(z[0])===code)||INFR.find(z=>(z[0]+' · '+z[1])===v)||INFR.find(z=>String(z[1]).toLowerCase()===v.toLowerCase())||null;
 }
 function sincronizarDescripcion(p){
@@ -495,6 +495,7 @@ function campos(p){
   return S;
 }
 function avisoVigente(p,x){
+  if(esEmpadronado(p)&&/RUT|nombre|infractor|certificado|direcci[oó]n|comuna/i.test(x)&&!/placa|patente/i.test(x)) return false;
   if(x.startsWith('Revisa al pie del parte si fue')&&p.modalidad_mtt) return false;
   if(x.startsWith('Falta el certificado')&&p.origen==='mtt'&&p.modalidad_mtt==='personal') return false;
   const c=p.cert||{}, v=k=>(valorActual(p,k)||'').trim();
@@ -837,10 +838,25 @@ function mostrar(){
       boton.setAttribute('aria-pressed',String(marcado));
       boton.onclick=()=>{
         p.empadronadoManual=!marcado;
+        p.avOk=false;
+        for(const key of ['RUT (certificado)','Nombre (certificado)','Dirección (certificado)','Comuna (certificado)']){
+          delete p.ed?.[key];delete p.ok?.[key];delete p.done?.[key];
+        }
         pintarTira();mostrar();
         autoguardar().catch(()=>toast('No se pudo guardar la sesión automáticamente'));
       };
       d.appendChild(boton);
+      const domicilio=document.createElement('button');
+      domicilio.type='button';domicilio.textContent=p.denunciadoDomicilio?'✓ Denunciado por domicilio':'Denunciado por domicilio (sin persona)';
+      domicilio.onclick=()=>{
+        p.denunciadoDomicilio=!p.denunciadoDomicilio;
+        p.avOk=false;
+        for(const key of ['RUT (certificado)','Nombre (certificado)','Dirección (certificado)','Comuna (certificado)']){
+          delete p.ed?.[key];delete p.ok?.[key];delete p.done?.[key];
+        }
+        pintarTira();mostrar();autoguardar().catch(()=>toast('No se pudo guardar'));
+      };
+      d.appendChild(domicilio);
     }
     s.f.forEach(f=>{
       const key=f.k, val=valorActual(p,key);
@@ -929,7 +945,7 @@ function mostrar(){
             const hit=buscarInfr(el.value);
             if(hit){
               el.value=String(hit[0]);
-              infraccionCorregida=el.value!==String(f.v);
+              infraccionCorregida=el.value!==valorGuardado;
             }
           }
         }
@@ -939,7 +955,7 @@ function mostrar(){
         }
         p.ed[key]=e.target.value;
         p.ok=p.ok||{};
-        p.ok[key]=false;
+        p.ok[key]=formatoCampoValido(key,el.value)&&Boolean(el.value.trim());
         if(infraccionCorregida){
           sincronizarDescripcion(p);
           refrescarConScroll();
@@ -1020,10 +1036,12 @@ function formatoRut(valor){
   return m?m[1]+'-'+m[2]:limpio;
 }
 function esEmpadronado(p){
+  if(p.denunciadoDomicilio) return true;
   if(p.origen==='carab'&&typeof p.empadronadoManual==='boolean') return p.empadronadoManual;
   return p.empadronado||/^PORESCRITO[.:;]*$/i.test((p.cert?.nombre||'').replace(/\s/g,''));
 }
 function nombreEmpadronado(p){
+  if(p.denunciadoDomicilio) return normalizarDireccion(p.ed?.Lugar??p.lugar??'').trim().toUpperCase();
   const tipo=p.ed?.['Tipo de vehículo (certificado)']??(p.cert?.tipo_vehiculo||p.tipo_vehiculo||'VEHICULO');
   const placa=p.ed?.['Placa']??p.placa??'';
   return [tipo,placa].map(v=>String(v).trim().toUpperCase()).filter(Boolean).join(' ');

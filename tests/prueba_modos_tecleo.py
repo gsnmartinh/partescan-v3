@@ -25,6 +25,7 @@ class SistemaFalso:
         if vigilar and self.fallo:
             raise T.Detener('No se confirmó el guardado')
     def teclear_parte(self, p):
+        self.rol_usado = '100'
         self.tecleados.append(p['n_parte'])
         self.avisos = ['Aviso de revisión']
     def chequear_avisos(self): pass
@@ -42,6 +43,15 @@ class Pruebas(unittest.TestCase):
             except T.Detener:
                 if not fallo: raise
         return sis,estados
+    def test_rol_anterior_o_vacio_no_confirma(self):
+        for rol in ('', '99', '200'):
+            sis=SistemaFalso()
+            estados=[]
+            with patch.object(T, 'ESPERA_INICIO', 0), patch.object(T, 'revisar_teclas'), patch.object(sis, 'leer_id', return_value=rol):
+                with self.assertRaises(T.Detener):
+                    T.procesar_lote(sis,[{'n_parte':'1'}],[0],on_estado=lambda *e: estados.append(e),aceptar_auto=True)
+            self.assertFalse(any(e[1]=='ingresado' for e in estados))
+
     def test_manual(self):
         sis,estados=self.ejecutar(False)
         self.assertEqual(sis.clicks,0)
@@ -62,6 +72,9 @@ class PruebasBoton(unittest.TestCase):
     def activar(self, foco=40, texto='&Aceptar', habilitado=True):
         sis=T.Sistema.__new__(T.Sistema)
         sis.ids={40:40}
+        sis.rol_usado='100'
+        sis.p={}
+        sis.leer_id=MagicMock(return_value='100')
         sis.asegurar_primer_plano=MagicMock()
         sis.chequear_avisos=MagicMock()
         api=MagicMock()
