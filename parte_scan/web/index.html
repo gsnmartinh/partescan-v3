@@ -838,6 +838,7 @@ function mostrar(){
       boton.setAttribute('aria-pressed',String(marcado));
       boton.onclick=()=>{
         p.empadronadoManual=!marcado;
+        p.denunciadoDomicilio=false;
         p.avOk=false;
         for(const key of ['RUT (certificado)','Nombre (certificado)','Dirección (certificado)','Comuna (certificado)']){
           delete p.ed?.[key];delete p.ok?.[key];delete p.done?.[key];
