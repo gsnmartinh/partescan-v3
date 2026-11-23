@@ -1,3 +1,16 @@
+# ParteScan 5.1.17 · ParteScan Captura 1.1.7
+
+- Relee datos sospechosos, valida fechas y utiliza etiquetas del documento para localizar campos.
+- Android conserva las coordenadas de las líneas en nuevas lecturas y las exporta para mejorar la reconstrucción de filas en escritorio.
+- Compara la calidad del texto recuperado y añade una lectura con contraste. Los PDF se procesan página por página.
+- Antes de Aceptar comprueba rol, número y fecha del parte. Un rol posterior vacío, antiguo o con salto inesperado interrumpe el lote y deja el ingreso sin confirmar.
+- Evita heredar el estado y rol de otra causa al reutilizar identificadores de tanda.
+- Mejora la edición de infracciones y el reconocimiento de correcciones válidas.
+- Agrega denunciado por domicilio, con dirección como nombre y SR como RUT, y limpia la identificación al cambiar modalidad.
+- Reconoce la disposición de ficha empresarial con cuadro único para la razón social. Requiere comprobación en el sistema real del Juzgado.
+
+Pendientes detectados en pruebas sintéticas: asociación de hojas de continuación, generación automática de copias por infractor y boleta, asociación de boletas citadas en orden inverso y reconocimiento completo de algunas infracciones combinadas. Revisa estos casos antes de teclear.
+
 # ParteScan 5.1.16 · ParteScan Captura 1.1.6
 
 - Escritorio distingue los datos detectados, modificados y revisados, y valida fechas, horas y el dígito verificador del RUT.
