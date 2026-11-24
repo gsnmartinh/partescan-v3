@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from . import perfil
+from .lugares import compactar_lugar, LIMITE_LUGAR
 
 WIN = sys.platform == "win32"
 
@@ -409,7 +410,7 @@ def partes_desde_lista(lista):
             "fecha_parte": g("fecha_parte"),
             "fecha_citacion": g("fecha_citacion"),
             "descripcion": limpiar(g("descripcion")),
-            "lugar": normalizar_direccion(g("lugar")),
+            "lugar": compactar_lugar(normalizar_direccion(g("lugar"))),
             "hora": g("hora"),
             "rut": g("rut"),
             "rut_confirmado": g("rut_confirmado") is True,
@@ -1272,7 +1273,14 @@ class Sistema:
 
     def h_lugar(self, ctl, p):
         if p["lugar"]:
-            self.escribir(ctl, [p["lugar"]], "Lugar")
+            lugar = compactar_lugar(p["lugar"])
+            limite_control = user32.SendMessageW(ctl.hwnd, 0x00D5, 0, 0)  # EM_GETLIMITTEXT
+            limite = limite_control if 0 < limite_control < 32767 else LIMITE_LUGAR
+            if len(lugar) > limite:
+                raise Detener("El lugar tiene %d caracteres y el campo admite %d. Abrevialo en ParteScan: %s" % (len(lugar), limite, lugar))
+            self.escribir(ctl, [lugar], "Lugar")
+            if not igual(leer(ctl.hwnd), lugar):
+                raise Detener("El lugar quedo recortado o modificado en el sistema. Revisa la causa antes de continuar.")
         self.avanzar(ctl, "Lugar")
 
     def h_hora(self, ctl, p):

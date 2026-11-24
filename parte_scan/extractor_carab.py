@@ -193,12 +193,15 @@ def _infraccion(t, secs):
                      r"[.:;\s]*[\"“]\s*([^\"”]{10,450})[\"”]", t, re.I)
     if not cita:
         cita = re.search(r'\binfracci[oó]n\s+al\s+tr[aá]nsito\s*:\s*["“]\s*([^"”]{10,450})["”]', t, re.I)
+    if not cita:
+        cita = re.search(r'["“]\s*(CONDUCIR\s+VEH[IÍ]CULO\b[^"”]{10,450})["”]', t, re.I)
     if cita:
         return limpiar(cita.group(1)).upper()
     todas = [s for r, s in secs if r.startswith("INFRACCION") and s]
     todas = [s for s in todas if not re.fullmatch(
         r"(?:A\s+LA\s+LEY\s+DE\s+TRANSITO|AL\s+TRANSITO)\W*", s, re.I)]
-    v = todas[0] if todas else ""
+    # Un rótulo repetido puede dejar un fragmento antes de la infracción citada.
+    v = next((s for s in todas if re.match(r"\s*[\"“]", s)), todas[0] if todas else "")
     if not v:
         m = re.search(r"siguiente\s+infracci[oó]n\W{0,4}\s*[\"“”']?\s*(.{10,450}?)(?=\bINFRACTOR|\bREINCIDENCIA|\bDISP\.?\s*INFR|\bCITACI)",
                       re.sub(r"\s+", " ", t), re.I)
@@ -509,7 +512,9 @@ def parte(texto):
         for x, bol in zip(infractores, boletas):
             x["boleta"] = bol
     pers = []
-    for bloque in SM.personas(texto):
+    secciones_infractor = [sec for rot, sec in secs if rot.startswith("INFRACTOR") and sec]
+    fuente_personas = "\n".join(secciones_infractor) if secciones_infractor else texto
+    for bloque in SM.personas(fuente_personas):
         x = _infractor(bloque)
         if not x[0]:
             cab = _trozo_nombre((bloque.split(",")[0] if "," in bloque else bloque))

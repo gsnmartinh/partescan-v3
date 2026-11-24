@@ -1,3 +1,16 @@
+# ParteScan 5.1.18
+
+- Abrevia el lugar del hecho conservando calles, cruces y numeración. Usa CON y elimina rótulos como CALLE o AVENIDA. Muestra el original y un contador de 30 caracteres.
+- Comprueba el límite del campo al teclear y detiene el ingreso si el lugar queda recortado. El límite de referencia de 30 caracteres proviene del caso observado y requiere comprobación en el sistema real.
+- Corrige la lectura de infracciones con rótulos repetidos o dañados y conserva las cinco infracciones combinadas del caso real revisado.
+- Reconoce luces de freno en mal estado (59), neumáticos en mal estado (64) y transporte sin inscripción (65).
+- Aplica el criterio confirmado del juzgado para facilitar vehículo sin licencia: 67 y descripción del hecho.
+- Conserva todos los hechos en la descripción cuando comparten el código comodín 67.
+- Evita tomar como segundo infractor a una persona mencionada en la sección del vehículo cuando el denunciado está identificado en su propia sección.
+- Mejora la búsqueda de infracciones, la descripción conjunta de documentación y la memoria local de interpretaciones confirmadas.
+
+Validación local sobre la tanda real del 23/11: coincidencia del conjunto de códigos en los 58 partes con la referencia corregida y la confirmación posterior del código 59. Los 58 lugares quedan dentro de 30 caracteres conservando la numeración. Esto no mide el acierto de los demás campos ni sustituye la revisión del documento. Los partes de varias hojas se revisarán en otra sesión con ejemplos reales.
+
 # ParteScan 5.1.17 · ParteScan Captura 1.1.7
 
 - Relee datos sospechosos, valida fechas y utiliza etiquetas del documento para localizar campos.

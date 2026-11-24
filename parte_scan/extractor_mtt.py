@@ -77,6 +77,9 @@ def parte(texto, celdas=None):
     else:
         fecha_inf, hora, lugar = fecha_parte, "", ""
     mi = re.search(r"infracci[oó]n\s*\(?e?s?\)?\s*\)?\s*[:;]\s*(.+?)\s*Disposici", t, re.I)
+    if mi is None:
+        # El OCR del parte 2322569 lee el rótulo como «infraccinles», sin dos puntos.
+        mi = re.search(r"infracc\S*\s*[:;]?\s*(\d+\s*\.\s+.+?)\s+Disposici", t, re.I)
     infracciones = _lista(mi.group(1)) if mi else []
     md = re.search(r"Disposici[oó]n\s+Infringida\s*(.+?)\s*Antecedentes\s+del\s+Infractor", t, re.I)
     disposiciones = _lista(md.group(1)) if md else []

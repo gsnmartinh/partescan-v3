@@ -2,12 +2,12 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
 (async()=>{
 for(const path of ['parte_scan/web/index.html']){
  const script=fs.readFileSync(path,'utf8').match(/<script>([\s\S]*)<\/script>/)[1];
- const calls=[],p={nombre:'Nombre OCR NACIONALIDAD',ed:{'Nombre (certificado)':'NOMBRE CORREGIDO'}};
+ const calls=[],p={nombre:'Nombre OCR NACIONALIDAD',ed:{'Nombre (certificado)':'NOMBRE CORREGIDO','Lugar':'av arturo prat esquina con av alemania'}};
  const elements={tAviso:{},tAuto:{checked:true},tAct:{value:''}};
  let fail=false;
  const ctx=vm.createContext({P:[p],$:id=>elements[id],valorActual:(p,k)=>p.ed[k]??'',hoy:()=>'',infrVigentes:()=>[],placa6:String,
  fetch:async(url,opt)=>{calls.push({url,body:JSON.parse(opt.body)});return {json:async()=>fail?{error:'En curso'}:{ok:true}}},alert(){},tecSondear(){}});
- vm.runInContext(script.slice(script.indexOf('function normalizarDireccion('),script.indexOf('function textoMemoria(')),ctx);
+ vm.runInContext(script.slice(script.indexOf('function compactarLugar('),script.indexOf('function textoMemoria(')),ctx);
  vm.runInContext(script.slice(script.indexOf('function V(p,k)'),script.indexOf("$('btnTecleo').onclick=")),ctx);
  vm.runInContext(script.slice(script.indexOf('function esEmpadronado('),script.indexOf('function valorActual(')),ctx);
  vm.runInContext("let tMarcando=false;",ctx);
@@ -16,6 +16,7 @@ for(const path of ['parte_scan/web/index.html']){
  await vm.runInContext('tecIniciar(null)',ctx);
  assert.equal(calls[0].url,'/api/tecleo/cargar');
  assert.equal(calls[0].body.partes[0].nombre,'NOMBRE CORREGIDO');
+ assert.equal(calls[0].body.partes[0].lugar,'PRAT CON AV ALEMANIA');
  assert.equal(calls[1].url,'/api/tecleo/iniciar');
  assert.equal(calls[1].body.auto,true);
  calls.length=0;fail=true;

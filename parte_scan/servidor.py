@@ -50,6 +50,8 @@ def armar(r, archivo, pagina, pid):
                 continue
             if item["cod"] not in {i["cod"] for i in items}:
                 items.append(dict(item, estado="check", nota="Confirma esta infracción adicional en la imagen: " + bloque))
+    texto_documentos = " ".join([r["infraccion_texto"], *r.get("bloques_infraccion", [])])
+    causa = catalogo.resumen_documentacion(texto_documentos, items) or causa
     if len(items) > 1:
         avisos.append("Revisa la imagen y confirma que estén todas las infracciones del parte.")
     if personal:
@@ -62,7 +64,8 @@ def armar(r, archivo, pagina, pid):
         "depto": r["departamento"], "folio": r["n_parte_final"], "oficina": r.get("oficina", ""),
         "fecha_parte": r["fecha_parte"], "fecha_infraccion": r["fecha_infraccion"],
         "hora_infraccion": hora(r["hora_infraccion"]), "lugar": r["lugar"],
-        "infraccion_texto": r["infraccion_texto"], "tipo_vehiculo": exportar.tipo_limpio(r["tipo_vehiculo"]),
+        "infraccion_texto": r["infraccion_texto"], "texto_documentacion": texto_documentos,
+        "tipo_vehiculo": exportar.tipo_limpio(r["tipo_vehiculo"]),
         "marca": exportar.marca_limpia(r["marca"]), "placa": exportar.placa6(r["placa"]),
         "fecha_citacion": r["fecha_citacion"], "hora_citacion": r["hora_citacion"],
         "articulo": r["articulo"], "avisos": avisos, "causa": causa, "causa_literal": comodin,
@@ -128,11 +131,18 @@ def armar_mtt(r, archivo, pagina, pid):
     """Denuncia del MTT: trae al infractor y al vehículo en sus tablas; puede traer varias infracciones."""
     p = armar(r, archivo, pagina, pid)
     causa, items, literal = "", [], False
+    descripciones = []
     for texto in r["infracciones"]:
         c, its, es_comodin = catalogo.resolver_o_comodin(texto)
+        if c and c not in descripciones:
+            descripciones.append(c)
+        literal = literal or es_comodin
         if not causa and c:
-            causa, literal = c, es_comodin
+            causa = c
         items += [i for i in its if i["cod"] not in [x["cod"] for x in items]]
+    resumen = catalogo.resumen_documentacion(" ".join(r["infracciones"]), items)
+    causa = resumen or " / ".join(descripciones)
+    p["texto_documentacion"] = " ".join(r["infracciones"])
     personal = r.get("notificado_personalmente", False)
     avisos = list(r["avisos"])
     modalidad = r.get("modalidad_mtt", "")
@@ -150,7 +160,7 @@ def armar_mtt(r, archivo, pagina, pid):
     else:
         avisos.append("No pude leer el N° de la boleta de citación (al pie del parte): escribe sus primeros 6 dígitos como folio.")
     if len(r["infracciones"]) > 1:
-        avisos.append("Este parte trae %d infracciones: la descripción de la causa es la primera; ingresa todas." % len(r["infracciones"]))
+        avisos.append("Este parte trae %d infracciones: revisa la descripción de la causa e ingresa todos los códigos." % len(r["infracciones"]))
         for item in items:
             item["estado"] = "check"
             item["nota"] = (item["nota"] + " Confirma este código con la imagen del parte.").strip()

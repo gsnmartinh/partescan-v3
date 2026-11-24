@@ -385,10 +385,94 @@ function buscarInfr(v){
   const code=(v.match(/^(\d+)\s*(?:[·:—–-]|$)/)||[])[1]||v.split(' · ')[0].trim();
   return INFR.find(z=>String(z[0])===code)||INFR.find(z=>(z[0]+' · '+z[1])===v)||INFR.find(z=>String(z[1]).toLowerCase()===v.toLowerCase())||null;
 }
+function normalizarInfraccion(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim()}
+function sugerirInfracciones(v){
+  const palabras=normalizarInfraccion(v).split(' ').filter(Boolean);
+  if(!palabras.length) return [];
+  return INFR.filter(z=>palabras.every(w=>normalizarInfraccion(z[0]+' '+z[1]).includes(w)))
+    .sort((a,b)=>(String(b[0])===v)-(String(a[0])===v)).slice(0,12);
+}
+function agregarSelectorInfracciones(el){
+  el.removeAttribute('list');
+  const lista=document.createElement('div');lista.className='meta';
+  lista.setAttribute('aria-label','Resultados de infracciones');
+  const actualizar=()=>{
+    lista.replaceChildren();
+    for(const hit of sugerirInfracciones(el.value)){
+      const boton=document.createElement('button');boton.type='button';
+      boton.textContent=hit[0]+' — '+hit[1];
+      // No perder el foco antes de aceptar la opción: change puede reconstruir el formulario.
+      boton.onmousedown=e=>e.preventDefault();
+      boton.onclick=()=>{el.value=String(hit[0]);lista.replaceChildren();el.dispatchEvent(new Event('change'))};
+      lista.append(boton);
+    }
+    if(!lista.childNodes.length&&el.value.trim()) lista.textContent='Sin coincidencias. Busca otra palabra o código.';
+  };
+  el.addEventListener('input',actualizar);el.addEventListener('focus',actualizar);
+  el.addEventListener('change',()=>lista.replaceChildren());
+  el.after(lista);
+}
+function descripcionInfracciones(p,nombres){
+  const codigos=infrVigentes(p).map(String);
+  if(codigos.length===3&&['92','37','33'].every(c=>codigos.includes(c))){
+    // Solo resumir cuando los códigos conservan los conceptos de este juzgado.
+    if(nombres.every((n,i)=>normalizarInfraccion(n).includes({'92':'SEGURO','37':'PERMISO','33':'REVISION'}[codigos[i]]))){
+      const t=normalizarInfraccion(p.texto_documentacion||p.infraccion_texto);
+      if(/\b(?:VIGENTES?|VALID[OA]S?)\b|\bAL\s+DIA\b/.test(t)) return nombres.join(' / ');
+      const vencida=/\bVENCID[OA]S?\b|\bCADUCAD[OA]S?\b/.test(t);
+      const sin=/\bSIN\b|\bNO\s+(?:PORTAR|PRESENTAR|CONTAR)\b/.test(t);
+      if(vencida&&!sin) return 'CONDUCIR CON LA TOTALIDAD DE LA DOCUMENTACION VENCIDA';
+      if(sin&&!vencida) return 'CONDUCIR SIN LA TOTALIDAD DE LA DOCUMENTACION';
+    }
+  }
+  return nombres.join(' / ');
+}
+const CLAVE_INTERPRETACIONES='partescan-interpretaciones-v1';
+function leerInterpretaciones(){
+  try{const datos=JSON.parse(localStorage.getItem(CLAVE_INTERPRETACIONES)||'[]');return Array.isArray(datos)?datos.filter(x=>x&&typeof x.texto==='string'&&Array.isArray(x.codigos)&&typeof x.descripcion==='string'):[]}catch{return []}
+}
+function contextoInterpretacion(p){return normalizarInfraccion(p.origen)+'|'+normalizarInfraccion(V(p,'Oficina emisora'))}
+function recordarInterpretacion(p){
+  const texto=normalizarInfraccion(p.infraccion_texto),codigos=infrVigentes(p).map(String);
+  const descripcion=String(V(p,'Descripción de la causa')||'').trim();
+  if(!texto||!descripcion||!codigos.length||!codigos.every(c=>buscarInfr(c))) return false;
+  const contexto=contextoInterpretacion(p);
+  const datos=leerInterpretaciones().filter(x=>x.texto!==texto||x.contexto!==contexto);
+  // Solo se conserva el fragmento de infracción y la interpretación confirmada.
+  datos.push({texto,contexto,codigos,descripcion,nombres:codigos.map(c=>buscarInfr(c)[1])});
+  try{localStorage.setItem(CLAVE_INTERPRETACIONES,JSON.stringify(datos.slice(-200)));return true}catch{toast('No se pudo guardar la interpretación.');return false}
+}
+function sugerirInterpretacion(p){
+  return leerInterpretaciones().find(x=>x.texto===normalizarInfraccion(p.infraccion_texto)&&x.contexto===contextoInterpretacion(p)&&
+    x.codigos.length&&x.codigos.every((c,i)=>buscarInfr(c)?.[1]===x.nombres?.[i]));
+}
+function aplicarInterpretacion(p,regla){
+  bakeEdits(p);
+  p.items=regla.codigos.map(c=>({cod:c,estado:'check',nota:'Interpretación recordada: verifica el documento.',manual:true}));
+  p.ed=p.ed||{};p.ed['Descripción de la causa']=regla.descripcion;p.causa_literal=false;
+  p.ok=p.ok||{};delete p.ok['Descripción de la causa'];
+  if(p.done) delete p.done['Descripción de la causa'];
+  Object.keys(p.ok).filter(k=>k.startsWith('Infracción ')).forEach(k=>delete p.ok[k]);
+  p.avOk=false;
+}
+function pintarMemoriaInfracciones(p,contenedor){
+  const recordar=document.createElement('button');recordar.type='button';recordar.textContent='Recordar esta interpretación';
+  recordar.title='Guarda el texto de infracción, los códigos y la descripción en este equipo. Úsalo después de revisarlos.';
+  recordar.onclick=()=>{if(recordarInterpretacion(p)){toast('Interpretación guardada. Se sugerirá para el mismo texto y oficina.');refrescarConScroll()}else toast('Revisa los códigos y la descripción antes de recordarlos.')};
+  contenedor.append(recordar);
+  const regla=sugerirInterpretacion(p);
+  if(!regla) return;
+  const detalle=document.createElement('span');detalle.textContent='Recordado: '+regla.codigos.join(', ')+' — '+regla.descripcion;
+  const usar=document.createElement('button');usar.type='button';usar.textContent='Usar interpretación recordada';
+  usar.onclick=()=>{aplicarInterpretacion(p,regla);refrescarConScroll();autoguardar().catch(()=>toast('No se pudo guardar'))};
+  const olvidar=document.createElement('button');olvidar.type='button';olvidar.textContent='Olvidar interpretación';
+  olvidar.onclick=()=>{try{localStorage.setItem(CLAVE_INTERPRETACIONES,JSON.stringify(leerInterpretaciones().filter(x=>x.texto!==regla.texto||x.contexto!==regla.contexto)));refrescarConScroll()}catch{toast('No se pudo borrar la interpretación.')}};
+  contenedor.append(detalle,usar,olvidar);
+}
 function sincronizarDescripcion(p){
   const nombres=infrVigentes(p).map(codigo=>buscarInfr(codigo)?.[1]);
   if(nombres.every(Boolean)){
-    const descripcion=nombres.join(' / ');
+    const descripcion=descripcionInfracciones(p,nombres);
     if('Descripción de la causa' in (p.ed||{})){
       if(p.ed['Descripción de la causa']===descripcion) return;
       if(!confirm('Cambiaste las infracciones. ¿Actualizar la descripción con los códigos seleccionados? Cancelar conserva tu texto.')) return;
@@ -414,10 +498,14 @@ function barraInfracciones(p){
     p.items.push({x:{abrev:String(hit[0]),t:hit[1]},cod:String(hit[0]),estado:'ok',nota:hit[1],manual:true});
     sincronizarDescripcion(p);
     refrescarConScroll();
+    autoguardar().catch(()=>toast('No se pudo guardar'));
   };
-  d.querySelectorAll('button[data-q]').forEach(b=>b.onclick=()=>{ bakeEdits(p); p.items.splice(+b.dataset.q,1); sincronizarDescripcion(p); refrescarConScroll() });
+  d.querySelectorAll('button[data-q]').forEach(b=>b.onclick=()=>{ bakeEdits(p); p.items.splice(+b.dataset.q,1); sincronizarDescripcion(p); refrescarConScroll();autoguardar().catch(()=>toast('No se pudo guardar')) });
   d.querySelector('#infAgrega').onclick=agregar;
+  agregarSelectorInfracciones(d.querySelector('#infNueva'));
   d.querySelector('#infNueva').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); agregar(); } });
+  const memoria=document.createElement('div');memoria.className='meta';d.append(memoria);
+  pintarMemoriaInfracciones(p,memoria);
   return d;
 }
 function infrVigentes(p){
@@ -452,7 +540,7 @@ function campos(p){
     gc('Actuario (código)',a?a[1]:'',a?'ok':'check',''),
     p.fecha_citacion?gc('Fecha de citación',p.fecha_citacion,'ok',''):gc('Fecha de citación',lote,lote?'check':'check',''),
     gc('Hora de citación','','blank',''),
-    gc('Lugar',p.lugar,p.lugar?'ok':'check',''),
+    gc('Lugar',compactarLugar(p.lugar),compactarLugar(p.lugar).length>30?'check':p.lugar?'ok':'check',compactarLugar(p.lugar)!==String(p.lugar||'').trim().toUpperCase()?'Original: '+(p.lugar||''):''),
     gc('Hora de la infracción',p.hora_infraccion,p.hora_infraccion?'ok':'check','')
   ]});
   const sinVeh=p.tiene_vehiculo===false||p.parte_escrito;
@@ -551,6 +639,26 @@ function campoBusqueda(key){
 }
 const CLAVE_CORRECCIONES='partescan-correcciones-v1';
 const CLAVE_MEMORIA='partescan-memoria-calles-v1';
+function compactarLugar(valor){
+  let texto=normalizarDireccion(valor).toUpperCase().replace(/\s+/g,' ').replace(/^[ ,.;]+|[ ,.;]+$/g,'');
+  texto=texto.replace(/\bHERNANDE\s+Z\b/g,'HERNANDEZ');
+  texto=texto.replace(/\bESQ(?:UINA)?\.?\s*(?:CON\s+)?|\bINTERSECCI[ÓO]N\s+(?:CON\s+)?/g,'CON ');
+  texto=texto.replace(/\s+\/\s+/g,' CON ').replace(/\s*,?\s+CON\s+/g,' CON ');
+  texto=texto.replace(/\b(?:NRO\.?|N[°º]|N[ÚU]MERO|NO\.)\s*(?=\d)/g,'');
+  texto=texto.replace(/,?\s+(?:DE\s+(?:LA\s+)?(?:CIUDAD|COMUNA)\s+DE\s+|COMUNA\s+DE\s+)?VALDIVIA[ ,.;]*$/g,'');
+  if(texto.includes(' CON ')) texto=texto.split(/,\s*(?:SECTOR\b|DE LA COMU)/)[0];
+  let resultado=texto.split(' CON ').map(tramo=>{
+    tramo=tramo.replace(/^[ ,.;]+|[ ,.;]+$/g,'');
+    const avenidaAlemania=/^(?:AVENIDA|AVDA\.?|AV\.?)\s+ALEMANIA\b/.test(tramo);
+    tramo=tramo.replace(/^(?:(?:CALLE|AVENIDA|AVDA\.?|AV\.?)\s+)+/g,'').replace(/^ARTURO\s+PRATT?\b/,'PRAT');
+    return avenidaAlemania?'AV '+tramo:tramo;
+  }).join(' CON ').trim();
+  if(resultado.length>30){
+    const iniciales={'ERNESTO RIQUELME':'E RIQUELME','CAMILO HENRÍQUEZ':'C HENRÍQUEZ','CAMILO HENRIQUEZ':'C HENRIQUEZ','CLEMENTE ESCOBAR':'C ESCOBAR','TORIBIO MEDINA':'T MEDINA'};
+    for(const [nombre,breve] of Object.entries(iniciales)) resultado=resultado.replace(new RegExp('\\b'+nombre+'\\b','g'),breve);
+  }
+  return resultado.replace(/\s+/g,' ').replace(/^[ ,.;]+|[ ,.;]+$/g,'');
+}
 function normalizarDireccion(texto){
   return String(texto??'').replace(/\b[O0]\s*['’‘´`ʼ]?\s*HIGGINS\b/gi,'OHIGGINS');
 }
@@ -875,7 +983,13 @@ function mostrar(){
         '<input class="val" aria-label="'+esc(key)+'"'+(esInf?' list="dlInf" autocomplete="off"':'')+' value="'+esc(val)+'" placeholder="(en blanco)">';
       r.innerHTML='<div class="lab">'+key+'</div><div>'+ctl+'<div class="meta"><span class="tag t-'+estado+'">'+(p.ok?.[key]?'Revisado':key in (p.ed||{})?'Modificado · revisar':estado==='ok'?'Detectado':LAB[estado])+'</span><span class="note">'+f.n.replace(/</g,'&lt;')+'</span></div></div><div style="display:flex;gap:6px"><button>Copiar</button>'+'<button class="cf"'+(estado!=='check'?' hidden':'')+'>✓ Revisar</button>'+'</div>';
       const el=r.querySelector('.val');
+      if(esInf) agregarSelectorInfracciones(el);
       el.style.textTransform='uppercase';
+      if(key==='Lugar'){
+        const contador=document.createElement('span');contador.className='note';contador.setAttribute('aria-live','polite');
+        const actualizar=()=>{const n=compactarLugar(el.value).length;contador.textContent=n+'/30 caracteres'+(n>30?' · Abrevia este lugar antes de teclear':'');};
+        el.after(contador);el.addEventListener('input',actualizar);el.addEventListener('change',actualizar);actualizar();
+      }
       if(key==='Lugar'||key==='Dirección (certificado)'){
         el.value=normalizarDireccion(el.value);
         const original=el.value, memoria=document.createElement('div');memoria.className='meta';
@@ -940,7 +1054,8 @@ function mostrar(){
       el.oninput=el.onchange=e=>{
         let infraccionCorregida=false;
         if(e.type==='change'){
-          if(key==='Lugar'||key==='Dirección (certificado)') el.value=normalizarDireccion(el.value);
+          if(key==='Lugar') el.value=compactarLugar(el.value);
+          if(key==='Dirección (certificado)') el.value=normalizarDireccion(el.value);
           if(key==='RUT (certificado)') el.value=formatoRut(el.value);
           if(esInf){
             const hit=buscarInfr(el.value);
@@ -1055,7 +1170,7 @@ function valorActual(p,key){
     if(key==='RUT (certificado)') return p.origen==='carab'?'SR':'';
     if(key==='Nombre (certificado)') return nombreEmpadronado(p);
   }
-  const formato=key==='RUT (certificado)'?formatoRut:v=>v;
+  const formato=key==='Lugar'?compactarLugar:key==='RUT (certificado)'?formatoRut:v=>v;
   if (p.ed && key in p.ed) return formato(p.ed[key]);
   for(const s of campos(p)) for(const f of s.f) if(f.k===key) return formato(f.v);
   return '';
@@ -1079,12 +1194,14 @@ document.addEventListener('keydown',e=>{
 function carab0(p){return p.origen==='carab'}
 function V(p,k){
   const v=valorActual(p,k);
-  if(k==='Lugar'||k==='Dirección (certificado)') return normalizarDireccion(v);
+  if(k==='Lugar') return compactarLugar(v);
+  if(k==='Dirección (certificado)') return normalizarDireccion(v);
   if(!esEmpadronado(p)&&k==='Nombre (certificado)'&&/^VEHICULO\b/.test(String(v).trim())){
     const pl=String(valorActual(p,'Placa')||'').trim().toUpperCase(); return ('VEHICULO '+pl).trim()}
   return v}
 function formatoCampoValido(key,valor){
   const texto=String(valor).trim().toUpperCase();
+  if(key==='Lugar') return compactarLugar(texto).length<=30;
   if(/fecha/i.test(key)){
     const m=texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if(!m) return false;

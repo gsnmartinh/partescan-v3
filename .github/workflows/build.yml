@@ -71,6 +71,17 @@ jobs:
       - name: Probar datos sospechosos y coordenadas del OCR móvil
         run: python tests/prueba_lectura_espacial.py
 
+      - name: Probar descripciones de documentación
+        run: python tests/prueba_documentacion.py
+
+      - name: Probar correcciones y exportación de infracciones
+        shell: pwsh
+        run: |
+          foreach ($prueba in @('tests/prueba_infracciones.js', 'tests/prueba_datos_tecleo.js', 'tests/prueba_confirmacion.js')) {
+            node $prueba
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
       - name: Pruebas del tecleo desde ParteScan
         run: python tests/prueba_tecleador.py
 

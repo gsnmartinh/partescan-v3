@@ -24,6 +24,10 @@ CODIGOS = {
 }
 # Parecidas pero no idénticas: se proponen con el código, pidiendo confirmar.
 CODIGOS_CONFIRMAR = {"SINL": "66"}
+CODIGOS.update({"NEUMATICOS": "64", "TRANSPORTE_NO_AUTORIZADO": "65", "LUCES_FRENO": "59", "ALCOHOL_VEHICULO": "12"})
+CATALOGO.extend({"a": abreviatura, "t": SISTEMA[codigo]}
+                for abreviatura, codigo in (("NEUMATICOS", "64"), ("TRANSPORTE_NO_AUTORIZADO", "65"), ("LUCES_FRENO", "59"), ("ALCOHOL_VEHICULO", "12"))
+                if not any(x["a"] == abreviatura for x in CATALOGO))
 
 # La infracción más específica se propone primero para la revisión.
 PARADERO = r"\b(?:PARADERO|PARADA\s+DE\s+LOCOMOCION\s+COLECTIVA)\b"
@@ -97,6 +101,9 @@ def codigo_concepto(a, texto):
     elegido = perfil.cargar().get("equivalencias", {}).get(a)      # lo que el usuario confirmó manda siempre
     if elegido and elegido in lista:
         return elegido, "ok", "%s · %s (confirmado por ti)" % (elegido, lista[elegido])
+    if (a == "FACILITAR" and lista.get("649") == SISTEMA.get("649")
+            and _norm(lista.get("67")) == _norm(SISTEMA.get("67"))):
+        return "67", "ok", "67 · Facilitar vehículo a quien no ha obtenido licencia (criterio confirmado del juzgado)."
     fijo = CODIGOS.get(a) or CODIGOS_CONFIRMAR.get(a)
     if fijo and fijo in lista and _norm(lista[fijo]) == _norm(SISTEMA.get(fijo)):
         # la lista de este juzgado trae el mismo código con la misma descripción que la verificada
@@ -127,7 +134,22 @@ def actividad_sin_patente(texto):
 
 def resolver(texto):
     """Devuelve (descripcion_causa, [items]) a partir del texto de la infracción del parte."""
-    T = sin_tildes(texto)
+    T = re.sub(r"\s+", " ", sin_tildes(texto)).strip()
+    if (re.search(r"\bSISTEMA\s+DE\s+RETENCION\s+INFANTIL\b", T)
+            or ("TRANSPORTE ESCOLAR" in T and re.search(r"TARJETA\s+IDENTIFICATORIA|LETRERO\s+CAPACIDAD", T))):
+        # Estos hechos reales se ingresan con el comodín y su descripción literal.
+        return "", []
+    if (re.search(r"\b(?:LUCES|LUZ)\s+DE\s+FRENOS?\b", T)
+            and re.search(r"\bMAL\s+ESTADO\b|\bQUEBRAD[OA]S?\b|\bNO\s+ENCIENDE[N]?\b", T)):
+        concepto = {"a": "LUCES_FRENO", "t": SISTEMA["59"]}
+        return concepto["t"], [crear_item(concepto)]
+    if re.search(r"\bNEUMATICOS?\b.{0,35}\bMAL\s+ESTADO\b", T):
+        concepto = {"a": "NEUMATICOS", "t": SISTEMA["64"]}
+        return concepto["t"], [crear_item(concepto)]
+    if (re.search(r"\bSERVICIO\s+DE\s+TRANSPORTE\b", T)
+            and re.search(r"\bNO\s+ESTANDO\s+INSCRITO\b", T)):
+        concepto = {"a": "TRANSPORTE_NO_AUTORIZADO", "t": SISTEMA["65"]}
+        return concepto["t"], [crear_item(concepto)]
     if re.search(r"\bESTACION\w*\b", T) and re.search(r"LINEA\s+AMARILLA", T) and re.search(r"\bESQUINA\b", T):
         concepto = por_abrev("ESQUINA")
         return concepto["t"], [crear_item(concepto)]
@@ -171,13 +193,23 @@ def resolver(texto):
                  r"SOBREPASAR.{0,75}ESPACIO\s+DESTINADO\s+A\s+EXPENDIO\s+DE\s+BEBIDAS\s+ALCOHOLICAS", T):
         concepto = por_abrev("504")
         return concepto["t"], [crear_item(concepto)]
-    total = bool(re.search(r"TOTALI\s*DAD\s+DE\s+LA\s+DOCUMENTACION", T))
+    total = bool(re.search(r"TOTALI\s*DAD\s+DE\s+(?:LA\s+)?DOCUMENTACION", T))
     if re.search(r"BOLETA\s+DE\s+CITACION.{0,55}\bVENCIDA\b", T):
         concepto = por_abrev("24")
         return concepto["t"], [crear_item(concepto)] + (tres() if total else [])
     if total and re.search(r"SIN\s+HABER\s+OBTENI\s*DO\s+[LI]ICENCIA|SIN\s+HABER\s+OBTENI\s*DO\s+LICENCIA", T):
         concepto = por_abrev("HABER")
-        return concepto["t"], [crear_item(concepto)] + [crear_item(por_abrev(a)) for a in ("REVISION", "PERMISO", "SEGURO")]
+        items = [crear_item(concepto)] + [crear_item(por_abrev(a)) for a in ("REVISION", "PERMISO", "SEGURO")]
+        descripcion = [concepto["t"]]
+        if re.search(r"DOCUMENTACION\s+VENCIDA", T):
+            descripcion.append("CONDUCIR CON LA TOTALIDAD DE LA DOCUMENTACION VENCIDA")
+        else:
+            descripcion.extend(i["x"]["t"] for i in items[1:])
+        if re.search(r"PERMITIR\s+LA\s+INGESTA\s+DE\s+LICOR\s+EN\s+EL\s+INTERIOR\s+DEL\s+VEHICULO", T):
+            alcohol = crear_item(por_abrev("ALCOHOL_VEHICULO"))
+            items.append(alcohol)
+            descripcion.append(alcohol["x"]["t"])
+        return " / ".join(descripcion), items
     if re.search(r"ESTACION.{0,150}SALIDA\s+DE\s+MALL.{0,45}VISIBILIDAD", T):
         concepto = por_abrev("ENTRADA")
         return concepto["t"], [crear_item(concepto)]
@@ -199,11 +231,17 @@ def resolver(texto):
         for rx, a in ESPECIFICAS:
             if re.search(rx, T):
                 return por_abrev(a)["t"], [crear_item(por_abrev(a))]
-    docs = [a for rx, a in ((r"SEGURO OBLIGATORIO|\bSOAP\b", "SEGURO"), (r"PERMISO (DE )?CIRCULACION", "PERMISO"),
-                            (r"REVISION TECNICA", "REVISION"),
+    docs = [a for rx, a in ((r"\bSEGURO\b|\bSOAP\b", "SEGURO"), (r"\bPERMISO\s+(?:DE\s+)?CIRCULACION\b|\bPERMISO\b(?=.{0,60}\b(?:SEGURO|SOAP|REVISION)\b)", "PERMISO"),
+                            (r"\bREVISION\s+TECNICA\b|\bREVISION\b(?=.{0,60}\b(?:SEGURO|SOAP|PERMISO)\b)", "REVISION"),
                             (r"SIN PORTAR .{0,25}LICENCIA|NO PORTAR .{0,25}LICENCIA|SIN LICENCIA", "SINL")) if re.search(rx, T)]
+    if all(re.search(rx, T) for rx in (r"\bPERMISO\b", r"\b(?:SEGURO|SOAP)\b", r"\bREVISION\b")):
+        docs = list(dict.fromkeys(["SEGURO", "PERMISO", "REVISION", *docs]))
     if len(docs) >= 2 and not re.search(r"HABER|OBTENID", T):
         its = [crear_item(por_abrev(a)) for a in docs]
+        if set(docs) == {"SEGURO", "PERMISO", "REVISION"}:
+            resumen = descripcion_documentacion(T)
+            if resumen:
+                return resumen, its
         return " Y ".join(i["x"]["t"] for i in its), its
     if re.search(r"SIN LA TOTALIDAD", T):
         return "CONDUCIR SIN LA TOTALIDAD DE LA DOCUMENTACION", tres()
@@ -231,6 +269,28 @@ def resolver(texto):
 
 
 LARGO_LITERAL = 250     # tope de la descripción cuando se copia lo que dice el parte
+
+
+def descripcion_documentacion(texto):
+    """Resume los tres documentos solo cuando comparten un estado inequívoco."""
+    t = sin_tildes(texto)
+    if re.search(r"\b(?:VIGENTES?|VALID[OA]S?)\b|\bAL\s+DIA\b", t):
+        return ""
+    vencida = bool(re.search(r"\bVENCID[OA]S?\b|\bCADUCAD[OA]S?\b", t))
+    faltante = bool(re.search(r"\bSIN\b|\bNO\s+(?:PORTAR|PRESENTAR|CONTAR)\b", t))
+    if vencida and not faltante:
+        return "CONDUCIR CON LA TOTALIDAD DE LA DOCUMENTACION VENCIDA"
+    if faltante and not vencida:
+        return "CONDUCIR SIN LA TOTALIDAD DE LA DOCUMENTACION"
+    return ""
+
+
+def resumen_documentacion(texto, items):
+    """No resume si hay otras infracciones o si los códigos del perfil son distintos."""
+    esperados = {str(crear_item(por_abrev(a))["cod"]) for a in ("SEGURO", "PERMISO", "REVISION")}
+    if len(items) == 3 and len(esperados) == 3 and {str(i["cod"]) for i in items} == esperados:
+        return descripcion_documentacion(texto)
+    return ""
 
 
 def comodin():
