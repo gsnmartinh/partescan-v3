@@ -1,3 +1,11 @@
+# ParteScan 5.1.20
+
+- Corrige los pendientes falsos del semáforo: el contador, el formulario y el filtro de revisión utilizan el mismo valor normalizado, incluido el RUT sin puntos y con guion.
+- Conserva las correcciones y revisiones guardadas en la sesión. Los datos que realmente faltan o no cumplen el formato siguen pidiendo revisión.
+- Al pasar el puntero sobre un parte pendiente, muestra los campos que todavía necesitan revisión.
+
+Validación con 111 partes reales de las tandas del 23 y 24/11. Se reprodujeron y corrigieron cuatro pendientes falsos en los partes comerciales, incluido el 117862. Las pruebas también comprueban que los RUT impresos inválidos mantengan su revisión. Captura Android conserva la versión 1.1.7.
+
 # ParteScan 5.1.19
 
 - Recupera RUT presentes en el texto del parte aunque las etiquetas o los dígitos estén separados por el OCR. Conserva para revisión los RUT impresos que no cumplen el dígito verificador.

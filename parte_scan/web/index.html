@@ -742,9 +742,7 @@ function registrarCambio(p,key,antes,despues){
 }
 function campoPendiente(p,key){
   if(p.fin) return false;
-  if(esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)','Comuna (certificado)'].includes(key)) return false;
-  const campo=campos(p).flatMap(s=>s.f).find(f=>f.k===key);
-  return campo&&estadoCampo(p,campo,valorActual(p,key))==='check';
+  return camposPendientes(p).some(f=>f.k===key);
 }
 function siguientePendiente(){
   const key=$('filtroPendientes').value;
@@ -1257,11 +1255,13 @@ function estadoCampo(p,f,valor){
   if(new Set((p.lecturas?.[f.k]||[]).map(([valor])=>valor).filter(Boolean)).size>1) return 'check';
   return f.st;
 }
-const pendientes=p=>campos(p).reduce((n,s)=>n+s.f.filter(f=>{
-  const identidadAutomatica=esEmpadronado(p)&&['RUT (certificado)','Nombre (certificado)'].includes(f.k);
+function camposPendientes(p){
+  return campos(p).flatMap(s=>s.f).filter(f=>{
   if(p.origen==='carab'&&esEmpadronado(p)&&f.k==='Comuna (certificado)') return false;
-  return estadoCampo(p,f,identidadAutomatica?f.v:p.ed?.[f.k]??f.v)==='check';
-}).length,0);
+    return estadoCampo(p,f,valorActual(p,f.k))==='check';
+  });
+}
+const pendientes=p=>camposPendientes(p).length;
 function placa6(x){x=String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=x.match(/^([A-Z]{3})(\d{2})$/)||x.match(/^([A-Z]{2})(\d{3})$/);return m?m[1]+'0'+m[2]:x}
 const regTecleo=p=>({origen:p.origen||'insp',n_parte:(p.origen==='carab'||p.origen==='mtt')?(V(p,p.origen==='carab'?'N° de parte (Carabineros)':'N° de denuncia (MTT)')||''):V(p,'N° de parte'),
     boleta:V(p,'N° de boleta (folio)'),boleta_completa:p.boleta_completa||'',fecha_ingreso:hoy(),fecha_parte:V(p,'Fecha del parte'),fecha_citacion:V(p,'Fecha de citación'),
@@ -1376,7 +1376,7 @@ function pintarTira(){
   siguiente.disabled=!filtro||!P.some(p=>campoPendiente(p,filtro));
   const t=$('tira'); t.innerHTML='';
   if(filtro&&siguiente.disabled) t.textContent='No quedan pendientes para este campo.';
-  P.forEach((p,i)=>{if(filtro&&!campoPendiente(p,filtro))return; const c=document.createElement('span');const sm=semaforo(p); c.className='chip'+(p.fin?' fin':' '+sm.c)+(i===sel?' sel':''); c.title=p.fin?'Ingresado':(sm.n?sm.n+' campo(s) por revisar':'Todos los datos completos');
+  P.forEach((p,i)=>{if(filtro&&!campoPendiente(p,filtro))return; const c=document.createElement('span');const sm=semaforo(p); c.className='chip'+(p.fin?' fin':' '+sm.c)+(i===sel?' sel':''); c.title=p.fin?'Ingresado':(sm.n?sm.n+' campo(s) por revisar: '+camposPendientes(p).map(f=>f.k).join(', '):'Todos los datos completos');
     const rv=rolPrevisto(p); c.textContent=(p.fin?'✓ ':'')+(p.origen==='carab'?('Carab. '+(p.n_parte_carab||p.folio)):(p.origen==='mtt'?('MTT '+p.folio):(p.folio||('Parte '+(i+1)))))+(rv?' · rol '+rv:'');c.onclick=()=>ir(i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-pressed',String(i===sel));c.setAttribute('aria-label',c.textContent+'. '+c.title);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();ir(i)}};t.appendChild(c)});
   const seleccionado=t.querySelector('.sel');
   if(seleccionado){
