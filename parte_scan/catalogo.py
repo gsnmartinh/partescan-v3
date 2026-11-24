@@ -8,6 +8,19 @@ _ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catalogo.json"
 CATALOGO = [{"a": x["abrev"], "t": x["texto"]} for x in json.load(open(_ruta, encoding="utf-8"))["infracciones"]]
 
 STOP = {"EN", "DE", "LA", "EL", "Y", "A", "CON", "SIN", "LOS", "LAS", "POR", "AL", "DEL", "SU", "UN", "UNA", "O", "LO", "DONDE", "SE"}
+
+# Clasificación del catálogo del juzgado, no del organismo que denuncia.
+# «Contexto» conserva la revisión habitual; en especial el 67 se usa como comodín.
+SIN_DATOS_VEHICULO = set("300 301 302 303 304 305 307 350 400 420 450 461 480 481 484 486 489 491 493 495 497 498 501 502 503 504 506 55 603 605 622 642 643 644 646 647 648 667 668 96 Mig1".split())
+CON_DATOS_VEHICULO = ({str(i) for i in range(1, 98)} - {"30", "55", "62", "67", "96"}) | set("482 483 485 487 488 492 494 496 499 500 505 507 508 509 600 601 602 606 607 608 609 610 611 613 614 615 616 617 618 619 620 621 623 625 626 627 628 629 630 632 633 634 635 636 637 638 639 640 641 645 649 669 670 671".split())
+
+
+def clasificacion_vehicular():
+    """No aplicar números de fábrica a un perfil que cambió sus descripciones."""
+    return {str(codigo): ("sin_vehiculo" if str(codigo) in SIN_DATOS_VEHICULO else "vehiculo")
+            for codigo, texto in perfil.infracciones().items()
+            if str(codigo) in SIN_DATOS_VEHICULO | CON_DATOS_VEHICULO
+            and _norm(texto) == _norm(SISTEMA.get(str(codigo), ""))}
 OVERR = {"SEGURO": "SEGURO", "PERMISO": "PERMISO", "REVISION": "REVISION"}
 SUG = {"ENTRADA": "ENTRADA", "FISCAL": "FISCAL"}
 
@@ -135,6 +148,11 @@ def actividad_sin_patente(texto):
 def resolver(texto):
     """Devuelve (descripcion_causa, [items]) a partir del texto de la infracción del parte."""
     T = re.sub(r"\s+", " ", sin_tildes(texto)).strip()
+    if (re.search(r"\bESTACION\w*\b.{0,60}\bEN\s+MEDIO\s+DE\s+LA\s+CALZADA\b", T)
+            and re.search(r"IMPIDIENDO\s+EL\s+NORMAL\s+TRANSITO", T)):
+        item = crear_item(por_abrev("48"))
+        item.update(estado="check", nota="48 como aproximación confirmada por el usuario: revisa la imagen; el hecho es en la calzada, no en la acera.")
+        return _literal(texto), [item]
     if (re.search(r"\bSISTEMA\s+DE\s+RETENCION\s+INFANTIL\b", T)
             or ("TRANSPORTE ESCOLAR" in T and re.search(r"TARJETA\s+IDENTIFICATORIA|LETRERO\s+CAPACIDAD", T))):
         # Estos hechos reales se ingresan con el comodín y su descripción literal.
@@ -247,6 +265,10 @@ def resolver(texto):
         return "CONDUCIR SIN LA TOTALIDAD DE LA DOCUMENTACION", tres()
     if re.search(r"CON LA TOTALIDAD", T):
         return "CONDUCIR " + por_abrev("VENCIDA")["t"], tres()
+    if (re.search(r"SIN\s+HABER\s+OBTENIDO\s+LICENCIA", T)
+            and re.search(r"SIN\s+PORTAR\b.{0,50}REVISION\s+TECNICA", T)):
+        items = [crear_item(por_abrev(a)) for a in ("HABER", "REVISION")]
+        return " / ".join(i["x"]["t"] for i in items), items
     if "LICENCIA" in T and re.search(r"\bSIN\b|NO PORTAR", T) and not re.search(r"HABER|OBTENID", T):
         it = crear_item(por_abrev("SINL"))
         return por_abrev("SINL")["t"], [it]

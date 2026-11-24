@@ -1277,7 +1277,9 @@ class Sistema:
             limite_control = user32.SendMessageW(ctl.hwnd, 0x00D5, 0, 0)  # EM_GETLIMITTEXT
             limite = limite_control if 0 < limite_control < 32767 else LIMITE_LUGAR
             if len(lugar) > limite:
-                raise Detener("El lugar tiene %d caracteres y el campo admite %d. Abrevialo en ParteScan: %s" % (len(lugar), limite, lugar))
+                aviso = "Lugar: %d caracteres; referencia del campo %d. Comprueba si el sistema conserva el texto completo." % (len(lugar), limite)
+                self.avisos.append(aviso)
+                print("  [revisa] " + aviso)
             self.escribir(ctl, [lugar], "Lugar")
             if not igual(leer(ctl.hwnd), lugar):
                 raise Detener("El lugar quedo recortado o modificado en el sistema. Revisa la causa antes de continuar.")

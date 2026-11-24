@@ -16,8 +16,10 @@ const listeners={};let selected,results;
 ctx.el={value:'revision',removeAttribute(){},addEventListener:(k,f)=>listeners[k]=f,after:x=>results=x,
  dispatchEvent:e=>{selected=ctx.el.value;listeners[e.type]?.()}};
 run('agregarSelectorInfracciones(el)');listeners.input();
-assert.equal(results.childNodes[0].textContent,'33 — VEHICULO SIN REVISION TECNICA VIGENTE');
-results.childNodes[0].onclick();assert.equal(selected,'33');assert.equal(results.childNodes.length,0);
+assert.equal(results.childNodes[1].textContent,'33 — VEHICULO SIN REVISION TECNICA VIGENTE');
+results.value='33';results.onchange();assert.equal(selected,'33');
+assert.equal(results.childNodes.length,INFR.length+1,'Un código reconocido conserva la lista completa para corregirlo');
+assert.equal(results.value,'33');
 assert.equal(run(`sugerirInfracciones('revision tecnica')[0][0]`),'33');
 assert.equal(run(`sugerirInfracciones('señalizado')[0][0]`),'19');
 assert.equal(run(`sugerirInfracciones('37')[0][0]`),'37');

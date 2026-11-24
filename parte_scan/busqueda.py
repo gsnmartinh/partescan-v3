@@ -4,7 +4,7 @@ import io
 import re
 from collections import defaultdict
 
-from . import catalogo, certificado, extractor, extractor_carab, extractor_mtt, exportar, motor
+from . import catalogo, certificado, extractor, extractor_carab, extractor_mtt, extractor_armada, exportar, motor
 
 IDENTIDAD = {"rut", "nombre", "direccion", "comuna"}
 CAMPOS = IDENTIDAD | {"placa", "fecha_parte", "fecha_infraccion", "hora_infraccion", "descripcion"}
@@ -13,6 +13,10 @@ CAMPOS = IDENTIDAD | {"placa", "fecha_parte", "fecha_infraccion", "hora_infracci
 def sugerir_infracciones(texto, origen):
     if origen == "carab":
         datos = extractor_carab.parte(texto)
+    elif origen == "armada":
+        datos = extractor_armada.parte(texto)
+        if datos["infraccion_texto"] and "648" in catalogo.SISTEMA:
+            return {"texto": datos["infraccion_texto"], "codigos":[{"codigo":"648", "texto":datos["infraccion_texto"]}]}
     elif origen == "mtt":
         datos = extractor_mtt.parte(texto)
     elif origen == "dom":
@@ -50,6 +54,9 @@ def extraer(texto, campo, origen, es_certificado):
         return ""
     if es_certificado:
         valor = certificado.leer(texto).get(campo, "")
+    elif origen == "armada":
+        datos = extractor_armada.parte(texto)
+        valor = datos.get("persona", {}).get(campo, "") if campo in IDENTIDAD else datos.get(campo, "")
     elif origen == "mtt":
         dato = "infractor_" + campo if campo in IDENTIDAD else campo
         valor = extractor_mtt.parte(texto).get(dato, "")

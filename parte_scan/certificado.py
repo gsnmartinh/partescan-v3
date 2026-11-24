@@ -120,6 +120,16 @@ def leer(t):
     rut = ""
     if m:
         rut = re.sub(r"\D", "", m.group(1)) + "-" + m.group(2).upper()
+    if not rut:
+        # Confusión observada en el RUN del certificado: «l3588.263-1».
+        # Solo dentro del rótulo RUN y con dígito verificador válido; nunca
+        # sustituir números impresos para hacerlos coincidir con la sesión.
+        confuso = re.search(r"R\.?[ \t]*U\.?[ \t]*[NT]\.?[ \t:;?*|!]*([\dlI., \t]{6,15})[ \t]*[-–]+[ \t]*([\dK])\b", zona, re.I)
+        if confuso and re.search(r"[lI]", confuso[1]):
+            base = confuso[1].replace("l", "1").replace("I", "1")
+            candidato = re.sub(r"\D", "", base) + "-" + confuso[2].upper()
+            if rut_ok(candidato):
+                rut = candidato
     if not rut and encabezado and len(prop) > 1:
         fila_run = re.fullmatch(r"([\d., \t]{6,15})\s*[-–]\s*([\dK])", prop[1], re.I)
         if fila_run:

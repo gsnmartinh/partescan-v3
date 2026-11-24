@@ -77,3 +77,30 @@ dialog{border-radius:var(--borderRadiusLarge);box-shadow:var(--shadow16)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active){#tira .chip.sel{outline:2px solid Highlight}.tag{border:1px solid CanvasText}button.p{border:1px solid ButtonText}}
 @media(max-width:1200px){main{gap:10px;padding:10px}.row{gap:8px}}
+
+/* Review fields: label above the value, one rhythm for data and actions. */
+#form .row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:12px 0}
+#form .row>.lab{grid-column:1/-1;padding:0;font-size:13px;line-height:20px;font-weight:500}
+.contenido-campo{min-width:0}
+.acciones-campo{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;align-items:start;max-width:160px}
+.contenido-campo>.val,.contenido-campo>button{margin-bottom:4px}
+.row.big select.selector-infracciones{font-size:14px;line-height:20px;font-weight:400}
+.selector-infracciones{margin-top:4px;max-width:100%;text-overflow:ellipsis}
+.agregar-infraccion{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px;align-items:start}
+.agregar-infraccion>.selector-infracciones{grid-row:2;grid-column:1/-1;margin:0}
+.agregar-infraccion>button.p{grid-column:2;grid-row:1;background:var(--ac);color:var(--acon);border-color:transparent;white-space:nowrap;padding:5px 12px}
+.agregar-infraccion>button.p:hover{background:var(--acx)}
+.meta .note{overflow-wrap:anywhere;min-width:0}
+.sugerencias-calle{flex-direction:column;align-items:stretch;gap:4px;margin-top:8px}
+.sugerencias-calle button{text-align:left;white-space:normal;overflow-wrap:anywhere;border:1px solid var(--line);color:var(--colorNeutralForeground2);background:var(--colorNeutralBackground2);font-size:12px;line-height:18px}
+.sugerencias-calle a{align-self:flex-end;font-size:11px;color:var(--colorBrandForeground)}
+.selector-revision[aria-pressed="true"]{border-color:var(--ac);background:var(--colorBrandBackground2);color:var(--colorBrandForeground)}
+.acciones-tanda{gap:8px;padding:12px}
+.acciones-tanda .val{min-width:0}
+.acciones-tanda button{min-height:32px}
+@media(max-width:1000px){
+ #form .row{gap:4px 8px;padding:12px 0}
+ .acciones-campo{max-width:100px;flex-direction:column;align-items:stretch}
+ .sugerencias-calle button{min-height:36px}
+}
+@media(forced-colors:active){.selector-revision[aria-pressed="true"]{outline:2px solid Highlight}.sugerencias-calle button{border:1px solid ButtonText}}

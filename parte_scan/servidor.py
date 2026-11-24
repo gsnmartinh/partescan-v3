@@ -127,6 +127,17 @@ def armar_carab(r, archivo, pagina, pid):
     return p
 
 
+def armar_armada(r, archivo, pagina, pid):
+    p = armar(r, archivo, pagina, pid)
+    p.update(origen="armada", numero_armada=r["numero_armada"])
+    # Correspondencia observada en los dos informes corregidos de la tanda real.
+    if r["infraccion_texto"] and "648" in catalogo.SISTEMA:
+        p.update(causa=catalogo.SISTEMA["648"], causa_literal=False,
+                 items=[{"cod":"648", "estado":"check", "nota":"Confirma la venta de alcohol en la imagen del informe."}])
+        p["avisos"] = list(r["avisos"])
+    return p
+
+
 def armar_mtt(r, archivo, pagina, pid):
     """Denuncia del MTT: trae al infractor y al vehículo en sus tablas; puede traer varias infracciones."""
     p = armar(r, archivo, pagina, pid)
@@ -348,6 +359,14 @@ def trabajador():
                                 IMAGENES[pid] = img
                                 TEXTOS[pid] = texto
                                 ultimo = armar_mtt(r, nombre, n, pid)
+                                PARTES.append(ultimo)
+                        elif tipo == "armada":
+                            r = motor.leer_armada(g, texto, imagen=img)
+                            with LOCK:
+                                pid = len(IMAGENES) + 1
+                                IMAGENES[pid] = img
+                                TEXTOS[pid] = texto
+                                ultimo = armar_armada(r, nombre, n, pid)
                                 PARTES.append(ultimo)
                         elif tipo == "carab":
                             r = motor.leer_carab(g, texto, imagen=img)
@@ -699,6 +718,7 @@ def estado_perfil():
         "oficinas": perfil.oficinas_ordenadas(),
         "comunas": sorted(catalogo.comuna_oficial(c) for c in catalogo._cargar_comunas()),
         "n_infracciones": len(perfil.infracciones()), "n_oficinas": len(perfil.oficinas()),
+        "clasificacion_vehicular": catalogo.clasificacion_vehicular(),
         "propia_infracciones": perfil.es_lista_propia("infracciones"), "propia_oficinas": perfil.es_lista_propia("oficinas"),
         "carpeta": str(perfil.carpeta()),
     }

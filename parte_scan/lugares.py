@@ -10,6 +10,7 @@ def compactar_lugar(valor):
     texto = re.sub(r'\bHERNANDE\s+Z\b', 'HERNANDEZ', texto)
     texto = re.sub(r'\bESQ(?:UINA)?\.?\s*(?:CON\s+)?|\bINTERSECCI[ÓO]N\s+(?:CON\s+)?', 'CON ', texto)
     texto = re.sub(r'\s+/\s+', ' CON ', texto)
+    texto = re.sub(r'\s+CON(?:\s+CON)+\s+', ' CON ', texto)
     texto = re.sub(r'\s*,?\s+CON\s+', ' CON ', texto)
     texto = re.sub(r'\b(?:NRO\.?|N[°º]|N[ÚU]MERO|NO\.)\s*(?=\d)', '', texto)
     texto = re.sub(r',?\s+(?:DE\s+(?:LA\s+)?(?:CIUDAD|COMUNA)\s+DE\s+|COMUNA\s+DE\s+)?VALDIVIA[ ,.;]*$', '', texto)

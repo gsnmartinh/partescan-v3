@@ -224,9 +224,11 @@ def leer_certificado(g, texto, *, imagen=None):
 
 def tipo_pagina(texto):
     """'parte', 'carab' (parte de Carabineros), 'mtt' (denuncia del MTT), 'certificado' u 'otra'."""
-    from . import certificado, extractor_carab, extractor_mtt
+    from . import certificado, extractor_carab, extractor_mtt, extractor_armada
     if certificado.es_certificado(texto):
         return "certificado"
+    if extractor_armada.es_armada(texto):
+        return "armada"
     if extractor.es_os10(texto):
         return "parte"
     if extractor.es_dom(texto):
@@ -402,6 +404,63 @@ def cotejar_con_rapidocr(g, r):
         return []
 
 
+def leer_armada(g, texto, *, imagen=None):
+    from . import extractor_armada as EA
+    r = EA.parte(texto)
+    anterior = any("anterior al patrullaje" in a for a in r["avisos"])
+    if (not r["numero_armada"] or not r["fecha_parte"] or anterior) and (g is not None or imagen is not None):
+        gris = g if g is not None else preparar(imagen)
+        cabecera = releer_franja(gris, 0, .30)
+        b = EA.parte(cabecera)
+        if anterior and (not b["fecha_parte"] or b["fecha_parte"] == r["fecha_parte"]):
+            color = imagen if imagen is not None else gris
+            zona = color.crop((0, 0, color.width, int(color.height*.30)))
+            zona.thumbnail((1700, 1500), Image.Resampling.LANCZOS)
+            alternativo = EA.parte(_releer_zona(zona, 6))
+            if alternativo["fecha_parte"]:
+                b["fecha_parte"] = alternativo["fecha_parte"]
+        if not r["numero_armada"] and b["numero_armada"]:
+            r["numero_armada"] = b["numero_armada"]
+        if (not r["fecha_parte"] or anterior) and b["fecha_parte"]:
+            r["fecha_parte"] = b["fecha_parte"]
+        r["avisos"] = [a for a in r["avisos"] if not ((r["numero_armada"] and "N° de parte" in a) or (r["fecha_parte"] and a.startswith("Revisa la fecha del informe")))]
+        if r["fecha_parte"] and r["fecha_infraccion"]:
+            import datetime
+            if datetime.datetime.strptime(r["fecha_parte"], "%d/%m/%Y") >= datetime.datetime.strptime(r["fecha_infraccion"], "%d/%m/%Y"):
+                r["avisos"] = [a for a in r["avisos"] if "anterior al patrullaje" not in a]
+    return r
+
+
+def releer_identidad_carab(gris, r, *, imagen=None):
+    """Recupera líneas mezcladas solo si el recorte confirma el mismo RUT válido."""
+    from . import extractor_carab as EC
+    if r.get("empadronado") or len(r.get("infractores", [])) > 1 or not lectura.valido("rut", r.get("infractor_rut", "")):
+        return
+    dudosos = EC.identidad_dudosa(r)
+    if not any(dudosos.values()):
+        return
+    zona = zona_por_etiqueta(gris, r"\bINFRACTOR\s*:", .22)
+    if zona is None:
+        zona = gris.crop((0, int(gris.height*.15), gris.width, int(gris.height*.72)))
+    b = EC.parte(_releer_zona(zona, 6))
+    r["pasadas_identidad"] = 1
+    if b["infractor_rut"] != r["infractor_rut"] and imagen is not None:
+        zona = imagen.crop((0, int(imagen.height*.37), imagen.width, int(imagen.height*.72)))
+        zona.thumbnail((1700, 1500), Image.Resampling.BICUBIC)
+        b = EC.parte(_releer_zona(zona, 6))
+    if b["infractor_rut"] != r["infractor_rut"]:
+        return
+    malos = EC.identidad_dudosa(b)
+    if dudosos["infractor_direccion"] and b["infractor_nombre"].startswith(r["infractor_nombre"] + " "):
+        dudosos["infractor_nombre"] = True
+    for campo, dudoso in dudosos.items():
+        if dudoso and not malos[campo] and lectura.valido(campo, b[campo]):
+            r[campo] = b[campo]
+    if len(r.get("infractores", [])) == 1:
+        for k in ("nombre", "direccion", "comuna"):
+            r["infractores"][0][k] = r["infractor_" + k]
+
+
 def leer_carab(g, texto, *, imagen=None):
     """Lee un parte de Carabineros priorizando Tesseract y utilizando validación cruzada con RapidOCR."""
     from . import extractor_carab as EC
@@ -425,6 +484,8 @@ def leer_carab(g, texto, *, imagen=None):
                     r[campo] = respaldo[campo]
                     if campo == "infraccion_texto":
                         r["bloques_infraccion"] = respaldo["bloques_infraccion"]
+    if (g is not None or imagen is not None) and any(EC.identidad_dudosa(r).values()):
+        releer_identidad_carab(g if g is not None else preparar(imagen), r, imagen=imagen)
     if (not r["fecha_citacion"] or not r["boleta"]) and (g is not None or imagen is not None):
         franja = releer_franja(g if g is not None else preparar(imagen), 0.45, 1)
         fechas = EC.fechas_citacion_recorte(franja) if not r["fecha_citacion"] else []

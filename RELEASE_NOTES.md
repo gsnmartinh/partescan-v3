@@ -1,3 +1,19 @@
+# ParteScan 5.1.19
+
+- Recupera RUT presentes en el texto del parte aunque las etiquetas o los dígitos estén separados por el OCR. Conserva para revisión los RUT impresos que no cumplen el dígito verificador.
+- Añade una segunda lectura local de nombres y domicilios dudosos. Confirma el mismo RUT antes de recuperar apellidos partidos o líneas mezcladas y separa el domicilio del relato, la licencia y los datos del vehículo.
+- Distingue el lugar del hecho del domicilio del denunciado y la hora del hecho de la citación en los modelos de Carabineros revisados.
+- Reconoce los informes de Capitanía de Puerto, separa la identidad de la denunciada de los funcionarios de la patrulla y aplica la numeración confirmada del juzgado. Los números manuscritos que no se leen siguen pidiendo revisión.
+- Conserva por separado la fecha del informe y la fecha del hecho: en los informes revisados, 16/11 y 09/11 respectivamente. La fecha de infracción corresponde al hecho, según el criterio confirmado por el usuario.
+- Recupera el RUN de certificados cuando el OCR confunde el número 1 con la letra l, únicamente junto al rótulo y con dígito verificador válido.
+- Clasifica las causas con y sin datos de vehículo según los códigos corregidos. Las causas sin vehículo no piden patente, tipo ni certificado; las combinadas mantienen la revisión vehicular si corresponde. El comodín 67 conserva el contexto.
+- Restablece la lista desplegable de infracciones y mantiene el catálogo completo al corregir un código reconocido.
+- Propone 48 como aproximación, con revisión, para estacionar en medio de la calzada impidiendo el tránsito. Conserva los códigos 16 y 33 en el caso combinado revisado.
+- Los 30 caracteres de Lugar son un aviso. Si el sistema del Juzgado efectivamente recorta el texto, el tecleo se detiene para revisar la causa.
+- Armoniza los campos, botones, listas y sugerencias con Fluent 2; mejora las etiquetas accesibles y la distribución en pantalla completa, media pantalla y temas claro y oscuro.
+
+Validación local con las tandas reales del 23 y 24/11: pruebas de clasificación sobre 111 partes, regresión de códigos de los 58 partes de referencia, recuperación de 16 RUT presentes en el OCR y segunda lectura efectiva de nueve imágenes seleccionadas. También se cotejaron 20 certificados y se comprobó la interfaz en navegador aislado. Esto no representa un porcentaje global de reconocimiento ni reemplaza la revisión del documento. La aplicación Android conserva la versión Captura 1.1.7; estas mejoras corresponden al escritorio.
+
 # ParteScan 5.1.18
 
 - Abrevia el lugar del hecho conservando calles, cruces y numeración. Usa CON y elimina rótulos como CALLE o AVENIDA. Muestra el original y un contador de 30 caracteres.

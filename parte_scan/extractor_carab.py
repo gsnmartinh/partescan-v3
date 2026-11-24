@@ -37,6 +37,9 @@ def es_carab(texto):
 
 def _plano(t):
     t = re.sub(r"\bINERACCI[OÓ]N\b", "INFRACCION", t or "", flags=re.I)
+    for mes in MESES:
+        t = re.sub(r"\b" + r"\s*".join(mes) + r"\b", mes, t, flags=re.I)
+    t = re.sub(r"\b(20\d)\s+(\d)\b", r"\1\2", t)
     return re.sub(r"\s+", " ", t)
 
 
@@ -67,7 +70,13 @@ def corregir_anio(fecha, hoy=None):
 
 def _fecha_num(s):
     m = re.search(r"(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d\s*\d)(?!\d)", s)
-    return "%02d/%02d/%s" % (int(m.group(1)), int(m.group(2)), re.sub(r"\s", "", m.group(3))) if m else ""
+    if not m:
+        return ""
+    import datetime
+    try:
+        return datetime.date(int(re.sub(r"\s", "", m.group(3))), int(m.group(2)), int(m.group(1))).strftime("%d/%m/%Y")
+    except ValueError:
+        return ""
 
 
 def _fecha_cabecera(t):
@@ -115,6 +124,12 @@ def _lugar_final(t):
     """Lugar del hecho: por la redacción habitual o el rótulo LUGAR; si eso no sirve (vacío, arrastra a una persona o
     repite el domicilio del infractor porque las secciones vienen en otro orden), por significado."""
     pers = SM.personas(t)
+    narrativo = re.search(r"\bsorprendid[oa]\b.{0,160}?\bhoras?\s*,?\s*en\s+(.+?)(?=,?\s+de\s+esta\s+(?:ciudad|comuna)|,?\s+por\s+el\b|$)", t, re.I)
+    if narrativo is None:
+        narrativo = re.search(r"\ben\s+(.{3,110}?)\s*,?\s*de\s+esta\s+ciudad\s*,?\s*sorprendieron\b", t, re.I)
+    if narrativo:
+        lugar_hecho = re.sub(r"^(?:sector|calle|avenida)\s+", "", narrativo.group(1), flags=re.I)
+        return SM.formato_lugar(limpiar(lugar_hecho)).strip(" ,.;")
     def sana(c):
         if not c or SM.MALO.search(c):
             return False
@@ -191,6 +206,8 @@ def _infraccion(t, secs):
     cita = re.search(r"\b(?:notificaron\s+al\s+infractor|si[gq]uiente\s*(?:in(?:fr|f|er)acci[oó]n\s*)?)"
                      r"(?:(?:(?:a\s+)?la\s+ley\s+de|al)\s+tr[aá]nsito\s*)?"
                      r"[.:;\s]*[\"“]\s*([^\"”]{10,450})[\"”]", t, re.I)
+    if not cita:
+        cita = re.search(r'\binfracci[oó]n\s+por\s+escrito\s*:\s*["“]\s*([^"”]{10,450})["”]', t, re.I)
     if not cita:
         cita = re.search(r'\binfracci[oó]n\s+al\s+tr[aá]nsito\s*:\s*["“]\s*([^"”]{10,450})["”]', t, re.I)
     if not cita:
@@ -274,7 +291,7 @@ def _tokens_nombre(bruto):
                 break
             continue
         nu = _norm(w)
-        if not toks and nu in {"O", "Y", "E", "A", "I", "EL", "LA", "UN", "UNA"}:
+        if not toks and nu in {"O", "Y", "E", "A", "I", "EL", "LA", "UN", "UNA", "COMO"}:
             continue
         toks.append(w)
         if len(toks) >= 8:
@@ -307,16 +324,32 @@ def _trozo_nombre(s):
 POR_ESCRITO = re.compile(r"^\W*" + r"\s*".join("PORESCRITO") + r"\b", re.I)
 
 
+def identidad_dudosa(r):
+    """Señales vistas en las tandas reales; se releen, no se adivinan apellidos."""
+    nombre = r.get("infractor_nombre", "")
+    direccion = r.get("infractor_direccion", "")
+    fragmentado = bool(re.search(r"\b[B-DF-HJ-NP-XZ]\b", nombre))
+    suspendido = bool(re.search(re.escape(nombre) + r"\s+DA\s*,", _plano(r.get("texto_ocr", "")), re.I)) if nombre else False
+    mezcla = bool(re.search(r"\bC\.\s*I\.|\bLICENC\s*IA|\bCONSUMIENDO|\bFECHA\s+DE", direccion, re.I))
+    sin_numero = bool(direccion) and not re.search(r"\d|\bS\s*/\s*N\b", direccion, re.I)
+    return {"infractor_nombre": not nombre or fragmentado or suspendido,
+            "infractor_direccion": not direccion or mezcla or sin_numero}
+
+
 def _infractor(texto_inf):
     """-> (nombre, rut, direccion, comuna, aviso, rut_leido)"""
     s = re.sub(r"^[\W_]+", "", limpiar(texto_inf))
+    s = re.sub(r"\bC\s*/\s*id\.", "C.I.", s, flags=re.I)
+    for palabra in ("IDENTIDAD", "DOMICILIADO", "DOMICILIADA"):
+        s = re.sub(r"\b" + r"\s*".join(palabra) + r"\b", palabra, s, flags=re.I)
+    s = re.sub(r"\bC\.[lI]\.(?=\s*\d)", "C.I.", s)
     if not s or POR_ESCRITO.match(s) or re.match(r"(?:ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
     s = re.split(r"\bD[I1l]SP\.?\s*[I1l]NFR\w*|\bD[I1l]SP[O0]S[I1lÍ]C[I1l][OÓ0]N\s+[I1l]NFR\w*", s, 1, flags=re.I)[0].strip()
     nombre = _trozo_nombre(s)
     rut, leido, aviso = "", "", ""
     mr = re.search(r"(?:R\.?U\.?[NT]\.?|C\.?\s?I\.?|c[eé]d(?:ula)?\.?\s*(?:(?:nacional\s+)?de\s+)?(?:ident\w*)?|ident\w*)\.?\s*(?:Nro\.?|N[°º]|n[uú]mero)?\s*:?\s*"
-                   r"(\d{1,2}\s*[.,]?\s*\d{3}\s*[.,]?\s*\d{3})\s*[-–—]\s*([\dKk])", s, re.I)
+                   r"((?:\d[\s.,]*){7,8})\s*[-–—]\s*([\dKk])", s, re.I)
     if mr:
         leido = re.sub(r"\D", "", mr.group(1)) + "-" + mr.group(2).upper()
         if certificado.rut_ok(leido):
@@ -325,16 +358,24 @@ def _infractor(texto_inf):
             aviso = "El RUT del infractor (%s) no cuadra con su dígito verificador: compáralo con el parte." % leido
     elif re.search(r"\bDNI\b|pasaporte|(?:" + NACION + r")", s, re.I):
         aviso = "Infractor extranjero (sin RUT): irá con SR y su nombre."
+    if not leido:
+        candidatos = re.findall(r"(?<!\d)((?:\d[\s.,]*){7,8})[-–—]\s*([\dKk])(?!\d)", s)
+        candidatos = {re.sub(r"\D", "", base) + "-" + dv.upper() for base, dv in candidatos}
+        if len(candidatos) == 1:
+            unico = next(iter(candidatos))
+            if certificado.rut_ok(unico):
+                rut = leido = unico
+                aviso = "RUT recuperado sin rótulo claro: verifica el nombre y el RUT en la imagen."
     
     direccion, comuna = "", ""
     md = re.search(r"domicili\w+\s*:?\s*(?:en\s+)?(.+?)[\s.]*$", s, re.I)
     if md:
         d = md.group(1).strip()
         # CORRECCIÓN: Cortar estrictamente si se cola texto de secciones posteriores (como DOCUMENTOS, CITACION, OBSERVACIONES)
-        d = re.split(r"\b(?:DOCUMENTOS?|OBSERVACI[OÓ]NES?|CITACI[OÓ]N|NOTIFICACI[OÓ]N|TESTIGOS?|DENUNCIANTE)\b.*$", d, flags=re.I)[0]
+        d = re.split(r"\b(?:CONSUMIENDO|INGIRIENDO|SORPRENDID[OA]|LICENC\s*IA|FECHA\s+DE\s+NACIMIENTO|DOCUMENTOS?|OBSERVACI[OÓ]NES?|CITACI[OÓ]N|NOTIFICACI[OÓ]N|TESTIGOS?|DENUNCIANTE)\b.*$", d, flags=re.I)[0]
         
         d = re.sub(r"\bSituaci[oó]n\s+calle\b.*$", "", d, flags=re.I).strip(" .,")
-        mc = re.search(r",?\s*comuna\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d, re.I) \
+        mc = re.search(r",?\s*(?:de\s+la\s+)?comuna\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})[.\s]*$", d, re.I) \
             or re.search(r"\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d) \
             or re.search(r",\s*([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d)
         if mc and not catalogo.comuna_en_sistema(limpiar(mc.group(1))):
@@ -428,7 +469,7 @@ def _oficina(texto):
     oficinas = perfil.oficinas_ordenadas()
     palabras_cab = re.findall(r"[A-Z]{4,}", cab)
     # En los partes impresos la unidad figura como «SUBCOM OSCAR C. GALLO».
-    if re.search(r"\bOSCAR\s+(?:CRISTI\b|C\.?\s+GALLO\b)", cab):
+    if re.search(r"\b[O0]SCAR\s+(?:CRISTI\b|C\.?\s+GALLO\b)", cab):
         for _cod, desc in oficinas:
             if re.search(r"\bOSCAR\s+CRISTI\b", _norm(desc)):
                 return desc, True
@@ -468,7 +509,15 @@ def fechas_citacion_recorte(texto):
         fecha = _fecha_num(m[1]) or fecha_de(m[1])
         if fecha:
             fechas.add(fecha)
-    return sorted(fechas)
+    import datetime
+    validas = []
+    for fecha in fechas:
+        try:
+            datetime.datetime.strptime(fecha, "%d/%m/%Y")
+            validas.append(fecha)
+        except ValueError:
+            pass
+    return sorted(validas)
 
 
 def fecha_citacion_recorte(texto):
@@ -482,10 +531,11 @@ def parte(texto):
     secs = _secciones(t)
     m = re.search(r"Parte\s*N\w{0,4}[.,\s:*°º]*(\d{2,5})", t, re.I)
     n_parte = (m.group(1).lstrip("0") or m.group(1)) if m else ""
-    fecha_parte = _fecha_cabecera(t) or _fecha_texto(t)
-    m = re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{1,2})\s*[:.;,]\s*(\d{2})", t, re.I) \
-        or re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{2})[5S](\d{2})\s*horas", t, re.I) \
-        or re.search(r"\bHORA\s*:\s*\W?\s*(\d{1,2})\s*[:.]\s*(\d{2})", t, re.I)
+    relato = re.split(r"\bC[I1]TACI[OÓ]N\s*:", t, maxsplit=1, flags=re.I)[0]
+    fecha_parte = _fecha_cabecera(t) or _fecha_texto(relato)
+    m = re.search(r"(?:a\s+las|siendo,?\s+las|hoy\s+las)\s+(\d{1,2})\s*[:.;,]\s*(\d{2})", relato, re.I) \
+        or re.search(r"(?:a\s+las|siendo,?\s+las)\s+(\d{2})[5S](\d{2})\s*horas", relato, re.I) \
+        or re.search(r"\bHORA\s*:\s*\W?\s*(\d{1,2})\s*[:.]\s*(\d{2})", relato, re.I)
     hora = "%d:%s" % (int(m.group(1)), m.group(2)) if m else ""
     seg_cit = _sec(secs, "CITACION", ultimo=True)
     fecha_cit = _fecha_num(seg_cit) or fecha_de(seg_cit)
@@ -514,6 +564,17 @@ def parte(texto):
     pers = []
     secciones_infractor = [sec for rot, sec in secs if rot.startswith("INFRACTOR") and sec]
     fuente_personas = "\n".join(secciones_infractor) if secciones_infractor else texto
+    # En los partes de alcohol la identidad antecede al relato y el rótulo
+    # «infractor» puede pertenecer solamente a la citación, sin datos personales.
+    # No buscar globalmente: así no se confunde al conductor con el denunciado.
+    narrativa = re.search(r"\bC\s*I\s*U\s*D\s*A\s*D\s*[.\-]*\s*(.+?)[;,]\s*sorprendid[oa]\b", t, re.I)
+    if not rut and narrativa and not POR_ESCRITO.match(_sec(secs, "INFRACTOR")):
+        bloque_narrativo = re.sub(r",?\s+de\s+esta\s+ciudad\s*$", ", " + perfil.cargar()["comuna"], narrativa.group(1), flags=re.I)
+        candidato = _infractor(bloque_narrativo)
+        if candidato[0] and candidato[1]:
+            nombre, rut, direccion, comuna, aviso_inf, rut_leido = candidato
+            fuente_personas = bloque_narrativo
+            infractores = [{"nombre": nombre, "rut": rut, "direccion": direccion, "comuna": comuna, "aviso": aviso_inf}]
     for bloque in SM.personas(fuente_personas):
         x = _infractor(bloque)
         if not x[0]:

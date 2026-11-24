@@ -8,6 +8,8 @@ for(const path of ['parte_scan/web/index.html']){
  const ctx=vm.createContext({P:[p],$:id=>elements[id],valorActual:(p,k)=>p.ed[k]??'',hoy:()=>'',infrVigentes:()=>[],placa6:String,
  fetch:async(url,opt)=>{calls.push({url,body:JSON.parse(opt.body)});return {json:async()=>fail?{error:'En curso'}:{ok:true}}},alert(){},tecSondear(){}});
  vm.runInContext(script.slice(script.indexOf('function compactarLugar('),script.indexOf('function textoMemoria(')),ctx);
+ vm.runInContext(script.slice(script.indexOf('function requiereDatosVehiculo('),script.indexOf('function campos(')),ctx);
+ ctx.PERFIL=null;
  vm.runInContext(script.slice(script.indexOf('function V(p,k)'),script.indexOf("$('btnTecleo').onclick=")),ctx);
  vm.runInContext(script.slice(script.indexOf('function esEmpadronado('),script.indexOf('function valorActual(')),ctx);
  vm.runInContext("let tMarcando=false;",ctx);
