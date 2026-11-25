@@ -64,7 +64,17 @@ def _dato_propietario(zona, etiqueta):
     m = re.search(r"^[^\w\r\n]*(?:" + etiqueta + r")\b[ \t:;?*|!]*([^\r\n]+)", zona, re.I | re.M)
     return _sin_ruido(_limpiar(m.group(1))) if m else ""
 
+def campo_dudoso(campo, valor):
+    valor = str(valor or "")
+    if campo in {"nombre", "marca"}:
+        return bool(re.search(r"[A-ZÁÉÍÓÚÑ][0-9](?=[A-ZÁÉÍÓÚÑ]|\b)", valor, re.I))
+    if campo == "direccion":
+        return bool(re.search(r"\b[lI]\d{2,}\b", valor, re.I))
+    return False
+
+
 def leer(t):
+    t = re.sub(r"\bTipo\s+V\s*e\s*h\s*[ií]\s*c\s*u\s*l\s*o\b", "Tipo Vehiculo", t, flags=re.I)
     # El OCR móvil a veces deja el valor justo antes de su rótulo.
     lineas = t.splitlines()
     inicio = next((i + 1 for i, l in enumerate(lineas) if ENCABEZADO_PROPIETARIO.search(l)), len(lineas))
@@ -87,7 +97,7 @@ def leer(t):
     t = re.sub(r"(?im)^([ \t]*" + etiquetas + r"[ \t:;?*|!]*)\r?\n[ \t]*(?=\S)", r"\1 ", t)
     o, av = {}, []
     # Inscripción: PLACA.NN-D  (el dígito final es el verificador de la placa)
-    m = re.search(r"\bInscripci[oó]n[ \t]*(?:[:;15l|$\-á][ \t]*)?"
+    m = re.search(r"\bInscripci[oó]n[ \t]*(?:[:;15|$\-á][ \t]*)?"
                   r"([A-Z]{2,5})[ \t.\-]*(\d{1,4})[ \t]*[-–][ \t]*([0-9K])\b", t, re.I)
     o["placa"] = (m.group(1) + m.group(2)).upper() if m else ""
     o["dv_placa"] = m.group(3).upper() if m else ""
@@ -96,10 +106,14 @@ def leer(t):
     m = re.search(r"A\S{1,2}o\s*[:;?]?\s*((?:19|20)\d{2})", tipo, re.I)
     if m:
         o["anio"] = m.group(1)
+    tipo = re.sub(r"\s*A\S{1,2}o\b.*$", "", tipo, flags=re.I)
     if not re.search(r"[A-Za-zÁÉÍÓÚÑ]", tipo):
         siguiente = re.search(r"(?im)^Tipo\s+Veh\S{1,3}culo[^\r\n]*\r?\n([^\r\n]+)", t)
         if siguiente:
-            tipo = siguiente.group(1)
+            from . import exportar, tipos_vehiculo
+            candidato = exportar.tipo_limpio(siguiente.group(1))
+            if candidato in tipos_vehiculo.TIPOS:
+                tipo = candidato
     tipo = re.sub(r"\s*A\S{1,2}o\b.*$", "", tipo, flags=re.I)
     o["tipo_vehiculo"] = re.sub(r"[^A-ZÁÉÍÓÚÑ ]", "", tipo.upper()).strip()
     if not o["anio"]:

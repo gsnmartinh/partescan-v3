@@ -1,3 +1,16 @@
+# ParteScan 5.1.21
+
+- Conserva campos correctamente reconocidos por el teléfono cuando la reconstrucción de las líneas deja incompleto el tipo de vehículo del certificado. Tolera espacios dentro del rótulo Tipo Vehículo y valores separados de la etiqueta.
+- Corrige la pérdida de la letra L inicial en patentes de certificados, observada en LSKC35.
+- Reconoce EMPADRONADO aunque el OCR escriba EMPADRONAD0 o separe sus letras; aplica la identificación de vehículo empadronado y evita tomar ese rótulo como nombre.
+- Recupera la hora de citación en los partes de Carabineros revisados y corta el domicilio antes de la sección de infracción, incluso con el rótulo mal leído.
+- Relee localmente nombres, domicilios y marcas dudosos del certificado. Cuando la segunda lectura no confirma el mismo RUT, ofrece alternativas de nombre o domicilio para seleccionar contra la imagen, conservando el original. Los avisos se resuelven al confirmar o corregir el campo.
+- Recupera comunas con espacios erróneos, como SANT IAGO, mediante coincidencia única con el catálogo. Amplía la normalización de OHIGGINS sin apóstrofo.
+- Aplica el código 38 para evadir control policial y evita añadir erróneamente el 610 al separar la frase sobre darse a la fuga.
+- Si el parte dice PARE o CEDA EL PASO sin precisar la señal, pide verificar la fotografía antes de elegir 52 o 494.
+
+Validación con la importación efectiva de los 15 partes y 10 certificados del 25/11; regresiones sobre las tandas anteriores de 58 y 53 partes y segunda lectura de nueve imágenes de referencia. Se comprobaron las alternativas y su confirmación en la interfaz, en pantalla completa y reducida, y en temas claro y oscuro. Se conservan los RUT impresos inválidos para revisión. Estas comprobaciones no representan un porcentaje global de acierto. Captura Android conserva la versión 1.1.7; las correcciones corresponden al reconocimiento y revisión en escritorio.
+
 # ParteScan 5.1.20
 
 - Corrige los pendientes falsos del semáforo: el contador, el formulario y el filtro de revisión utilizan el mismo valor normalizado, incluido el RUT sin puntos y con guion.

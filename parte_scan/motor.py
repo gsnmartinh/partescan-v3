@@ -178,23 +178,47 @@ def leer_certificado(g, texto, *, imagen=None):
     from . import catalogo, certificado
 
     datos = certificado.leer(texto)
-    campos = ("nombre", "rut", "direccion", "comuna", "placa")
+    campos = ("rut", "nombre", "direccion", "comuna", "placa", "tipo_vehiculo", "marca")
+    etiquetas = {"nombre":"nombre", "rut":"rut", "direccion":"dirección", "comuna":"comuna", "placa":"placa", "tipo_vehiculo":"tipo de vehículo", "marca":"marca"}
 
     def valido(campo, valor):
+        if certificado.campo_dudoso(campo, valor):
+            return False
         if campo == "rut":
             return certificado.rut_ok(valor)
         if campo == "comuna":
             return bool(valor) and catalogo.comuna_en_sistema(valor)
         if campo == "placa":
             return extractor.placa_ok(valor) and not re.fullmatch(r"(?=[A-Z]{4}\d{2}$)[A-Z]*[AEIOU][A-Z]*\d{2}", valor)
+        if campo == "tipo_vehiculo":
+            from . import exportar, tipos_vehiculo
+            return bool(valor) and exportar.tipo_limpio(valor) in tipos_vehiculo.TIPOS
         return lectura.valido(campo, valor)
 
+    # La reordenación por coordenadas no debe borrar un campo que el OCR
+    # original de esta misma foto ya reconoció correctamente.
+    fuente = imagen if imagen is not None else g
+    original = fuente.info.get("ocr_texto_original", "") if fuente is not None else ""
+    if original:
+        otros = certificado.leer(original)
+        for k in campos:
+            misma_persona = k not in {"nombre", "direccion", "comuna"} or (valido("rut", datos["rut"]) and otros["rut"] == datos["rut"])
+            if not valido(k, datos[k]) and valido(k, otros[k]) and misma_persona:
+                datos[k] = otros[k]
+                if k == "placa":
+                    datos["dv_placa"] = otros["dv_placa"]
+    alternativa_color = None
+    if fuente is not None and certificado.campo_dudoso('marca', datos['marca']):
+        from difflib import SequenceMatcher
+        alternativa_color = certificado.leer(_releer_zona(fuente, 4))
+        candidata = alternativa_color['marca']
+        if valido('marca', candidata) and SequenceMatcher(None, datos['marca'], candidata).ratio() >= .8:
+            datos['marca'] = candidata
     faltan = [k for k in campos if not valido(k, datos[k])]
-    if faltan:
+    if faltan and (g is not None or imagen is not None):
         if g is None:
             g = preparar(imagen)
         ancho, alto = g.size
-        etiquetas = {"nombre": "nombre", "rut": "rut", "direccion": "dirección", "comuna": "comuna", "placa": "placa"}
         for k, limites in (("placa", (0, 0.53)), ("rut", (0.25, 0.85))):
             if k not in faltan:
                 continue
@@ -207,18 +231,51 @@ def leer_certificado(g, texto, *, imagen=None):
                     datos["dv_placa"] = otros["dv_placa"]
                 datos["avisos"] = [a for a in datos["avisos"] if etiquetas[k] not in a.lower()]
                 faltan.remove(k)
-    if faltan:
+    if faltan and g is not None:
         # La segmentación por columnas recupera líneas que el modo de bloque mezcla u omite.
         zona = zona_por_etiqueta(g, r"DATOS\s+DEL\s+PROPIETARIO", .4) or g
         alternativo = _releer_zona(zona, 4)
         if re.search(r"\bPROPIETARIO\b", alternativo, re.I):
             otros = certificado.leer(alternativo)
             for k in faltan:
-                if valido(k, otros[k]):
+                misma_persona = k not in {"nombre", "direccion", "comuna"} or (valido("rut", datos["rut"]) and otros["rut"] == datos["rut"])
+                if valido(k, otros[k]) and misma_persona:
                     datos[k] = otros[k]
                     if k == "placa":
                         datos["dv_placa"] = otros["dv_placa"]
                     datos["avisos"] = [a for a in datos["avisos"] if etiquetas[k] not in a.lower()]
+    color = imagen if imagen is not None else g
+    if color is not None:
+        for grupo, limites in ((('tipo_vehiculo','marca'),(.04,.53)), (('nombre','direccion','comuna'),(.50,.94))):
+            pendientes = [k for k in grupo if not valido(k, datos[k])]
+            if not pendientes:
+                continue
+            zona = color.crop((0, int(color.height*limites[0]), color.width, int(color.height*limites[1])))
+            zona.thumbnail((1700, 2000), Image.Resampling.BICUBIC)
+            otros = certificado.leer(_releer_zona(zona, 6))
+            for k in pendientes:
+                misma_persona = k not in {"nombre", "direccion", "comuna"} or (valido("rut", datos["rut"]) and otros["rut"] == datos["rut"])
+                if valido(k, otros[k]) and misma_persona:
+                    datos[k] = otros[k]
+    # Si otra lectura no confirma el mismo RUN, no sustituir la identidad:
+    # ofrecer únicamente alternativas leídas de la misma foto para revisión.
+    dudosos = [k for k in ('nombre','direccion') if datos[k] and not valido(k, datos[k])]
+    if dudosos and color is not None:
+        from difflib import SequenceMatcher
+        otros = alternativa_color if alternativa_color is not None else certificado.leer(_releer_zona(color, 4))
+        for k in dudosos:
+            candidato = otros[k]
+            if valido(k, candidato) and SequenceMatcher(None, datos[k], candidato).ratio() >= .9:
+                datos.setdefault('lecturas', {})[k] = [[datos[k], 'OCR original'], [candidato, 'Segunda lectura local · confirma en la imagen']]
+    datos['campos_revisar'] = []
+    for k in campos:
+        if valido(k, datos[k]):
+            datos['avisos'] = [a for a in datos['avisos'] if etiquetas[k] not in a.lower()]
+        elif datos[k]:
+            datos['campos_revisar'].append(k)
+            if k in {'nombre','direccion','marca','tipo_vehiculo','comuna'}:
+                articulo = 'el' if k in {'nombre','tipo_vehiculo'} else 'la'
+                datos['avisos'].append('Revisa %s %s del certificado: la lectura sigue siendo dudosa.' % (articulo, etiquetas[k]))
     return datos
 
 

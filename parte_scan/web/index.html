@@ -611,7 +611,7 @@ function avisoVigente(p,x){
   const c=p.cert||{}, v=k=>(valorActual(p,k)||'').trim();
   const mapa=[[/la marca del certificado/,'Marca (certificado)'],[/el tipo de vehículo/,'Tipo de vehículo (certificado)'],[/la comuna del certificado/,'Comuna (certificado)'],
               [/la dirección del certificado/,'Dirección (certificado)'],[/el nombre del certificado/,'Nombre (certificado)'],[/el RUT del certificado/,'RUT (certificado)']];
-  for(const [re,k] of mapa) if(re.test(x)&&v(k)) return false;
+  for(const [re,k] of mapa) if(re.test(x)&&v(k)&&!campoPendiente(p,k)) return false;
   return true;
 }
 function mostrarFoto(p){
@@ -682,7 +682,7 @@ function compactarLugar(valor){
   return resultado.replace(/\s+/g,' ').replace(/^[ ,.;]+|[ ,.;]+$/g,'');
 }
 function normalizarDireccion(texto){
-  return String(texto??'').replace(/\b[O0]\s*['’‘´`ʼ]?\s*HIGGINS\b/gi,'OHIGGINS');
+  return String(texto??'').replace(/\b[O0]\s*['’‘´`ʼʻ]?\s*HIGGINS\b/gi,'OHIGGINS');
 }
 function textoMemoria(v){return normalizarDireccion(v).trim().replace(/\s+/g,' ').toUpperCase()}
 function contextoMemoria(p,key){
@@ -1252,6 +1252,8 @@ function estadoCampo(p,f,valor){
   if(!formatoCampoValido(f.k,valor)) return 'check';
   if(p.ok?.[f.k]) return 'ok';
   if(f.k in (p.ed||{})) return 'check';
+  const certificadoCampo={'RUT (certificado)':'rut','Nombre (certificado)':'nombre','Dirección (certificado)':'direccion','Comuna (certificado)':'comuna','Marca (certificado)':'marca','Tipo de vehículo (certificado)':'tipo_vehiculo','Placa':'placa'};
+  if((p.cert_campos_revisar||[]).includes(certificadoCampo[f.k])) return 'check';
   if(new Set((p.lecturas?.[f.k]||[]).map(([valor])=>valor).filter(Boolean)).size>1) return 'check';
   return f.st;
 }

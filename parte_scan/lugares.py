@@ -6,7 +6,7 @@ LIMITE_LUGAR = 30
 
 def compactar_lugar(valor):
     texto = re.sub(r'\s+', ' ', str(valor or '')).strip(' ,.;').upper()
-    texto = re.sub(r"\b[O0]\s*['’‘´`ʼ]?\s*HIGGINS\b", 'OHIGGINS', texto)
+    texto = re.sub(r"\b[O0]\s*['’‘´`ʼʻ]?\s*HIGGINS\b", 'OHIGGINS', texto)
     texto = re.sub(r'\bHERNANDE\s+Z\b', 'HERNANDEZ', texto)
     texto = re.sub(r'\bESQ(?:UINA)?\.?\s*(?:CON\s+)?|\bINTERSECCI[ÓO]N\s+(?:CON\s+)?', 'CON ', texto)
     texto = re.sub(r'\s+/\s+', ' CON ', texto)

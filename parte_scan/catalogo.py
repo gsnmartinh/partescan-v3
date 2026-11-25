@@ -148,6 +148,13 @@ def actividad_sin_patente(texto):
 def resolver(texto):
     """Devuelve (descripcion_causa, [items]) a partir del texto de la infracción del parte."""
     T = re.sub(r"\s+", " ", sin_tildes(texto)).strip()
+    if "ESTACION" in T and "PARE" in T and "CEDA EL PASO" in T:
+        item = crear_item(por_abrev("PARE"))
+        item.update(estado="check", nota="Verifica la fotografía: el parte dice PARE o CEDA EL PASO. Elige 52 (PARE) o 494 (CEDA) antes de confirmar.")
+        return item["x"]["t"], [item]
+    if re.search(r"EVADIR\s+CONTROL\s+POLICIAL|\bFUGA\b.{0,50}\bCARABINEROS\b|\bCARABINEROS\b.{0,50}\bFUGA\b", T):
+        item = crear_item(por_abrev("CARABI"))
+        return item["x"]["t"], [item]
     if (re.search(r"\bESTACION\w*\b.{0,60}\bEN\s+MEDIO\s+DE\s+LA\s+CALZADA\b", T)
             and re.search(r"IMPIDIENDO\s+EL\s+NORMAL\s+TRANSITO", T)):
         item = crear_item(por_abrev("48"))
@@ -382,6 +389,10 @@ def comuna_oficial(texto):
         k = sin_tildes(" ".join(palabras[:n])).upper()
         if k in _COMUNAS_NOMBRES:
             return _COMUNAS_NOMBRES[k]
+    compacto = sin_tildes("".join(palabras)).upper()
+    opciones = {v for k, v in _COMUNAS_NOMBRES.items() if k.replace(" ", "") == compacto}
+    if len(opciones) == 1:
+        return next(iter(opciones))
     return str(texto or "").strip()
 
 

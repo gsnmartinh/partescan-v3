@@ -195,8 +195,9 @@ def aplicar_certificado(p, c, pid_img, *, placa_verificada=""):
     placa, aviso = certificado.conciliar_placa(exportar.placa6(p["placa"]), exportar.placa6(c["placa"]))
     if not p.get("img_cert"):
         import copy
-        p["sin_cert"] = {k: copy.deepcopy(p[k]) for k in ("cert", "cert_avisos", "placa", "marca", "tipo_vehiculo", "lecturas") if k in p}
+        p["sin_cert"] = {k: copy.deepcopy(p[k]) for k in ("cert", "cert_avisos", "cert_campos_revisar", "placa", "marca", "tipo_vehiculo", "lecturas") if k in p}
         p["sin_cert"].setdefault("lecturas", {})
+        p["sin_cert"].setdefault("cert_campos_revisar", [])
     if placa_verificada:
         placa, aviso = placa_verificada, ""
     elif p["placa"] and c["placa"] and exportar.placa6(p["placa"]) != exportar.placa6(c["placa"]):
@@ -213,6 +214,16 @@ def aplicar_certificado(p, c, pid_img, *, placa_verificada=""):
     if p.get("origen") == "mtt":
         p["identidad_registro"] = {k: c[k] for k in persona}
     p["cert_avisos"] = list(c["avisos"]) + ([aviso] if aviso else [])
+    p["cert_campos_revisar"] = list(c.get("campos_revisar", []))
+    personales = {"rut", "nombre", "direccion", "comuna"}
+    identidad_del_parte = p.get("notificado_personalmente") or (p.get("origen") == "mtt" and p.get("modalidad_mtt") == "")
+    if identidad_del_parte:
+        p["cert_campos_revisar"] = [k for k in p["cert_campos_revisar"] if k not in personales]
+    campos_lectura = {"rut":"RUT (certificado)","nombre":"Nombre (certificado)","direccion":"Dirección (certificado)","comuna":"Comuna (certificado)","marca":"Marca (certificado)","tipo_vehiculo":"Tipo de vehículo (certificado)"}
+    for k, etiqueta in campos_lectura.items():
+        p.setdefault("lecturas", {}).pop(etiqueta, None)
+        if k in c.get("lecturas", {}) and not (identidad_del_parte and k in personales):
+            p["lecturas"][etiqueta] = c["lecturas"][k]
     # el tipo de vehículo y la marca del certificado son más fiables que los del parte
     if c["tipo_vehiculo"]:
         p["tipo_vehiculo"] = c["tipo_vehiculo"]
@@ -250,6 +261,7 @@ def paginas_ocr_movil(ruta):
                 imagen = ImageOps.exif_transpose(foto).convert("RGB")
                 lineas = lectura.lineas_espaciales(hoja.get("lineas"))
                 imagen.info["ocr_lineas"] = lineas
+                imagen.info["ocr_texto_original"] = hoja["texto"]
                 texto = hoja["texto"]
                 if lineas:
                     espacial = lectura.ordenar_lineas(lineas)
@@ -667,6 +679,7 @@ class H(BaseHTTPRequestHandler):
                                 # Sesiones anteriores no guardaban los datos previos al certificado.
                                 donante["cert"] = dict(donante.get("cert", {}), rut="", nombre="", direccion="", comuna="")
                                 donante["cert_avisos"] = ["Certificado reasignado: revisa los datos del denunciado."]
+                                donante["cert_campos_revisar"] = []
                             donante["img_cert"] = 0
                             for key in ("RUT (certificado)", "Nombre (certificado)", "Dirección (certificado)", "Comuna (certificado)", "Marca (certificado)", "Modelo (certificado)", "Tipo de vehículo (certificado)", "Placa"):
                                 for bucket in ("ed", "ok", "done"):

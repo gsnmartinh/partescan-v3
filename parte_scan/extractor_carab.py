@@ -68,6 +68,11 @@ def corregir_anio(fecha, hoy=None):
     return "%02d/%02d/%d" % (d, mes, anio), str(a)
 
 
+def _hora_citacion(s):
+    m = re.search(r"\b(?:a\s+)?l[4a]s\s+([01]?\d|2[0-3])\s*:\s*([0-5]\d)\b", s or "", re.I)
+    return "%02d:%s" % (int(m[1]), m[2]) if m else ""
+
+
 def _fecha_num(s):
     m = re.search(r"(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d\s*\d)(?!\d)", s)
     if not m:
@@ -243,6 +248,12 @@ def _extraer_multiples_infracciones(infr_texto):
     for t in trozos:
         limpio = t.strip(" ,.")
         if len(limpio) > 4:
+            # La fuga describe cómo se evadió el mismo control policial;
+            # al separarla perdía ese contexto y proponía inspector fiscal.
+            if (lista_final and re.search(r"EVADIR\s+CONTROL\s+POLICIAL", lista_final[-1], re.I)
+                    and re.match(r"D[ÁA]NDOSE\s+A\s+LA\s+FUGA\b", limpio, re.I)):
+                lista_final[-1] += ", " + limpio
+                continue
             lista_final.append(limpio)
             
     return lista_final if lista_final else [infr_texto]
@@ -322,6 +333,11 @@ def _trozo_nombre(s):
 
 
 POR_ESCRITO = re.compile(r"^\W*" + r"\s*".join("PORESCRITO") + r"\b", re.I)
+EMPADRONADO = re.compile(r"^\W*" + r"\s*".join("EMPADRONAD") + r"\s*[O0]\b", re.I)
+
+
+def es_empadronado(texto):
+    return bool(POR_ESCRITO.match(texto or "") or EMPADRONADO.match(texto or ""))
 
 
 def identidad_dudosa(r):
@@ -343,7 +359,7 @@ def _infractor(texto_inf):
     for palabra in ("IDENTIDAD", "DOMICILIADO", "DOMICILIADA"):
         s = re.sub(r"\b" + r"\s*".join(palabra) + r"\b", palabra, s, flags=re.I)
     s = re.sub(r"\bC\.[lI]\.(?=\s*\d)", "C.I.", s)
-    if not s or POR_ESCRITO.match(s) or re.match(r"(?:ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
+    if not s or es_empadronado(s) or re.match(r"(?:ignorad|se\s+ignora|no\s+se\b|sin\s+datos)", s, re.I):
         return "", "", "", "", "", ""
     s = re.split(r"\bD[I1l]SP\.?\s*[I1l]NFR\w*|\bD[I1l]SP[O0]S[I1lÍ]C[I1l][OÓ0]N\s+[I1l]NFR\w*", s, 1, flags=re.I)[0].strip()
     nombre = _trozo_nombre(s)
@@ -372,12 +388,12 @@ def _infractor(texto_inf):
     if md:
         d = md.group(1).strip()
         # CORRECCIÓN: Cortar estrictamente si se cola texto de secciones posteriores (como DOCUMENTOS, CITACION, OBSERVACIONES)
-        d = re.split(r"\b(?:CONSUMIENDO|INGIRIENDO|SORPRENDID[OA]|LICENC\s*IA|FECHA\s+DE\s+NACIMIENTO|DOCUMENTOS?|OBSERVACI[OÓ]NES?|CITACI[OÓ]N|NOTIFICACI[OÓ]N|TESTIGOS?|DENUNCIANTE)\b.*$", d, flags=re.I)[0]
+        d = re.split(r"\b(?:IN(?:FR|ER)ACCI[OÓ]N|CONSUMIENDO|INGIRIENDO|SORPRENDID[OA]|LICENC\s*IA|FECHA\s+DE\s+NACIMIENTO|DOCUMENTOS?|OBSERVACI[OÓ]NES?|CITACI[OÓ]N|NOTIFICACI[OÓ]N|TESTIGOS?|DENUNCIANTE)\b.*$", d, flags=re.I)[0]
         
         d = re.sub(r"\bSituaci[oó]n\s+calle\b.*$", "", d, flags=re.I).strip(" .,")
         mc = re.search(r",?\s*(?:de\s+la\s+)?comuna\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})[.\s]*$", d, re.I) \
             or re.search(r"\s+de\s+([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d) \
-            or re.search(r",\s*([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d)
+            or re.search(r",\s*(?:en\s+)?([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,25})$", d, re.I)
         if mc and not catalogo.comuna_en_sistema(limpiar(mc.group(1))):
             mc = None
         if mc:
@@ -568,7 +584,7 @@ def parte(texto):
     # «infractor» puede pertenecer solamente a la citación, sin datos personales.
     # No buscar globalmente: así no se confunde al conductor con el denunciado.
     narrativa = re.search(r"\bC\s*I\s*U\s*D\s*A\s*D\s*[.\-]*\s*(.+?)[;,]\s*sorprendid[oa]\b", t, re.I)
-    if not rut and narrativa and not POR_ESCRITO.match(_sec(secs, "INFRACTOR")):
+    if not rut and narrativa and not es_empadronado(_sec(secs, "INFRACTOR")):
         bloque_narrativo = re.sub(r",?\s+de\s+esta\s+ciudad\s*$", ", " + perfil.cargar()["comuna"], narrativa.group(1), flags=re.I)
         candidato = _infractor(bloque_narrativo)
         if candidato[0] and candidato[1]:
@@ -619,12 +635,12 @@ def parte(texto):
     return {
         "origen": "carab", "departamento": "CARABINEROS", "oficina": _of[0], "oficina_reconocida": _of[1], "n_parte": boleta, "n_parte_final": boleta,
         "n_parte_carab": n_parte, "boleta": boleta, "n_citacion_adjunta": "",
-        "empadronado": bool(POR_ESCRITO.match(_sec(secs, "INFRACTOR"))),
+        "empadronado": es_empadronado(_sec(secs, "INFRACTOR")),
         "fecha_parte": fecha_parte, "anio_leido": anio_leido, "fecha_infraccion": fecha_parte, "hora_infraccion": hora,
         "lugar": SM.formato_lugar(_u(_lugar_final(t)), conservar_comuna=str(_of[0]) == "5"), "infraccion_texto": infr, "bloques_infraccion": bloques_infr, "tipo_vehiculo": v["tipo"], "marca": v["marca"],
         "modelo": v["modelo"], "color": v["color"], "anio": v["anio"], "placa": v["placa"],
         "tiene_vehiculo": tiene_vehiculo,
-        "fecha_citacion": fecha_cit, "hora_citacion": "", "articulo": "",
+        "fecha_citacion": fecha_cit, "hora_citacion": _hora_citacion(seg_cit), "articulo": "",
         "infractores": infractores, "infractor_nombre": nombre, "infractor_rut": rut, "infractor_direccion": _u(direccion),
         "infractor_comuna": re.sub(r"^COMUNA\s+(DE\s+)?", "", comuna), "aviso_infractor": aviso_inf, "rut_leido": rut_leido,
         "avisos": av, "texto_ocr": texto,
